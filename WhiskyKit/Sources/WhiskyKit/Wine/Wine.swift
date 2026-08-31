@@ -726,7 +726,9 @@ public class Wine {
             try FileManager.default.installFile(at: sys32DXGI, from: origDXGI)
             try stripBuiltinMarker(at: sys32DXGI)
         } catch {
-            Logger.wineKit.warning("Could not deploy clean dxgi.dll into prefix: \(error.localizedDescription, privacy: .public)")
+            Logger.wineKit.warning(
+                "Could not deploy clean dxgi.dll into prefix: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 
