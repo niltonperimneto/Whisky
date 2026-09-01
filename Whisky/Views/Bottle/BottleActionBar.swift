@@ -43,11 +43,7 @@ struct BottleActionBar: View {
     /// still carries the emphasis.
     @ViewBuilder
     var body: some View {
-        if #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: 8) {
-                buttons
-            }
-        } else {
+        GlassEffectContainer(spacing: 8) {
             buttons
         }
     }
@@ -161,18 +157,10 @@ private extension View {
     /// survives either way.
     @ViewBuilder
     func glassButton(prominent: Bool = false) -> some View {
-        if #available(macOS 26.0, *) {
-            if prominent {
-                buttonStyle(.glassProminent)
-            } else {
-                buttonStyle(.glass)
-            }
+        if prominent {
+            buttonStyle(.glassProminent)
         } else {
-            if prominent {
-                buttonStyle(.borderedProminent)
-            } else {
-                buttonStyle(.bordered)
-            }
+            buttonStyle(.glass)
         }
     }
 }

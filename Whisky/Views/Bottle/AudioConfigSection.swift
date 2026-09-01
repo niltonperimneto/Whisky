@@ -219,16 +219,18 @@ extension AudioConfigSection {
         // The @Sendable closure annotation causes a compiler warning,
         // but mutation is main-thread-safe since the callback runs on main queue.
         monitor.startListening { event in
-            // Record event in session history
-            deviceHistory.append(event)
+            Task { @MainActor in
+                // Record event in session history
+                deviceHistory.append(event)
 
-            // Debounce status update for Bluetooth connections (2-3 second delay)
-            // to avoid spurious state changes during BT negotiation.
-            debounceTask?.cancel()
-            debounceTask = Task { @MainActor in
-                try? await Task.sleep(for: .seconds(2))
-                guard !Task.isCancelled else { return }
-                audioStatus = .unknown
+                // Debounce status update for Bluetooth connections (2-3 second delay)
+                // to avoid spurious state changes during BT negotiation.
+                debounceTask?.cancel()
+                debounceTask = Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2))
+                    guard !Task.isCancelled else { return }
+                    audioStatus = .unknown
+                }
             }
         }
     }

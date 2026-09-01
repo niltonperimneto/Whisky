@@ -159,20 +159,19 @@ extension WhiskyWineDownloadView {
             ProgressView(value: fractionProgress, total: 1)
             HStack {
                 HStack {
-                    Text(String(
+                    let baseText = String(
                         format: String(localized: "setup.whiskywine.progress"),
                         formatBytes(bytes: completedBytes),
                         formatBytes(bytes: totalBytes)
-                    ))
-                        + Text(String(" "))
-                        + (shouldShowEstimate()
-                            ? Text(String(
-                                format: String(localized: "setup.whiskywine.eta"),
-                                formatRemainingTime(
-                                    remainingBytes: totalBytes - completedBytes
-                                )
-                            ))
-                            : Text(String()))
+                    )
+                    let estimateText = shouldShowEstimate() ? String(
+                        format: String(localized: "setup.whiskywine.eta"),
+                        formatRemainingTime(
+                            remainingBytes: totalBytes - completedBytes
+                        )
+                    ) : ""
+                    Text("\(baseText) \(estimateText)")
+                        .font(.headline)
                     Spacer()
                 }
                 .font(.subheadline)

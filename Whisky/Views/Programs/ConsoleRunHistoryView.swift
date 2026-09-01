@@ -95,9 +95,7 @@ struct ConsoleRunHistoryView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(entry.programName)
                             .font(.headline)
-                        Text(entry.startTime, style: .date)
-                            + Text(" ")
-                            + Text(entry.startTime, style: .time)
+                        Text("\(entry.startTime, style: .date) \(entry.startTime, style: .time)")
                     }
 
                     Spacer()
@@ -148,9 +146,7 @@ struct ConsoleRunHistoryView: View {
                     selectedRunId = entry.id
                 } label: {
                     HStack {
-                        Text(entry.startTime, style: .date)
-                            + Text(" ")
-                            + Text(entry.startTime, style: .time)
+                        Text("\(entry.startTime, style: .date) \(entry.startTime, style: .time)")
 
                         Spacer()
 

@@ -360,7 +360,7 @@ public enum GameMatcher {
         guard !entry.variants.isEmpty else { return nil }
 
         let currentArch = machineArchitecture()
-        let currentOS = operatingSystemVersion()
+        _ = operatingSystemVersion()
 
         // Filter variants whose constraints match current machine
         // Sort variants: prefer those tested on current architecture

@@ -109,15 +109,9 @@ struct DependencyConfigSection: View {
     private func dependencyRowDetails(_ depStatus: DependencyStatus) -> some View {
         HStack(spacing: 4) {
             if let lastChecked = depStatus.lastChecked {
-                Text("Checked ")
+                Text("Checked \(lastChecked, style: .relative) ago")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
-                    +
-                    Text(lastChecked, style: .relative)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    +
-                    Text(" ago")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

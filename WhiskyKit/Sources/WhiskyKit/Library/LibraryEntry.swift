@@ -211,7 +211,7 @@ public enum SteamLibrarySource: LibrarySource {
 public enum LibraryCatalogue {
     /// Registered sources, in the order their entries are produced. Adding a
     /// launcher is this line plus the type.
-    public static let sources: [any LibrarySource.Type] = [
+    nonisolated(unsafe) public static let sources: [any LibrarySource.Type] = [
         PinnedLibrarySource.self,
         SteamLibrarySource.self
     ]

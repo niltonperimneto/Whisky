@@ -233,7 +233,9 @@ public final class AudioDeviceMonitor: @unchecked Sendable {
 
         var name: CFString = "" as CFString
         var size = UInt32(MemoryLayout<CFString>.size)
-        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name)
+        let status = withUnsafeMutablePointer(to: &name) { pointer in
+            AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, pointer)
+        }
 
         guard status == noErr else {
             logger.error("Failed to query device name for \(deviceID): \(status)")
