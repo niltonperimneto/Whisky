@@ -132,9 +132,7 @@ struct RunningProcessesView: View {
     private var stopConfirmationMessage: some View {
         let hasUntracked = viewModel.processes.contains { $0.source == .untracked }
         if hasUntracked {
-            Text("process.confirm.stop.message")
-                + Text("\n")
-                + Text("process.confirm.stop.includesUntracked")
+            Text("\(Text("process.confirm.stop.message"))\n\(Text("process.confirm.stop.includesUntracked"))")
         } else {
             Text("process.confirm.stop.message")
         }

@@ -65,7 +65,7 @@ struct GPTKSettingsSection: View {
                 .foregroundStyle(.secondary)
         }
         .task {
-            await Task.detached(priority: .utility) {
+            _ = await Task.detached(priority: .utility) {
                 GPTKImporter.deployStoredPayloadIfCapable()
             }.value
             refresh()

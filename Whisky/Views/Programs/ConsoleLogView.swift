@@ -76,9 +76,7 @@ struct ConsoleLogView: View {
                 Text(runEntry.programName)
                     .font(.headline)
                 HStack(spacing: 8) {
-                    Text(runEntry.startTime, style: .date)
-                        + Text(" ")
-                        + Text(runEntry.startTime, style: .time)
+                    Text("\(runEntry.startTime, style: .date) \(runEntry.startTime, style: .time)")
                     if let duration = runEntry.duration {
                         Text(formattedDuration(duration))
                             .foregroundStyle(.secondary)

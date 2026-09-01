@@ -422,17 +422,11 @@ private struct ActiveEnvironmentOverrides: View {
                 .foregroundColor(.secondary)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(key)
+                let textKey = Text(key).foregroundColor(.primary)
+                let textEq = Text("=").foregroundColor(.secondary)
+                let textVal = Text(value).foregroundColor(.primary)
+                Text("\(textKey)\(textEq)\(textVal)")
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.primary)
-                    +
-                    Text("=")
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.secondary)
-                    +
-                    Text(value)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundColor(.primary)
 
                 Text(reason)
                     .font(.caption2)

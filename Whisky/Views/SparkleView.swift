@@ -41,11 +41,16 @@ struct SparkleView: View {
 }
 
 /// This view model class publishes when new updates can be checked by the user
+@MainActor
 final class CheckForUpdatesViewModel: ObservableObject {
     @Published var canCheckForUpdates = false
 
     init(updater: SPUUpdater) {
-        updater.publisher(for: \.canCheckForUpdates)
-            .assign(to: &$canCheckForUpdates)
+        // A Task herda o contexto do @MainActor automaticamente
+        Task { [weak self] in
+            for await newValue in updater.publisher(for: \.canCheckForUpdates).values {
+                self?.canCheckForUpdates = newValue
+            }
+        }
     }
 }

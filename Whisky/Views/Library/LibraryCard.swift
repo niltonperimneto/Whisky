@@ -271,10 +271,6 @@ private extension View {
     /// real control rather than nothing.
     @ViewBuilder
     func cardGlass(_ shape: some Shape, interactive: Bool = false) -> some View {
-        if #available(macOS 26.0, *) {
-            glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
-        } else {
-            background(.thinMaterial, in: shape)
-        }
+        glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
     }
 }

@@ -128,6 +128,7 @@ struct LogTextView: NSViewRepresentable {
         Coordinator()
     }
 
+    @MainActor
     final class Coordinator {
         weak var textView: NSTextView?
 
