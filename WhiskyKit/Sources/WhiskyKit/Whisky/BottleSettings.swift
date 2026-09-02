@@ -257,6 +257,14 @@ public struct BottleSettings: Codable, Equatable {
         set { wineConfig.wineVersion = newValue }
     }
 
+    /// Which installed runtime this bottle runs on.
+    ///
+    /// `nil` means the default runtime at ``WhiskyWineInstaller/libraryFolder``.
+    public var runtime: String? {
+        get { wineConfig.runtime }
+        set { wineConfig.runtime = newValue }
+    }
+
     /// The Windows version that Wine emulates for this bottle.
     ///
     /// Different Windows versions may provide better compatibility
@@ -342,9 +350,11 @@ public struct BottleSettings: Codable, Equatable {
 
     /// Whether D3DMetal uses the Metal 4 command encoding backend.
     ///
-    /// `D3DMDevice::MTL4OptionEnabled` checks the OS version *before* it reads
-    /// `D3DM_MTL4`, and only takes the Metal 4 path for D3D12 devices, so the
-    /// variable is inert rather than harmful on older systems and D3D11 titles.
+    /// `D3DMDevice::MTL4OptionEnabled` seeds itself from
+    /// `IsAtLeastOSVersions(macOS 27)` and only reads `D3DM_MTL4` when the
+    /// variable is present, so turning this off has to write `0` rather than
+    /// leave the variable out. It only takes the Metal 4 path for D3D12
+    /// devices, so the variable is inert rather than harmful for D3D11 titles.
     public var metal4Enabled: Bool {
         get { metalConfig.metal4Enabled }
         set { metalConfig.metal4Enabled = newValue }
@@ -369,6 +379,17 @@ public struct BottleSettings: Codable, Equatable {
         set { graphicsConfig.metalFX = newValue }
     }
 
+    /// Whether games in this bottle may turn on DLSS frame generation.
+    ///
+    /// Separate from ``metalFX`` because the two features fail differently.
+    /// Upscaling is measured good; frame generation took the whole login
+    /// session down on the machine it was tested on. See
+    /// ``BottleGraphicsConfig/frameGeneration``.
+    public var frameGeneration: Bool {
+        get { graphicsConfig.frameGeneration }
+        set { graphicsConfig.frameGeneration = newValue }
+    }
+
     /// Whether Whisky publishes the program this bottle launched to Discord.
     ///
     /// Announces every program, including the ones with no Discord support of
@@ -387,17 +408,6 @@ public struct BottleSettings: Codable, Equatable {
     public var discordBridge: Bool {
         get { discordConfig.bridge }
         set { discordConfig.bridge = newValue }
-    }
-
-    /// Whether games in this bottle may turn on DLSS frame generation.
-    ///
-    /// Separate from ``metalFX`` because the two features fail differently.
-    /// Upscaling is measured good; frame generation took the whole login
-    /// session down on the machine it was tested on. See
-    /// ``BottleGraphicsConfig/frameGeneration``.
-    public var frameGeneration: Bool {
-        get { graphicsConfig.frameGeneration }
-        set { graphicsConfig.frameGeneration = newValue }
     }
 
     /// Whether DXVK is the active graphics backend.
@@ -862,7 +872,7 @@ public struct BottleSettings: Codable, Equatable {
 
         // Resolve the graphics backend (`.recommended` -> concrete backend)
         let resolvedBackend = if graphicsBackend == .recommended {
-            resolvedBackend ?? GraphicsBackendResolver.resolve()
+            resolvedBackend ?? GraphicsBackendResolver.resolve(for: runtime)
         } else {
             graphicsBackend
         }
@@ -870,6 +880,13 @@ public struct BottleSettings: Codable, Equatable {
         // Backend-conditional env vars and DLL overrides
         switch resolvedBackend {
         case .d3dMetal, .recommended:
+            // D3DMetal is Wine's default on macOS -- no special env vars needed,
+            // beyond opting in to the DLSS-to-MetalFX path. The DLL placement
+            // that actually gates it happens in `Wine.applyMetalFX` at launch.
+            if metalFX {
+                builder.set("D3DM_ENABLE_METALFX", "1", layer: .bottleManaged)
+            }
+
             // Wine answers KMTQAITYPE_WDDM_2_7_CAPS, the query behind "hardware
             // accelerated GPU scheduling", only when this says d3dmetal, and
             // returns STATUS_NOT_IMPLEMENTED otherwise. NVIDIA Streamline
@@ -880,18 +897,12 @@ public struct BottleSettings: Codable, Equatable {
             if frameGeneration {
                 builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .bottleManaged)
             }
-            // The DLL placement that actually gates the DLSS-to-MetalFX path
-            // happens in `Wine.applyMetalFX` at launch; this is the opt-in.
-            if metalFX {
-                builder.set("D3DM_ENABLE_METALFX", "1", layer: .bottleManaged)
-            }
 
-            // `D3DMDevice::MTL4OptionEnabled` checks the OS version before it
-            // reads this and only takes the Metal 4 path for D3D12 devices, so
-            // the variable is inert rather than harmful everywhere else.
-            if metal4Enabled {
-                builder.set("D3DM_MTL4", "1", layer: .bottleManaged)
-            }
+            // `D3DMDevice::MTL4OptionEnabled` starts from
+            // `IsAtLeastOSVersions(macOS 27)` and only lets `D3DM_MTL4` decide
+            // when the variable is present, so omitting it leaves Metal 4 on
+            // rather than off. Both states have to be written.
+            builder.set("D3DM_MTL4", metal4Enabled ? "1" : "0", layer: .bottleManaged)
 
         case .dxvk:
             // DXVK: DLL overrides + env vars
@@ -914,11 +925,22 @@ public struct BottleSettings: Codable, Equatable {
 
         case .dxmt:
             // DXMT: native overrides for the D3D11 trio plus the builtin
-            // winemetal bridge. No env vars in v1; the file placement happens
-            // in `Wine.enableDXMT` at launch.
+            // winemetal bridge. The file placement happens in
+            // `Wine.enableDXMT` at launch.
             for entry in DLLOverrideResolver.dxmtPreset {
                 managedDLLOverrides.append((entry: entry, source: .dxmt))
             }
+
+            // Metal only accepts a shader cache path while the process has
+            // never had an MTLDevice, which is earlier than DXMT's own DLL can
+            // manage: by the time it loads, the engine has already made one and
+            // its call to set the path does nothing. The Mac driver sets it
+            // instead, and this names the directory it uses.
+            //
+            // The value has to be the one DXMT asks for itself, or DXMT's own
+            // call disagrees with what is already set and it logs that it could
+            // not set the cache path on every launch.
+            builder.set("WINE_METAL_SHADER_CACHE_DIR", "dxmt", layer: .bottleManaged)
 
         case .wined3d:
             // Disable D3DMetal, forcing Wine's OpenGL-based wined3d path

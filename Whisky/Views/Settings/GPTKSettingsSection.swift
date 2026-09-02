@@ -65,8 +65,8 @@ struct GPTKSettingsSection: View {
                 .foregroundStyle(.secondary)
         }
         .task {
-            _ = await Task.detached(priority: .utility) {
-                GPTKImporter.deployStoredPayloadIfCapable()
+            await Task.detached(priority: .utility) {
+                _ = GPTKImporter.deployStoredPayloadEverywhereCapable()
             }.value
             refresh()
         }
@@ -92,7 +92,10 @@ struct GPTKSettingsSection: View {
 
     private func refresh() {
         storedRecord = GPTKImporter.storedRecord()
-        runtimeCapable = GPTKImporter.isRuntimeGPTKCapable()
+        // Any installed runtime being capable is enough: the payload deploys
+        // into each one that can execute it, and bottles pick which to use.
+        runtimeCapable = WhiskyWineInstaller.installedRuntimes()
+            .contains { GPTKImporter.isRuntimeGPTKCapable(for: $0.runtime) }
     }
 
     private func importPayload(from url: URL) {
@@ -113,15 +116,19 @@ struct GPTKSettingsSection: View {
                 try GPTKImporter.importPayload(payload)
                 // Deployment into the Wine tree is gated: on an engine build
                 // without GPTK exception-unwind support the payload would
-                // crash every process that touches it.
-                if GPTKImporter.isRuntimeGPTKCapable() {
-                    try GPTKImporter.deployStoredPayload()
-                }
+                // crash every process that touches it. A failed deploy has to
+                // reach the user: the store looks imported either way, and the
+                // runtime it missed would break its next D3DMetal launch with
+                // nothing on screen saying why.
+                let sweep = GPTKImporter.deployStoredPayloadEverywhereCapable()
                 for mount in mounts.reversed() {
                     GPTKDiskImage.detach(mount)
                 }
                 await MainActor.run {
                     importing = false
+                    if !sweep.failures.isEmpty {
+                        importError = sweep.failures.joined(separator: "\n")
+                    }
                     refresh()
                 }
             } catch {
@@ -143,7 +150,7 @@ struct GPTKSettingsSection: View {
             // a half-finished deploy looks undeployed while forwarders are
             // already swapped, and skipping cleanup would delete originals/ with
             // the store. The removal is idempotent per file.
-            try GPTKImporter.removeDeployedPayload()
+            try GPTKImporter.removeDeployedPayloadEverywhere()
             try GPTKImporter.removeStore()
         } catch {
             importError = error.localizedDescription

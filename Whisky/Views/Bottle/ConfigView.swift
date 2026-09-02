@@ -27,8 +27,14 @@ private let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: 
 struct ConfigView: View {
     @ObservedObject var bottle: Bottle
     @State private var buildVersion: String = ""
+    /// The version shown in the picker. Seeded from the prefix rather than from
+    /// the settings file, and only written back once the prefix agrees.
+    @State private var windowsVersion: WinVersion = .win10
     @State private var retinaModeState: RetinaModeState = .unknown
     @State private var dpiConfig: Int = 96
+    /// Set when a prefix read ran out of time rather than failing outright.
+    /// Something else is holding the prefix, and the rows cannot say that alone.
+    @State private var prefixBusy = false
     @State private var winVersionLoadingState: LoadingState = .loading
     @State private var buildVersionLoadingState: LoadingState = .loading
     @State private var retinaModeLoadingState: LoadingState = .loading
@@ -36,8 +42,11 @@ struct ConfigView: View {
     @State private var dpiSheetPresented: Bool = false
     @State private var showStabilityDiagnostics: Bool = false
     @State private var stabilityDiagnosticReport: String = ""
-    @State private var exportPresentation: ExportPresentation?
-    @State private var crashPresentation: BottleDiagnosisPresentation?
+    @State private var showDiagnosticExportSheet: Bool = false
+    @State private var showCrashDiagnosticsSheet: Bool = false
+    @State private var latestDiagnosis: CrashDiagnosis?
+    @State private var latestDiagnosisLogText: String = ""
+    @State private var latestDiagnosisProgram: Program?
     @State private var isRepairingPrefix: Bool = false
     @State private var prefixRepairResult: PrefixRepairResult?
     @State private var gameConfigSnapshot: GameConfigSnapshot?
@@ -59,7 +68,7 @@ struct ConfigView: View {
         }
     }
 
-    @AppStorage("wineSectionExpanded") private var wineSectionExpanded: Bool = true
+    @AppStorage("wineSectionExpanded") private var wineSectionExpanded: Bool = false
     @AppStorage("performanceSectionExpanded") private var performanceSectionExpanded: Bool = true
     @AppStorage("launcherSectionExpanded") private var launcherSectionExpanded: Bool = false
     @AppStorage("inputSectionExpanded") private var inputSectionExpanded: Bool = false
@@ -68,10 +77,25 @@ struct ConfigView: View {
 
     var body: some View {
         Form {
+            // What a game feels first comes first; the Wine plumbing that
+            // built this screen's reputation sits below, collapsed.
+            GraphicsConfigSection(bottle: bottle)
+            AudioConfigSection(bottle: bottle)
+            PerformanceConfigSection(bottle: bottle, isExpanded: $performanceSectionExpanded)
+            ResolutionConfigSection(bottle: bottle)
+            InputConfigSection(bottle: bottle, isExpanded: $inputSectionExpanded)
+            LauncherConfigSection(
+                bottle: bottle,
+                isExpanded: $launcherSectionExpanded,
+                onViewDiagnostics: loadLatestDiagnosisAndView
+            )
+            DiscordConfigSection(bottle: bottle)
+            DependencyConfigSection(bottle: bottle)
             WineConfigSection(
                 bottle: bottle,
                 isExpanded: $wineSectionExpanded,
                 buildVersion: $buildVersion,
+                windowsVersion: $windowsVersion,
                 retinaModeState: $retinaModeState,
                 dpiConfig: $dpiConfig,
                 winVersionLoadingState: $winVersionLoadingState,
@@ -79,23 +103,13 @@ struct ConfigView: View {
                 retinaModeLoadingState: $retinaModeLoadingState,
                 dpiConfigLoadingState: $dpiConfigLoadingState,
                 dpiSheetPresented: $dpiSheetPresented,
+                prefixBusy: prefixBusy,
+                onRetryWindowsVersion: loadWindowsVersion,
                 onRetryBuildVersion: loadBuildName,
                 onRetryRetinaMode: loadRetinaMode,
                 onRetryDpi: loadDpi
             )
-            LauncherConfigSection(
-                bottle: bottle,
-                isExpanded: $launcherSectionExpanded,
-                onViewDiagnostics: loadLatestDiagnosisAndView
-            )
-            InputConfigSection(bottle: bottle, isExpanded: $inputSectionExpanded)
-            GraphicsConfigSection(bottle: bottle)
-            AudioConfigSection(bottle: bottle)
-            DiscordConfigSection(bottle: bottle)
-            ResolutionConfigSection(bottle: bottle)
-            PerformanceConfigSection(bottle: bottle, isExpanded: $performanceSectionExpanded)
             DLLOverrideConfigSection(bottle: bottle, isExpanded: $dllOverrideSectionExpanded)
-            DependencyConfigSection(bottle: bottle)
             gameConfigRevertSection
             Section("Diagnostics") {
                 Text("Analyze Wine crash output for troubleshooting guidance")
@@ -115,7 +129,7 @@ struct ConfigView: View {
                 Button("Export Diagnostic Report\u{2026}") {
                     loadLatestDiagnosisAndExport()
                 }
-                .disabled(mostRecentlyDiagnosedProgram == nil)
+                .disabled(latestDiagnosis == nil && mostRecentlyDiagnosedProgram == nil)
 
                 Button("View Latest Diagnosis") {
                     loadLatestDiagnosisAndView()
@@ -194,26 +208,28 @@ struct ConfigView: View {
                 defaultFilenamePrefix: "whisky-stability-diagnostics"
             )
         }
-        // Both item-based: presenting on a flag while the content reads a
-        // separate optional can build the sheet before the diagnosis lands.
-        .sheet(item: $exportPresentation) { presentation in
-            DiagnosticExportSheet(
-                diagnosis: presentation.diagnosis,
-                bottle: bottle,
-                program: presentation.program,
-                logFileURL: presentation.program.settings.lastLogFileURL
-            )
+        .sheet(isPresented: $showDiagnosticExportSheet) {
+            if let diagnosis = latestDiagnosis, let program = latestDiagnosisProgram {
+                DiagnosticExportSheet(
+                    diagnosis: diagnosis,
+                    bottle: bottle,
+                    program: program,
+                    logFileURL: program.settings.lastLogFileURL
+                )
+            }
         }
-        .sheet(item: $crashPresentation) { presentation in
-            DiagnosticsView(
-                diagnosis: presentation.diagnosis,
-                logText: presentation.logText,
-                programName: presentation.program.name,
-                bottleName: bottle.settings.name,
-                timestamp: presentation.program.settings.lastDiagnosisDate ?? Date(),
-                applyBottle: bottle
-            )
-            .frame(minWidth: 600, minHeight: 400)
+        .sheet(isPresented: $showCrashDiagnosticsSheet) {
+            if let diagnosis = latestDiagnosis, let program = latestDiagnosisProgram {
+                DiagnosticsView(
+                    diagnosis: diagnosis,
+                    logText: latestDiagnosisLogText,
+                    programName: program.name,
+                    bottleName: bottle.settings.name,
+                    timestamp: program.settings.lastDiagnosisDate ?? Date(),
+                    applyBottle: bottle
+                )
+                .frame(minWidth: 600, minHeight: 400)
+            }
         }
         .alert(item: $prefixRepairResult) { result in
             switch result {
@@ -266,7 +282,8 @@ struct ConfigView: View {
         }
         .navigationTitle("tab.config")
         .onAppear {
-            winVersionLoadingState = .success
+            windowsVersion = bottle.settings.windowsVersion
+            loadWindowsVersion()
 
             loadBuildName()
             loadRetinaMode()
@@ -275,20 +292,24 @@ struct ConfigView: View {
             gameConfigSnapshot = GameConfigSnapshot.load(from: bottle.url)
             hasActiveSession = sessionStore.hasActiveSession(for: bottle.url)
         }
-        .onChange(of: bottle.settings.windowsVersion) { _, newValue in
-            if winVersionLoadingState == .success {
-                winVersionLoadingState = .loading
-                buildVersionLoadingState = .loading
-                Task(priority: .userInitiated) {
-                    do {
-                        try await Wine.changeWinVersion(bottle: bottle, win: newValue)
-                        winVersionLoadingState = .success
-                        bottle.settings.windowsVersion = newValue
-                        loadBuildName()
-                    } catch {
-                        logger.error("Failed to change Windows version: \(error.localizedDescription)")
-                        winVersionLoadingState = .failed
-                    }
+        .onChange(of: windowsVersion) { previous, newValue in
+            guard winVersionLoadingState == .success, newValue != bottle.settings.windowsVersion else { return }
+            winVersionLoadingState = .loading
+            buildVersionLoadingState = .loading
+            Task(priority: .userInitiated) {
+                do {
+                    try await Wine.changeWinVersion(bottle: bottle, win: newValue)
+                    // The setting follows the prefix, never leads it. Writing it
+                    // first is how a bottle ended up with a picker saying
+                    // Windows 11 over a prefix telling Steam it was Windows 7.
+                    bottle.settings.windowsVersion = newValue
+                    winVersionLoadingState = .success
+                    loadBuildName()
+                } catch {
+                    logger.error("Failed to change Windows version: \(error.localizedDescription)")
+                    windowsVersion = previous
+                    winVersionLoadingState = .failed
+                    loadBuildName()
                 }
             }
         }
@@ -312,14 +333,54 @@ struct ConfigView: View {
 // MARK: - Loading Functions
 
 extension ConfigView {
+    /// Reads what the prefix reports and shows that, rather than what the
+    /// settings file remembers being asked for.
+    ///
+    /// The two can disagree: a prefix adopted from another Whisky, or a version
+    /// change whose registry write failed. When they do, the prefix wins here,
+    /// and the launch path is what puts the setting back into effect.
+    /// How long a prefix read is given before the row gives up and offers a retry.
+    ///
+    /// These are single registry reads and answer in seconds. Anything longer
+    /// means something else is holding the prefix, and a spinner with no end is
+    /// the worst way to say so.
+    private static let prefixReadTimeout: Duration = .seconds(30)
+
+    func loadWindowsVersion() {
+        winVersionLoadingState = .loading
+        Task(priority: .userInitiated) {
+            do {
+                guard let reported = try await withTimeout(Self.prefixReadTimeout, operation: {
+                    try await Wine.reportedWindowsVersion(bottle: bottle)
+                })
+                else {
+                    logger.warning("Prefix reports a Windows version Whisky cannot name")
+                    winVersionLoadingState = .failed
+                    return
+                }
+                windowsVersion = reported
+                bottle.settings.windowsVersion = reported
+                prefixBusy = false
+                winVersionLoadingState = .success
+            } catch {
+                logger.error("Failed to read the prefix Windows version: \(error.localizedDescription)")
+                prefixBusy = error is TimedOutError
+                winVersionLoadingState = .failed
+            }
+        }
+    }
+
     func loadBuildName() {
         buildVersionLoadingState = .loading
         Task(priority: .userInitiated) {
             do {
-                buildVersion = try await Wine.buildVersion(bottle: bottle) ?? ""
+                buildVersion = try await withTimeout(Self.prefixReadTimeout) {
+                    try await Wine.buildVersion(bottle: bottle)
+                } ?? ""
                 buildVersionLoadingState = .success
             } catch {
                 logger.error("Failed to load build version: \(error.localizedDescription)")
+                prefixBusy = error is TimedOutError
                 buildVersionLoadingState = .failed
             }
         }
@@ -329,7 +390,9 @@ extension ConfigView {
         retinaModeLoadingState = .loading
         Task(priority: .userInitiated) {
             do {
-                let value = try await Wine.retinaMode(bottle: bottle)
+                let value = try await withTimeout(Self.prefixReadTimeout) {
+                    try await Wine.retinaMode(bottle: bottle)
+                }
                 switch value {
                 case .some(true):
                     retinaModeState = .enabled
@@ -341,6 +404,7 @@ extension ConfigView {
                 retinaModeLoadingState = .success
             } catch {
                 logger.error("Failed to get retina mode: \(error.localizedDescription)")
+                prefixBusy = error is TimedOutError
                 retinaModeLoadingState = .failed
             }
         }
@@ -352,10 +416,13 @@ extension ConfigView {
             do {
                 // Wine.dpiResolution returns nil if registry key doesn't exist (expected for unedited DPI)
                 // It throws only on actual Wine/registry errors
-                dpiConfig = try await Wine.dpiResolution(bottle: bottle) ?? 0
+                dpiConfig = try await withTimeout(Self.prefixReadTimeout) {
+                    try await Wine.dpiResolution(bottle: bottle)
+                } ?? 0
                 dpiConfigLoadingState = .success
             } catch {
                 logger.error("Failed to load DPI resolution: \(error.localizedDescription)")
+                prefixBusy = error is TimedOutError
                 dpiConfigLoadingState = .failed
             }
         }
@@ -442,7 +509,9 @@ extension ConfigView {
         else { return }
         Task {
             guard let diagnosis = await Wine.classifyLastRun(logFileURL: logURL, exitCode: 1) else { return }
-            exportPresentation = ExportPresentation(diagnosis: diagnosis, program: program)
+            latestDiagnosis = diagnosis
+            latestDiagnosisProgram = program
+            showDiagnosticExportSheet = true
         }
     }
 
@@ -452,29 +521,12 @@ extension ConfigView {
         else { return }
         Task {
             guard let diagnosis = await Wine.classifyLastRun(logFileURL: logURL, exitCode: 1) else { return }
-            crashPresentation = BottleDiagnosisPresentation(
-                diagnosis: diagnosis,
-                program: program,
-                logText: (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            )
+            latestDiagnosis = diagnosis
+            latestDiagnosisProgram = program
+            latestDiagnosisLogText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            showCrashDiagnosticsSheet = true
         }
     }
-}
-
-/// What the export sheet is exporting; `Identifiable` so `.sheet(item:)`
-/// never presents without both a diagnosis and its program.
-struct ExportPresentation: Identifiable {
-    let id = UUID()
-    let diagnosis: CrashDiagnosis
-    let program: Program
-}
-
-/// What the bottle-level diagnostics sheet is showing.
-struct BottleDiagnosisPresentation: Identifiable {
-    let id = UUID()
-    let diagnosis: CrashDiagnosis
-    let program: Program
-    let logText: String
 }
 
 // swiftlint:enable file_length

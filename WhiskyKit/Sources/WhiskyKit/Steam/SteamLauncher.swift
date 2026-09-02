@@ -62,10 +62,6 @@ public enum SteamLauncher {
             throw SteamLaunchError.steamNotInstalled
         }
 
-        if record {
-            GameRouting().record(appId: appId, bottleURL: bottle.url)
-        }
-
         let installURL = installURL ?? SteamLibrary.enumerate(bottleURL: bottle.url)
             .first { $0.appId == appId }?.installURL
         let plan = LaunchResolver.plan(
@@ -76,12 +72,29 @@ public enum SteamLauncher {
 
         return Task {
             await Wine.syncAudioRegistry(bottle: bottle)
+            await Wine.syncWindowsVersion(bottle: bottle)
+
             _ = try? await Wine.runProgram(
                 at: steamExe, args: ["-applaunch", String(appId)], bottle: bottle,
                 programOverrides: plan.overrides,
                 gameProfileEnvironment: plan.gameProfileEnvironment,
                 // the plan is the game's; steam.exe is only the vehicle
-                overridesApplyToDescendants: true
+                // The plan is the game's, but the name and icon are not: the
+                // client is only the vehicle and it starts other games too.
+                identityScope: .program,
+                overridesApplyToDescendants: true,
+                // The client hands the game its own handles, so an attached
+                // client is what puts the game's output in the run's log. This
+                // task holds the call for the whole session, which is what the
+                // caller already expects of it.
+                keepAttached: true,
+                // Recorded once the client is up: a launch that never happened
+                // used to leave a routing entry and a last-played behind it.
+                onStarted: {
+                    guard record else { return }
+                    GameRouting().record(appId: appId, bottleURL: bottle.url)
+                    GameRecordStore(bottleURL: bottle.url).recordLaunch(.steam(appID: appId))
+                }
             )
         }
     }
@@ -111,32 +124,6 @@ public enum SteamLauncher {
         return SteamLibrary.preferredOverrides(among: candidates)
     }
 
-    /// Finds the installed game an App ID names, and the bottle holding it.
-    ///
-    /// Narrowing `bottles` to a single bottle chooses where to look, never
-    /// whether to look: an App ID that arrives from outside the app may only
-    /// ever reach a game the user actually has. The library entry is also what
-    /// lets a caller name the game rather than echo the App ID back.
-    ///
-    /// - Parameters:
-    ///   - appId: The Steam App ID to locate.
-    ///   - bottles: The bottles to search.
-    ///   - routing: The route store to consult.
-    /// - Returns: The library entry and the bottle it was found in.
-    /// - Throws: ``SteamLaunchError/gameNotFound(appId:)`` when no bottle has it.
-    @MainActor
-    public static func resolveGame(
-        appId: Int, in bottles: [Bottle], routing: GameRouting = GameRouting()
-    ) throws -> (game: SteamGame, bottle: Bottle) {
-        let bottle = try resolveBottle(appId: appId, in: bottles, routing: routing)
-        guard let game = SteamLibrary.enumerate(bottleURL: bottle.url)
-            .first(where: { $0.appId == appId })
-        else {
-            throw SteamLaunchError.gameNotFound(appId: appId)
-        }
-        return (game, bottle)
-    }
-
     /// Finds the bottle to launch an App ID from: the remembered route when it
     /// still has the game installed, otherwise the first bottle that does.
     ///
@@ -146,7 +133,6 @@ public enum SteamLauncher {
     ///   - routing: The route store to consult.
     /// - Returns: The bottle holding the game.
     /// - Throws: ``SteamLaunchError/gameNotFound(appId:)`` when no bottle has it.
-    @MainActor
     public static func resolveBottle(
         appId: Int, in bottles: [Bottle], routing: GameRouting = GameRouting()
     ) throws -> Bottle {
@@ -164,5 +150,26 @@ public enum SteamLauncher {
             throw SteamLaunchError.gameNotFound(appId: appId)
         }
         return bottle
+    }
+
+    /// Whether a bottle set to `bottleRuntime` runs on `runtime`.
+    ///
+    /// `nil` and `""` both name the default runtime and have to compare equal:
+    /// every bottle written before runtime selection existed decodes to `nil`,
+    /// and none of them would match the default tool otherwise.
+    nonisolated static func runtime(_ bottleRuntime: String?, matches runtime: String?) -> Bool {
+        (bottleRuntime ?? "") == (runtime ?? "")
+    }
+
+    /// The bottles that run on `runtime`.
+    ///
+    /// Each compatibility tool Whisky installs is a runtime, so the client
+    /// picking one means "run this in the bottle that uses it". Narrowing the
+    /// candidates is what makes that true without writing anything: a runtime
+    /// belongs to the bottle, and setting it at launch would reconfigure every
+    /// other game installed in the same one.
+    @MainActor
+    public static func bottles(_ bottles: [Bottle], on runtime: String?) -> [Bottle] {
+        bottles.filter { Self.runtime($0.settings.runtime, matches: runtime) }
     }
 }

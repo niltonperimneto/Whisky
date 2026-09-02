@@ -31,6 +31,30 @@ public enum DependencyCategory: String, Codable, CaseIterable, Sendable {
     case directx = "DirectX"
     /// Audio middleware and codecs.
     case audio = "Audio"
+    /// Typefaces Windows applications expect to find installed.
+    case fonts = "Fonts"
+}
+
+// MARK: - Registry Probe
+
+/// A registry value whose presence means a dependency's payload is installed.
+///
+/// Needed because Wine ships builtin DLLs under the same names the Microsoft
+/// redistributables use, so a file on disk proves nothing: a bottle that has
+/// never seen `vcrun2022` still has `vcruntime140.dll` and `msvcp140.dll`, and
+/// Wine's builtin `msvcp140` is in fact larger than Microsoft's, so size cannot
+/// separate them either. The registry can: the real redistributable records its
+/// version, and winetricks records the DLL override it set.
+public struct DependencyRegistryProbe: Codable, Sendable {
+    /// Full key path, `HKLM\...` or `HKCU\...`.
+    public let key: String
+    /// The value that must exist under that key.
+    public let valueName: String
+
+    public init(key: String, valueName: String) {
+        self.key = key
+        self.valueName = valueName
+    }
 }
 
 // MARK: - Dependency Definition
@@ -46,7 +70,7 @@ public enum DependencyCategory: String, Codable, CaseIterable, Sendable {
 /// ```swift
 /// let vcRuntime = DependencyDefinition.standardDependencies.first { $0.id == "vcruntime" }
 /// // vcRuntime?.displayName == "Visual C++ Runtime"
-/// // vcRuntime?.winetricksVerbs == ["vcrun2019"]
+/// // vcRuntime?.winetricksVerbs == ["vcrun2022"]
 /// ```
 public struct DependencyDefinition: Codable, Identifiable, Sendable {
     /// Stable identifier (e.g. "vcruntime", "dotnet48", "directx").
@@ -57,6 +81,22 @@ public struct DependencyDefinition: Codable, Identifiable, Sendable {
     public let description: String
     /// The winetricks verb names required to install this dependency.
     public let winetricksVerbs: [String]
+    /// Verbs that already provide what this dependency installs, so a prefix
+    /// carrying one of them counts as satisfied. A newer redistributable
+    /// replacing an older one is the case this exists for.
+    public let equivalentVerbs: [String]
+    /// Files this dependency leaves in the prefix, relative to `drive_c`.
+    ///
+    /// The verb log is not the only way a payload arrives: a game's own
+    /// installer ships the Visual C++ runtime, and Microsoft's redistributable
+    /// refuses to reinstall over an equal or newer version, exiting 1638. Wine
+    /// truncates that to 102 on the way out, winetricks does not recognise it,
+    /// and the dependency looks missing forever while its files sit right
+    /// there. Checked when no verb accounts for it.
+    public let probeFiles: [String]
+    /// Registry values that account for the payload the same way ``probeFiles``
+    /// does, for the dependencies whose files Wine also ships as builtins.
+    public let probeRegistry: [DependencyRegistryProbe]
     /// The functional category this dependency belongs to.
     public let category: DependencyCategory
     /// Rough time estimate for installation, shown in the UI.
@@ -68,7 +108,10 @@ public struct DependencyDefinition: Codable, Identifiable, Sendable {
         description: String,
         winetricksVerbs: [String],
         category: DependencyCategory,
-        estimatedInstallMinutes: Int
+        estimatedInstallMinutes: Int,
+        equivalentVerbs: [String] = [],
+        probeFiles: [String] = [],
+        probeRegistry: [DependencyRegistryProbe] = []
     ) {
         self.id = id
         self.displayName = displayName
@@ -76,49 +119,26 @@ public struct DependencyDefinition: Codable, Identifiable, Sendable {
         self.winetricksVerbs = winetricksVerbs
         self.category = category
         self.estimatedInstallMinutes = estimatedInstallMinutes
+        self.equivalentVerbs = equivalentVerbs
+        self.probeFiles = probeFiles
+        self.probeRegistry = probeRegistry
     }
-}
 
-extension DependencyDefinition {
-    /// The default set of dependencies shown in the bottle configuration UI.
-    ///
-    /// Each entry maps a user-facing name to one or more winetricks verbs.
-    /// The list covers the most commonly needed Windows components for
-    /// games and applications running under Wine.
-    public static let standardDependencies: [DependencyDefinition] = [
-        DependencyDefinition(
-            id: "vcruntime",
-            displayName: "Visual C++ Runtime",
-            description: "Required by most Windows games and applications",
-            winetricksVerbs: ["vcrun2019"],
-            category: .runtime,
-            estimatedInstallMinutes: 2
-        ),
-        DependencyDefinition(
-            id: "dotnet48",
-            displayName: ".NET Framework 4.8",
-            description: "Required by .NET applications and some game launchers",
-            winetricksVerbs: ["dotnet48"],
-            category: .runtime,
-            estimatedInstallMinutes: 10
-        ),
-        DependencyDefinition(
-            id: "directx",
-            displayName: "DirectX Runtime",
-            description: "DirectX 9/10/11 components for older games",
-            winetricksVerbs: ["d3dx9", "d3dcompiler_47"],
-            category: .directx,
-            estimatedInstallMinutes: 3
-        ),
-        DependencyDefinition(
-            id: "directx_audio",
-            displayName: "DirectX Audio",
-            description: "XACT audio framework for games using DirectX audio",
-            winetricksVerbs: ["xact"],
-            category: .audio,
-            estimatedInstallMinutes: 2
-        )
-    ]
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        description = try container.decode(String.self, forKey: .description)
+        winetricksVerbs = try container.decode([String].self, forKey: .winetricksVerbs)
+        category = try container.decode(DependencyCategory.self, forKey: .category)
+        estimatedInstallMinutes = try container.decode(Int.self, forKey: .estimatedInstallMinutes)
+        // Absent in definitions written before equivalents existed.
+        equivalentVerbs = try container.decodeIfPresent([String].self, forKey: .equivalentVerbs) ?? []
+        probeFiles = try container.decodeIfPresent([String].self, forKey: .probeFiles) ?? []
+        probeRegistry = try container.decodeIfPresent(
+            [DependencyRegistryProbe].self, forKey: .probeRegistry
+        ) ?? []
+    }
 }
 
 // MARK: - Dependency Confidence

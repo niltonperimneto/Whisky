@@ -1,0 +1,292 @@
+// swiftlint:disable function_body_length
+// swiftlint:disable cyclomatic_complexity
+//
+//  WineEnvironment+ProgramOverrides.swift
+//  WhiskyKit
+//
+//  This file is part of Whisky.
+//
+//  Whisky is free software: you can redistribute it and/or modify it under the terms
+//  of the GNU General Public License as published by the Free Software Foundation,
+//  either version 3 of the License, or (at your option) any later version.
+//
+//  Whisky is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+//  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+//  See the GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License along with Whisky.
+//  If not, see https://www.gnu.org/licenses/.
+//
+import Foundation
+
+extension Wine {
+    /// Builtin-mode reset entries for every DLL any translation layer may have
+    /// overridden — the union of the DXVK and DXMT presets. Used when a
+    /// program-level backend override selects a builtin-backed path
+    /// (D3DMetal/wined3d) and must neutralize whatever the bottle enabled.
+    static var translationDLLResetEntries: [DLLOverrideEntry] {
+        let names = Set(
+            (DLLOverrideResolver.dxvkPreset + DLLOverrideResolver.dxmtPreset).map(\.dllName)
+        )
+        return names.sorted().map { DLLOverrideEntry(dllName: $0, mode: .builtin) }
+    }
+
+    /// Applies per-program overrides to the programUser layer of the builder.
+    ///
+    /// Each non-nil field in the overrides sets the corresponding environment variable(s)
+    /// in the ``EnvironmentLayer/programUser`` layer, which has higher priority than
+    /// bottleManaged and launcherManaged layers.
+    static func applyProgramOverrides(
+        _ overrides: ProgramOverrides,
+        runtime: String? = nil,
+        frameGeneration: Bool = false,
+        metal4Enabled: Bool = true,
+        builder: inout EnvironmentBuilder,
+        dllResolver: inout DLLOverrideResolver
+    ) {
+        // Graphics backend override: replaces bottle-level backend entirely
+        if let backend = overrides.graphicsBackend {
+            let resolved = if backend == .recommended {
+                GraphicsBackendResolver.resolve(for: runtime)
+            } else {
+                backend
+            }
+            switch resolved {
+            case .d3dMetal, .recommended:
+                // Undo any bottle-level DXVK/DXMT by overriding DLLs to builtin
+                dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
+                // Remove DXVK and wined3d env vars at program layer
+                builder.remove("DXVK_HUD", layer: .programUser)
+                builder.remove("DXVK_ASYNC", layer: .programUser)
+                builder.remove("WINED3DMETAL", layer: .programUser)
+                // A DXVK bottle never sets this, so a program forced onto
+                // D3DMetal inside one has to claim hardware scheduling itself
+                // or Streamline refuses DLSS frame generation. Gated on the
+                // same bottle setting as the bottle-managed layer, or turning
+                // frame generation off would leave this one route still open.
+                if frameGeneration {
+                    builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .programUser)
+                }
+                // A DXVK/DXMT bottle never writes D3DM_MTL4 at the bottle
+                // layer because its d3d12 is disabled. This override just put
+                // d3d12 back on D3DMetal, and the variable defaults to on when
+                // absent, so the bottle's choice has to be restated here or a
+                // bottle that turned Metal 4 off silently loses that for this
+                // program.
+                builder.set(
+                    "D3DM_MTL4",
+                    (overrides.metal4Enabled ?? metal4Enabled) ? "1" : "0",
+                    layer: .programUser
+                )
+
+            case .dxvk:
+                // Enable DXVK DLLs at program level
+                dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxvkPreset)
+                builder.remove("WINED3DMETAL", layer: .programUser)
+                // CX_ACTIVE_GRAPHICS_BACKEND deliberately survives, on the
+                // bottles that set it at all. It selects no backend: win32u is
+                // the only thing in the runtime that reads it, and all it does
+                // is answer KMTQAITYPE_WDDM_2_7_CAPS. Stripping it here starved
+                // every child of a DXVK-steered launcher, because Steam runs its
+                // games on D3DMetal (DXVK has no d3d12) while they inherit
+                // Steam's environment. D3DM_ENABLE_METALFX and D3DM_MTL4 already
+                // survive this branch for the same reason.
+
+            case .dxmt:
+                // Reset the full translation-DLL union to builtin first so a DXVK
+                // bottle's d3d9 (which DXMT's preset doesn't touch, and whose
+                // native copy enableDXVK left in the prefix) is neutralized, then
+                // layer DXMT's preset on top — last-append-wins restores n,b for
+                // the DXMT trio and b for winemetal. DXVK/wined3d env must not leak.
+                dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
+                dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxmtPreset)
+                builder.remove("DXVK_HUD", layer: .programUser)
+                builder.remove("DXVK_ASYNC", layer: .programUser)
+                builder.remove("WINED3DMETAL", layer: .programUser)
+                // Survives for the reason given under .dxvk: DXMT translates d3d11
+                // only, so d3d12 is still D3DMetal here.
+
+            case .wined3d:
+                // Force wined3d: disable D3DMetal + undo DXVK/DXMT DLLs
+                builder.set("WINED3DMETAL", "0", layer: .programUser)
+                // The one branch that really has no D3DMetal behind it, so the
+                // capability claim would be a lie.
+                builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
+                dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
+            }
+        }
+
+        // Legacy DXVK override: only honored when no explicit backend override is
+        // present. The override UI historically wrote `dxvk` alongside
+        // `graphicsBackend`, and since program-custom resolution is last-append-wins
+        // the stale flag would silently clobber the explicit backend choice
+        // (re-enabling DXVK under a D3DMetal override, or disabling DXMT).
+        if let dxvk = overrides.dxvk, overrides.graphicsBackend == nil {
+            if dxvk {
+                // Program forces DXVK on -- add DXVK preset to program custom DLLs
+                dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxvkPreset)
+            } else {
+                // Program forces DXVK off -- override each DXVK DLL to builtin
+                for entry in DLLOverrideResolver.dxvkPreset {
+                    dllResolver.programCustom.append(
+                        DLLOverrideEntry(dllName: entry.dllName, mode: .builtin)
+                    )
+                }
+            }
+        }
+
+        // DXVK HUD override
+        if let dxvkHud = overrides.dxvkHud {
+            switch dxvkHud {
+            case .full:
+                builder.set("DXVK_HUD", "full", layer: .programUser)
+            case .partial:
+                builder.set("DXVK_HUD", "devinfo,fps,frametimes", layer: .programUser)
+            case .fps:
+                builder.set("DXVK_HUD", "fps", layer: .programUser)
+            case .off:
+                builder.remove("DXVK_HUD", layer: .programUser)
+            }
+        }
+
+        // DXVK async override
+        if let dxvkAsync = overrides.dxvkAsync {
+            builder.set("DXVK_ASYNC", dxvkAsync ? "1" : "0", layer: .programUser)
+        }
+
+        // Enhanced sync override
+        if let enhancedSync = overrides.enhancedSync {
+            switch enhancedSync {
+            case .none:
+                if MacOSVersion.current < .sequoia15_4 {
+                    builder.remove("WINEESYNC", layer: .programUser)
+                    builder.remove("WINEMSYNC", layer: .programUser)
+                } else {
+                    // On 15.4+ ESYNC is required for stability
+                    builder.set("WINEESYNC", "1", layer: .programUser)
+                    builder.remove("WINEMSYNC", layer: .programUser)
+                }
+            case .esync:
+                builder.set("WINEESYNC", "1", layer: .programUser)
+                builder.remove("WINEMSYNC", layer: .programUser)
+            case .msync:
+                builder.set("WINEMSYNC", "1", layer: .programUser)
+                builder.set("WINEESYNC", "1", layer: .programUser)
+            }
+        }
+
+        // Force D3D11 override
+        if let forceD3D11 = overrides.forceD3D11 {
+            if forceD3D11 {
+                builder.set("D3DM_FORCE_D3D11", "1", layer: .programUser)
+                builder.set("D3DM_FEATURE_LEVEL_12_0", "0", layer: .programUser)
+            } else {
+                builder.remove("D3DM_FORCE_D3D11", layer: .programUser)
+                builder.remove("D3DM_FEATURE_LEVEL_12_0", layer: .programUser)
+            }
+        }
+
+        // Metal 4 override. `D3DMDevice::MTL4OptionEnabled` only takes that path
+        // for D3D12 devices, so a D3D12 title whose renderer wedges on a fence
+        // the Metal 4 submission path never signals has to be able to drop back
+        // without the rest of the bottle losing it. Removing the variable would
+        // not drop back: it defaults to on from the OS version alone, and only
+        // an explicit value overrides that.
+        if let metal4Enabled = overrides.metal4Enabled {
+            builder.set("D3DM_MTL4", metal4Enabled ? "1" : "0", layer: .programUser)
+        }
+
+        // Frame generation override. `CX_ACTIVE_GRAPHICS_BACKEND` is the whole
+        // switch, since Streamline only enters its DLSS-G path once win32u
+        // answers `KMTQAITYPE_WDDM_2_7_CAPS`, and the graphics-backend branch
+        // above only reaches it for a program that also overrides its backend.
+        if let frameGeneration = overrides.frameGeneration {
+            if frameGeneration {
+                builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .programUser)
+            } else {
+                builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
+            }
+        }
+
+        // Shader cache override, on the variable DXVK actually reads.
+        if let shaderCache = overrides.shaderCacheEnabled {
+            if !shaderCache {
+                builder.set("DXVK_STATE_CACHE", "0", layer: .programUser)
+            } else {
+                builder.remove("DXVK_STATE_CACHE", layer: .programUser)
+            }
+        }
+
+        // Input override: controller compatibility SDL hints at program level
+        if let controllerCompat = overrides.controllerCompatibilityMode {
+            // When compat mode is overridden, control whether SDL hints are applied
+            if controllerCompat {
+                if let disableHIDAPI = overrides.disableHIDAPI, disableHIDAPI {
+                    builder.set("SDL_JOYSTICK_HIDAPI", "0", layer: .programUser)
+                }
+                if let allowBG = overrides.allowBackgroundEvents, allowBG {
+                    builder.set("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", "1", layer: .programUser)
+                }
+                let mapping = overrides.disableControllerMapping ?? false
+                let labels = overrides.useButtonLabels ?? false
+                if mapping || labels {
+                    builder.set("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "1", layer: .programUser)
+                } else {
+                    builder.set("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "0", layer: .programUser)
+                }
+            } else {
+                // Program overrides compat mode off: remove all SDL hints
+                builder.remove("SDL_JOYSTICK_HIDAPI", layer: .programUser)
+                builder.remove("SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", layer: .programUser)
+                builder.remove("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", layer: .programUser)
+            }
+        }
+
+        // Program-specific DLL overrides (structured entries)
+        if let dllOverrides = overrides.dllOverrides {
+            dllResolver.programCustom.append(contentsOf: dllOverrides)
+        }
+    }
+
+    /// Logs a safe launch summary at info level.
+    ///
+    /// Only logs the bottle name, active layers, and whitelisted non-sensitive keys.
+    /// Does NOT log full environment dict, WINEPREFIX paths, or user-set custom env vars.
+    static func logLaunchSummary(
+        bottleName: String,
+        provenance: EnvironmentProvenance,
+        environment: [String: String]
+    ) {
+        let layerNames = provenance.activeLayers.sorted().map { layer -> String in
+            switch layer {
+            case .base: "base"
+            case .platform: "platform"
+            case .bottleManaged: "bottleManaged"
+            case .launcherManaged: "launcherManaged"
+            case .gameProfile: "gameProfile"
+            case .bottleUser: "bottleUser"
+            case .programUser: "programUser"
+            case .featureRuntime: "featureRuntime"
+            case .callsiteOverride: "callsiteOverride"
+            }
+        }
+
+        // Non-sensitive keys allowed in the launch summary
+        let allowedKeys = [
+            "DXVK_ASYNC", "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
+            "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL"
+        ]
+        let safeEntries = allowedKeys.compactMap { key -> String? in
+            guard let value = environment[key] else { return nil }
+            return "\(key)=\(value)"
+        }
+
+        let safeValues = safeEntries.isEmpty ? "defaults" : safeEntries.joined(separator: ", ")
+        envLogger.info(
+            "Launch: bottle=\(bottleName), layers=[\(layerNames.joined(separator: ","))], \(safeValues)"
+        )
+    }
+}
+
+// swiftlint:enable cyclomatic_complexity
+// swiftlint:enable function_body_length

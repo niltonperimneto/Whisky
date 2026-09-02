@@ -80,11 +80,6 @@ extension GPTKImporter {
     /// Every slot we interpose, in the order they are installed.
     static let interposers = [videoProcessorInterposer, dxgiVersionInterposer]
 
-    static func shim(for interposer: GPTKInterposer, inLibraryFolder folder: URL) -> URL {
-        folder.appending(path: "Wine").appending(path: "lib")
-            .appending(path: "gptk-video").appending(path: interposer.shimFileName)
-    }
-
     /// Where the runtime ships the interposer, if it is new enough to carry one.
     static let videoProcessorShimPath = ["lib", "gptk-video", "d3d12shim.dll"]
     /// Apple's D3D12 under its second name. Nine characters, and that is not a
@@ -93,8 +88,13 @@ extension GPTKImporter {
     static let videoDeviceUnixName = "d3dmt.so"
     static let videoProcessorSlotName = "d3d12.dll"
 
+    static func shim(for interposer: GPTKInterposer, inLibraryFolder folder: URL) -> URL {
+        folder.appending(path: "Wine").appending(path: "lib")
+            .appending(path: "gptk-video").appending(path: interposer.shimFileName)
+    }
+
     static func videoProcessorShim(inLibraryFolder folder: URL) -> URL {
-        videoProcessorShimPath.reduce(folder.appending(path: "Wine")) { $0.appending(path: $1) }
+        shim(for: videoProcessorInterposer, inLibraryFolder: folder)
     }
 
     /// Whether `folder`'s runtime carries an interposer to install at all.
@@ -156,8 +156,9 @@ extension GPTKImporter {
         )
 
         // Stage the shim beside the slot and swap by rename. Removing the slot
-        // before copying left a window where a crash strands the tree with no
-        // d3d12.dll at all, a state the guard above then refuses to repair.
+        // before copying leaves a window where a crash strands the tree with no
+        // DLL in that slot at all, a state the guard above then refuses to
+        // repair because there is nothing left to rename aside.
         let staged = peDir.appending(path: interposer.slotName + ".staging")
         try? fileManager.removeItem(at: staged)
         try fileManager.copyItem(at: shim, to: staged)
@@ -177,9 +178,7 @@ extension GPTKImporter {
     /// Removal has to happen before the payload itself is removed, or the slot
     /// still holds the interposer, does not byte-match the store, and the
     /// restore loop skips it and leaves the tree with no working D3D12 at all.
-    static func remove(
-        _ interposer: GPTKInterposer, fromLibraryFolder folder: URL, usingStore store: URL
-    ) {
+    static func remove(_ interposer: GPTKInterposer, fromLibraryFolder folder: URL, usingStore store: URL) {
         let fileManager = FileManager.default
         let wineLib = folder.appending(path: "Wine").appending(path: "lib")
         let peDir = wineLib.appending(path: "wine").appending(path: "x86_64-windows")
@@ -234,27 +233,29 @@ extension GPTKImporter {
         seedPlaceholder(for: videoProcessorInterposer, inBottle: bottle, fromLibraryFolder: folder)
     }
 
-    /// Installs the video processor if the payload is already deployed, and
-    /// seeds every bottle's placeholder.
+    /// Installs the video processor into every runtime that already holds the
+    /// payload, and seeds every bottle's placeholder.
     ///
     /// This is the path for installs that were already set up before the
     /// interposer existed: they have the payload deployed and never run a deploy
-    /// again, so without this they would keep rendering video through the
-    /// engine's broken fallback until they happened to reimport. Idempotent and
-    /// cheap enough to run at launch.
-    public static func ensureVideoProcessorInstalled(bottles: [URL]) {
-        let folder = WhiskyWineInstaller.libraryFolder
-        guard isDeployed(inLibraryFolder: folder), hasVideoProcessor(inLibraryFolder: folder) else {
-            return
-        }
-        do {
-            try installVideoProcessor(intoLibraryFolder: folder)
-        } catch {
-            logger.error("Installing the D3D12 video processor failed: \(error.localizedDescription)")
-            return
-        }
-        for bottle in bottles {
-            seedVideoDevicePlaceholder(inBottle: bottle, fromLibraryFolder: folder)
+    /// again, so without this they would keep the broken video until they
+    /// happened to reimport. Idempotent and cheap enough to run at launch.
+    public static func ensureVideoProcessorEverywhere(bottles: [URL]) {
+        for runtime in WhiskyWineInstaller.installedRuntimes().map(\.runtime) {
+            let folder = WhiskyWineInstaller.libraryFolder(for: runtime)
+            guard isDeployed(inLibraryFolder: folder) else { continue }
+            for interposer in interposers where has(interposer, inLibraryFolder: folder) {
+                do {
+                    try install(interposer, intoLibraryFolder: folder)
+                } catch {
+                    let why = "\(interposer.label): \(error.localizedDescription)"
+                    logger.error("Installing an interposer failed, \(why, privacy: .public)")
+                    continue
+                }
+                for bottle in bottles {
+                    seedPlaceholder(for: interposer, inBottle: bottle, fromLibraryFolder: folder)
+                }
+            }
         }
     }
 

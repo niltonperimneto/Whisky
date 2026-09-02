@@ -195,4 +195,171 @@ final class TroubleshootingChecksTests: XCTestCase {
         XCTAssertEqual(result.outcome, .fail)
         XCTAssertEqual(result.evidence["programName"], "definitely-not-a-real-game-zzz.exe")
     }
+
+    // MARK: - WinetricksVerbCheck alternatives
+
+    /// Builds a context whose bottle directory exists, so a verb cache can be
+    /// written into it.
+    private func makeBottleContext() throws -> CheckContext {
+        let bottleURL = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: bottleURL, withIntermediateDirectories: true)
+        let preflight = PreflightData(
+            bottleURL: bottleURL,
+            bottleName: "Test Bottle",
+            programName: nil,
+            launcherType: nil,
+            isWineserverRunning: false,
+            processCount: 0,
+            graphicsBackend: "dxmt"
+        )
+        return CheckContext(
+            bottleURL: bottleURL,
+            bottleName: "Test Bottle",
+            preflight: preflight,
+            session: TroubleshootingSession(bottleURL: bottleURL)
+        )
+    }
+
+    func testEitherVisualCPlusPlusRuntimeSatisfiesTheRequirement() async throws {
+        let context = try makeBottleContext()
+        defer { try? FileManager.default.removeItem(at: context.bottleURL) }
+        try WinetricksVerbCache.save(
+            WinetricksVerbCache(installedVerbs: ["vcrun2019", "dotnet48"]), to: context.bottleURL
+        )
+
+        let result = await WinetricksVerbCheck().run(
+            params: ["verbs": "vcrun2022|vcrun2019,dotnet48"], context: context
+        )
+
+        XCTAssertEqual(result.outcome, .alreadyConfigured)
+        XCTAssertNil(result.evidence["missing"])
+    }
+
+    func testMissingRequirementReportsTheVerbToInstall() async throws {
+        let context = try makeBottleContext()
+        defer { try? FileManager.default.removeItem(at: context.bottleURL) }
+        try WinetricksVerbCache.save(WinetricksVerbCache(installedVerbs: ["dotnet48"]), to: context.bottleURL)
+
+        let result = await WinetricksVerbCheck().run(
+            params: ["verbs": "vcrun2022|vcrun2019,dotnet48"], context: context
+        )
+
+        XCTAssertEqual(result.outcome, .fail)
+        // The fix installs what this string names, so it has to be one verb
+        // rather than the alternatives that were looked for.
+        XCTAssertEqual(result.evidence["missing"], "vcrun2022")
+    }
+
+    func testAnEquivalentVerbSatisfiesTheDependencyDefinition() {
+        let vcruntime = DependencyDefinition.standardDependencies.first { $0.id == "vcruntime" }
+
+        XCTAssertEqual(vcruntime?.winetricksVerbs, ["vcrun2022"])
+        XCTAssertEqual(vcruntime?.equivalentVerbs, ["vcrun2019"])
+    }
+
+    func testDependencyDefinitionDecodesWithoutEquivalents() throws {
+        let json = """
+        {
+          "id": "vcruntime", "displayName": "Visual C++ Runtime", "description": "old payload",
+          "winetricksVerbs": ["vcrun2019"], "category": "Runtime", "estimatedInstallMinutes": 2
+        }
+        """
+        let decoded = try JSONDecoder().decode(DependencyDefinition.self, from: Data(json.utf8))
+
+        XCTAssertEqual(decoded.winetricksVerbs, ["vcrun2019"])
+        XCTAssertTrue(decoded.equivalentVerbs.isEmpty)
+    }
+
+    // MARK: - Windows version and build number
+
+    func testEachVersionAcceptsItsOwnDefaultBuild() {
+        for version in WinVersion.allCases {
+            XCTAssertTrue(
+                version.accepts(build: version.defaultBuild),
+                "\(version.pretty()) rejects the build Wine writes for it"
+            )
+        }
+    }
+
+    func testABuildFromAnotherVersionIsRefused() {
+        // The pair that started this: a prefix on Windows 7 carrying a build
+        // number from Windows 11.
+        XCTAssertFalse(WinVersion.win7.accepts(build: 22_100))
+        XCTAssertFalse(WinVersion.win11.accepts(build: 7_601))
+        XCTAssertFalse(WinVersion.win10.accepts(build: 22_000))
+    }
+
+    func testNewerBuildsOfTheSameVersionAreAccepted() {
+        // Windows 11 24H2 and Windows 10 22H2, which people do set by hand.
+        XCTAssertTrue(WinVersion.win11.accepts(build: 26_100))
+        XCTAssertTrue(WinVersion.win10.accepts(build: 19_045))
+        XCTAssertTrue(WinVersion.win7.accepts(build: 7_600))
+    }
+
+    func testPrefixVersionIsReadFromWhatProgramsRead() {
+        // The pair that fooled every reader: 6.1 with a Windows 11 build. What
+        // programs get told is Windows 7, so that is what Whisky must show.
+        XCTAssertEqual(WinVersion(currentVersion: "6.1", build: 22_100), .win7)
+
+        XCTAssertEqual(WinVersion(currentVersion: "5.2", build: 3_790), .winXP)
+        XCTAssertEqual(WinVersion(currentVersion: "6.2", build: 9_200), .win8)
+        XCTAssertEqual(WinVersion(currentVersion: "6.3", build: 9_600), .win81)
+        XCTAssertEqual(WinVersion(currentVersion: "6.3", build: 19_045), .win10)
+        XCTAssertEqual(WinVersion(currentVersion: "6.3", build: 22_000), .win11)
+        XCTAssertEqual(WinVersion(currentVersion: "10.0", build: 26_100), .win11)
+    }
+
+    func testAnUnreadableVersionNamesNothing() {
+        XCTAssertNil(WinVersion(currentVersion: "4.0", build: 1_381))
+        XCTAssertNil(WinVersion(currentVersion: "", build: nil))
+    }
+
+    func testTheSixThreeFamilyFallsBackWithoutABuild() {
+        // 8.1, 10 and 11 all report 6.3, so a missing build can only be told
+        // apart by which key was there at all.
+        XCTAssertEqual(WinVersion(currentVersion: "6.3", build: nil), .win81)
+        XCTAssertEqual(WinVersion(currentVersion: "10.0", build: nil), .win10)
+    }
+
+    func testTheRedistributablesAreNotProbedByFile() {
+        // Microsoft's redistributable exits 1638 over a newer copy of itself,
+        // wine truncates that to 102, and winetricks records no verb, so these
+        // need a fallback probe. It cannot be the files: wine ships builtin
+        // vcruntime140.dll, msvcp140.dll, d3dx9_43.dll and d3dcompiler_47.dll,
+        // so every bottle has them from wineboot onward and a file probe reads
+        // as installed on a prefix that has none of the real payload. Size does
+        // not separate them either; wine's builtin msvcp140 is the larger one.
+        for id in ["vcruntime", "directx"] {
+            let definition = DependencyDefinition.standardDependencies.first { $0.id == id }
+            XCTAssertNotNil(definition, "\(id) missing from the standard set")
+            XCTAssertTrue(definition?.probeFiles.isEmpty ?? false, "\(id) probes a builtin filename")
+            XCTAssertFalse(definition?.probeRegistry.isEmpty ?? true, "\(id) has no fallback probe")
+        }
+    }
+
+    func testTheFontDependenciesAreProbedByFile() {
+        // Fonts are the opposite case: wine ships no Arial, so the file being
+        // there does mean the payload is.
+        let corefonts = DependencyDefinition.standardDependencies.first { $0.id == "corefonts" }
+        XCTAssertEqual(corefonts?.category, .fonts)
+        XCTAssertEqual(corefonts?.winetricksVerbs, ["corefonts"])
+        XCTAssertTrue(corefonts?.probeFiles.contains("windows/Fonts/Arial.ttf") ?? false)
+
+        let cjk = DependencyDefinition.standardDependencies.first { $0.id == "sourcehansans" }
+        XCTAssertEqual(cjk?.category, .fonts)
+        XCTAssertEqual(cjk?.probeFiles, ["windows/Fonts/sourcehansans.ttc"])
+    }
+
+    func testDependencyDefinitionDecodesWithoutProbeFiles() throws {
+        let json = """
+        {
+          "id": "directx", "displayName": "DirectX", "description": "old payload",
+          "winetricksVerbs": ["d3dx9"], "category": "DirectX", "estimatedInstallMinutes": 3
+        }
+        """
+        let decoded = try JSONDecoder().decode(DependencyDefinition.self, from: Data(json.utf8))
+
+        XCTAssertTrue(decoded.probeFiles.isEmpty)
+        XCTAssertTrue(decoded.probeRegistry.isEmpty)
+    }
 }

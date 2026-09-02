@@ -20,12 +20,12 @@ import SwiftUI
 import WhiskyKit
 
 struct SettingsView: View {
-    @AppStorage("SUEnableAutomaticChecks") var whiskyUpdate = true
     @AppStorage("killOnTerminate") var killOnTerminate = true
     @AppStorage("showMenuBarExtra") var showMenuBarExtra = false
     @AppStorage("checkWhiskyWineUpdates") var checkWhiskyWineUpdates = true
     @AppStorage("defaultBottleLocation") var defaultBottleLocation = BottleData.defaultBottleDir
     @AppStorage("preferredTerminal") var preferredTerminal = "terminal"
+    @AppStorage("audioDeviceAlerts") var audioDeviceAlerts = true
     @AppStorage(Telemetry.consentDefaultsKey) private var telemetryConsentRaw: String = Telemetry.ConsentState
         .undecided.rawValue
 
@@ -43,6 +43,8 @@ struct SettingsView: View {
                 Toggle("settings.toggle.kill.on.terminate", isOn: $killOnTerminate)
                 Toggle("settings.toggle.menubar", isOn: $showMenuBarExtra)
                     .help("settings.toggle.menubar.help")
+                Toggle("settings.toggle.audioAlerts", isOn: $audioDeviceAlerts)
+                    .help("settings.toggle.audioAlerts.help")
                 Picker("settings.terminal", selection: $preferredTerminal) {
                     // installedTerminals should always include Terminal.app on macOS,
                     // but fall back to showing just Terminal if somehow empty
@@ -70,9 +72,9 @@ struct SettingsView: View {
                 }
             }
             Section("settings.updates") {
-                Toggle("settings.toggle.whisky.updates", isOn: $whiskyUpdate)
                 Toggle("settings.toggle.whiskywine.updates", isOn: $checkWhiskyWineUpdates)
             }
+            RuntimesSettingsSection()
             GPTKSettingsSection()
             Section("settings.privacy") {
                 Toggle("settings.toggle.telemetry", isOn: telemetryOptIn)

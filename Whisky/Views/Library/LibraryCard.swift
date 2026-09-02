@@ -30,9 +30,31 @@ enum LibraryEntryState: Equatable {
     /// Not started, or started and already exited.
     case idle
     /// Whisky has been asked to start it and Wine has not put a window up yet.
-    case launching
+    ///
+    /// A Steam launch spends up to 90 seconds bringing the client up and then
+    /// up to 120 more waiting for the game, so the phase is carried here: three
+    /// minutes of one unlabelled spinner reads as a hang.
+    case launching(LaunchPhase)
     /// It has a process of its own in ``ProcessRegistry``.
     case running
+
+    /// What a launch is waiting on.
+    enum LaunchPhase: Equatable {
+        /// Bringing the Steam client up first.
+        case startingClient
+        /// Asked for the game; waiting for its process to appear.
+        case waitingForGame
+        /// A direct program launch, which has no phases worth naming.
+        case program
+
+        var label: LocalizedStringKey {
+            switch self {
+            case .startingClient: "library.card.startingClient"
+            case .waitingForGame: "library.card.waitingForGame"
+            case .program: "library.card.launching"
+            }
+        }
+    }
 }
 
 /// One library entry, coloured by its own icon.
@@ -44,12 +66,19 @@ enum LibraryEntryState: Equatable {
 /// size where it stays crisp.
 struct LibraryCard: View {
     let item: LibraryEntry
+    /// The resolved display name: a rename, a launcher's proper name, or the
+    /// source's. Resolved by ``LibraryRow`` so search and sort see the same one.
+    let title: String
     /// Only shown when there is more than one bottle, since with a single bottle
     /// the prefix is plumbing and naming it on every card is noise.
     let bottleName: String?
     let lastPlayed: Date?
+    let favourite: Bool
     let state: LibraryEntryState
     let launch: () -> Void
+    /// Abandons a launch still in flight. `nil` for entries with nothing to
+    /// cancel, which is every direct program launch.
+    let onCancel: (() -> Void)?
 
     @State private var icon: Image?
     @State private var artwork: Image?
@@ -68,10 +97,6 @@ struct LibraryCard: View {
     private var foreground: Color {
         palette.deepened().prefersLightForeground ? .white : .black
     }
-
-    /// A launcher is named by what it is. A pin takes its name from the
-    /// executable, which is how the Steam client ends up on screen as "steam".
-    private var title: String { item.launcher?.displayName ?? item.name }
 
     var body: some View {
         Button(action: launch) {
@@ -146,13 +171,21 @@ struct LibraryCard: View {
                     statusView
                 }
                 Spacer(minLength: 8)
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(1)
-                    // Tail, not middle: a game's name is recognisable from its
-                    // start, and "The Elder Scro...Special Edition" reads worse
-                    // than losing the edition suffix.
-                    .truncationMode(.tail)
+                HStack(spacing: 5) {
+                    Text(title)
+                        .font(.headline)
+                        .lineLimit(1)
+                        // Tail, not middle: a game's name is recognisable from
+                        // its start, and "The Elder Scro...Special Edition"
+                        // reads worse than losing the edition suffix.
+                        .truncationMode(.tail)
+                    if favourite {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                            .accessibilityLabel("library.card.favorite")
+                    }
+                }
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(foreground.opacity(0.7))
@@ -183,12 +216,21 @@ struct LibraryCard: View {
     @ViewBuilder
     private var statusView: some View {
         switch state {
-        case .launching:
-            ProgressView()
-                .controlSize(.small)
-                .frame(width: 30, height: 30)
-                .cardGlass(.circle)
-                .help("library.card.launching")
+        case let .launching(phase):
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                if isActive, let onCancel {
+                    Button("library.card.cancelLaunch", systemImage: "xmark") { onCancel() }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .bold))
+                }
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .glassEffect(.regular, in: .capsule)
+            .help(phase.label)
         case .running:
             Label("library.card.running", systemImage: "circle.fill")
                 .labelStyle(.titleAndIcon)
@@ -197,13 +239,13 @@ struct LibraryCard: View {
                 .foregroundStyle(.green)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
-                .cardGlass(.capsule)
+                .glassEffect(.regular, in: .capsule)
         case .idle:
             if isActive {
                 Image(systemName: "play.fill")
                     .font(.system(size: 13))
                     .frame(width: 30, height: 30)
-                    .cardGlass(.circle, interactive: true)
+                    .glassEffect(.regular.interactive(), in: .circle)
                     .transition(.opacity.combined(with: .scale))
             }
         }
@@ -262,15 +304,5 @@ struct LibraryCard: View {
         let sampled = await IconCache.shared.sampledIcon(for: iconURL)
         palette = sampled.palette
         icon = Image(nsImage: sampled.image)
-    }
-}
-
-private extension View {
-    /// Liquid Glass where the system has it, a plain material where it does not.
-    /// The affordance matters more than the material, so the older path is a
-    /// real control rather than nothing.
-    @ViewBuilder
-    func cardGlass(_ shape: some Shape, interactive: Bool = false) -> some View {
-        glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
     }
 }

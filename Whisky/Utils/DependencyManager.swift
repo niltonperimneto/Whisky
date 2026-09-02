@@ -56,35 +56,47 @@ enum DependencyManager {
     ) async -> [DependencyStatus] {
         let (installedVerbs, fromCache) = await Winetricks.loadInstalledVerbs(for: bottle)
         let confidence: DependencyConfidence = fromCache ? .cached : .authoritative
-        let bottleURL = await MainActor.run { bottle.url }
         let now = Date()
+
+        let bottleURL = await MainActor.run { bottle.url }
+        let driveC = bottleURL.appending(path: "drive_c")
 
         return definitions.map { definition in
             let requiredVerbs = definition.winetricksVerbs
-            let installed = requiredVerbs.filter { installedVerbs.contains($0) }
-            let missing = requiredVerbs.filter { !installedVerbs.contains($0) }
+            // An equivalent already in the prefix satisfies the whole
+            // definition, so moving the default from vcrun2019 to vcrun2022
+            // does not report every existing bottle as missing it.
+            let hasEquivalent = definition.equivalentVerbs.contains(where: installedVerbs.contains)
+            let installed = hasEquivalent ? requiredVerbs : requiredVerbs.filter(installedVerbs.contains)
+            var missing = hasEquivalent ? [] : requiredVerbs.filter { !installedVerbs.contains($0) }
 
-            var installStatus: DependencyInstallStatus = if missing.isEmpty {
+            // No verb accounts for it, so ask the prefix. A game's own
+            // installer, or a redistributable that refused to reinstall over a
+            // newer copy of itself, leaves the payload without leaving a verb.
+            var byProbe = false
+            if !missing.isEmpty {
+                let byFile = !definition.probeFiles.isEmpty
+                    && definition.probeFiles.allSatisfy { relativePath in
+                        FileManager.default.fileExists(
+                            atPath: driveC.appending(path: relativePath).path(percentEncoded: false)
+                        )
+                    }
+                let byRegistry = !definition.probeRegistry.isEmpty
+                    && definition.probeRegistry.allSatisfy { probe in
+                        WineRegistryFile.readValue(
+                            bottleURL: bottleURL, key: probe.key, valueName: probe.valueName
+                        ) != nil
+                    }
+                byProbe = byFile || byRegistry
+                if byProbe { missing = [] }
+            }
+
+            let installStatus: DependencyInstallStatus = if missing.isEmpty {
                 .installed
             } else if installed.isEmpty {
                 .notInstalled
             } else {
                 .partiallyInstalled(installed: installed, missing: missing)
-            }
-            var statusConfidence = confidence
-
-            // The vc_redist installer can hang under wine after installing
-            // successfully, so the verb never reaches winetricks.log even
-            // though the runtime is in place. Fall back to the mfc140.dll
-            // marker probe (see VCRuntimeFallback), but only when the verbs
-            // are missing from the log.
-            if VCRuntimeFallback.detectsInstallation(
-                definition: definition,
-                missingVerbs: missing,
-                bottleURL: bottleURL
-            ) {
-                installStatus = .installed
-                statusConfidence = .heuristic
             }
 
             return DependencyStatus(
@@ -92,7 +104,9 @@ enum DependencyManager {
                 definition: definition,
                 status: installStatus,
                 lastChecked: now,
-                confidence: statusConfidence
+                // A file on disk says the payload is there, not that winetricks
+                // put it there, which is a weaker claim than the verb log.
+                confidence: byProbe ? .heuristic : confidence
             )
         }
     }

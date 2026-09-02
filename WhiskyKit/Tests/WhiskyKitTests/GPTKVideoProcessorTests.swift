@@ -125,19 +125,6 @@ struct GPTKVideoProcessorTests {
         #expect(try exportName(of: renamed) == "d3dmt.dll")
     }
 
-    @Test("A staging file left by an interrupted install is replaced, not tripped over")
-    func installReplacesStaleStagingFile() throws {
-        let (store, runtime) = try makeDeployableRuntime()
-        let staging = peDir(of: runtime).appending(path: "d3d12.dll.staging")
-        try Data("half-written".utf8).write(to: staging)
-
-        try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
-
-        #expect(GPTKImporter.isVideoProcessorInstalled(inLibraryFolder: runtime))
-        // the swap consumes the staged copy; nothing is left behind
-        #expect(!FileManager.default.fileExists(atPath: staging.path(percentEncoded: false)))
-    }
-
     @Test("A runtime that ships no interposer is left alone")
     func installSkipsRuntimeWithoutShim() throws {
         let store = try makeImportedStore(in: tempDir)
@@ -161,7 +148,8 @@ struct GPTKVideoProcessorTests {
 
         try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
 
-        let backup = store.appending(path: "originals").appending(path: "d3d12.dll")
+        let backup = GPTKImporter.originalsFolder(inStore: store, key: "default")
+            .appending(path: "d3d12.dll")
         let backupData = try Data(contentsOf: backup)
         #expect(backupData.suffix(13) == Data("wine original".utf8))
         #expect(GPTKImporter.isVideoProcessorInstalled(inLibraryFolder: runtime))
@@ -272,9 +260,9 @@ struct GPTKVideoProcessorTests {
         try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
 
         #expect(GPTKImporter.isInstalled(interposer, inLibraryFolder: runtime))
+        let renamed = peDir(of: runtime).appending(path: interposer.renamedName)
         // The fixture's name slot is sized for the longest slot name, so a
         // shorter replacement leaves the old terminator behind it.
-        let renamed = peDir(of: runtime).appending(path: interposer.renamedName)
         let actual = try exportName(of: renamed).trimmingCharacters(in: ["\0"])
         #expect(actual == interposer.renamedName, "export name is \(actual)")
 
@@ -304,6 +292,25 @@ struct GPTKVideoProcessorTests {
             #expect(!GPTKImporter.isInstalled(each, inLibraryFolder: runtime))
             let renamed = peDir(of: runtime).appending(path: each.renamedName)
             #expect(!FileManager.default.fileExists(atPath: renamed.path(percentEncoded: false)))
+        }
+    }
+
+    @Test("The swap leaves no staging file behind in any slot")
+    func swapLeavesNoStagingFile() throws {
+        let interposer = GPTKImporter.dxgiVersionInterposer
+        let store = try makeImportedStore(in: tempDir)
+        try makeStoreD3D12Renameable(inStore: store)
+        try makeStoreSlotRenameable(inStore: store, slotName: interposer.slotName)
+        let runtime = tempDir.appending(path: "Libraries")
+        try makeRuntime(at: runtime)
+        try makeVideoProcessorShim(at: runtime)
+        try makeInterposerShim(interposer, at: runtime, marker: "dxgi interposer")
+
+        try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
+
+        for each in GPTKImporter.interposers {
+            let staged = peDir(of: runtime).appending(path: each.slotName + ".staging")
+            #expect(!FileManager.default.fileExists(atPath: staged.path(percentEncoded: false)))
         }
     }
 }

@@ -7,45 +7,146 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- The Recommended graphics backend now resolves launchers (Steam and other
-  Chromium-based clients) to DXVK on every runtime. Previously a runtime
-  without the D3DMetal payload resolved launchers to DXMT, whose Direct3D
-  layer launcher UIs cannot render on, leaving the client running with no
-  window (#163).
-- Enabling DXVK now reconciles the bottle's dxgi.dll against the D3DMetal
-  payload. With the payload deployed, the builtin dxgi is Apple's forwarder,
-  which DXVK's d3d11 cannot pair with, so Wine's own backed-up dxgi is
-  installed into system32 with its builtin marker stripped and loads as a
-  true native PE. Without the payload, a stale native dxgi.dll a previous
-  DXMT launch left in the bottle's system directories is removed instead:
-  that leftover paired DXVK's d3d11 with DXMT's dxgi, which cannot create
-  window swapchains, leaving Chromium-based launchers such as Steam running
-  with no window after a switch from DXMT to DXVK (#163).
-- A Visual C++ Runtime whose installer hung under wine after installing
-  successfully is now detected. The winetricks.log entry is only written once
-  the installer exits, so the Dependencies panel kept saying "Not Installed"
-  although the runtime was in place. When the log lacks the vcruntime verb,
-  the presence of mfc140.dll in system32 -- the x64 redist's payload on the
-  default win64 bottles, which Wine does not ship as a builtin -- now counts
-  as installed, reported with heuristic confidence; a bottle whose log
-  already says installed is never probed (#233).
-
-### Removed
-- ClickOnce support. Games do not arrive as `.appref-ms` deployments, and
-  nobody spoke up for it during the window on #215. The manager, its
-  detection pass in the program scan, the badge, the context menu, the
-  .NET auto-recommendation and the `.appref-ms` file type in the run
-  panels are all gone. The ClickOnce cache filter in the executable scan
-  stays, since a prefix can still contain those artifacts.
-
-  This removes `ClickOnceManager` and the `Program(appRefURL:bottle:displayName:)`
-  initializer from WhiskyKit's public API, along with the `isClickOnce`
-  property, so the kit needs a major version bump (#215).
-
-## [3.7.0] - 2026-08-29 (App)
-
 ### Added
+- DLSS frame generation can be set per program, beside the Metal 4 override in a
+  program's graphics overrides. It is the setting most likely to be right for one
+  title and wrong for the next: a title that ships DLSS-G and holds is worth the
+  frames, and one that deadlocks is not, and neither answer should decide it for
+  every game in the bottle.
+- The macOS Steam overlay can be put into a game's process, behind
+  `WHISKY_STEAM_OVERLAY=1 %command%` in the game's Steam launch options. The
+  received answer is that the overlay cannot work here, because the client
+  injects a dylib into a native process and a Windows game is not one. The game
+  is not, but the process running it is, and that process presents through a
+  `CAMetalLayer`, which is what the overlay hooks. Injected into a Wine process
+  running a DXVK swapchain it loads, reads the app id the client already set,
+  and reports `Hooking _MTLCommandBuffer::presentDrawable:`. The missing piece
+  was only ever `DYLD_INSERT_LIBRARIES`, which the client carries under a name
+  dyld does not strip and expects whatever it launched to restore. It is not a
+  default: with D3DMetal's Metal 4 backend the overlay's hook of
+  `AGXG17GFamilyCommandBuffer::commit` leaves command buffers failing with
+  `MTL4CommandQueueErrorDomain error 1` on an `MTL3On4CommandBuffer`, which
+  cost Ready or Not a flashing screen, a black one and then a crash. Shift+tab
+  does not reach it either.
+- A game the macOS Steam client launches now runs under a helper that stands in
+  for the client inside the bottle, and the game is the helper's child the way
+  it is Proton's `steam.exe` stub's child on Linux. Several of the things a game
+  asks before it will use the Steamworks API do not go through that API, so the
+  bridge to the macOS client cannot answer any of them: whether the process in
+  `ActiveProcess\pid` is alive, whether a window of class `vguiPopupWindow`
+  exists, what `SteamPath` and `ValvePlatformMutex` are, and whether anything
+  answers Steam's DRM start handshake. Helldivers 2 read its own Steam ID
+  through a healthy bridge and then span its callback loop without ever
+  requesting an auth ticket, which is what a game that has decided Steam is
+  absent does. Being the parent is what makes the rest work: the environment the
+  helper sets is inherited, a game that asks Steam to relaunch it gets
+  relaunched in place, a title Steam hands a launcher URL rather than an
+  executable goes through the shell, and the helper exits when the game does
+  rather than outliving the session. It runs from the app bundle, writes nothing
+  into a prefix, and starts only when the environment names a Steam session.
+- The prefix is told where Steam is, who is signed in, and what the client's UI
+  language is before a game the client launched starts. `steam_api` prefers the
+  registry and falls back to resolving `steamclient64.dll` against `SteamPath`,
+  and a clean bottle gave it nothing to fall back to; `ActiveUser` is read from
+  the macOS client's own login list; the language and the app's installed and
+  running state are filled in by `lsteamclient`, through an export that has
+  shipped in the runtime all along and that nothing called. XBox Game Studios
+  titles are told `GamingRepair` already succeeded, which is about twenty
+  seconds of a game looking hung that they otherwise spend on a repair that
+  cannot work here. Values the bottle's own Windows client wrote are left alone.
+- `steam://` URLs opened inside a bottle reach the macOS client. Wine hands a
+  scheme it does not recognise to `/usr/bin/open`, so the handler is two
+  registry values. Bottles with their own Windows client keep pointing at it.
+- Metal 4 can be turned off for one program while the bottle keeps it. D3DMetal
+  only takes that command encoding path for D3D12 devices, and a queue fence
+  there does not always signal: Helldivers 2 waits on three, finds one stuck
+  exactly one signal behind, retries four times and then dereferences null on
+  its renderer thread. Turning the whole bottle back is the wrong trade for one
+  title, so this is a per-program setting, and the game ships with it off.
+- A menu item turns compatibility tools on in the macOS Steam client, and
+  another puts Steam back. Both quit Steam first, because the files being
+  replaced are the ones it has open and it rewrites its own configuration on
+  exit. Turning it on says what it costs before doing it: the client stops
+  updating itself, since the check that would undo the change is the same one
+  that keeps it. Applying again after a Steam update repairs whatever the update
+  reverted, and a client that has changed too much to recognise is reported
+  rather than patched.
+- Whisky can make compatibility tools usable in the macOS Steam client, and put
+  it back. Valve builds the whole compatibility manager for macOS and then
+  switches it off with a string compare, and hides its Compatibility settings
+  behind the same question in JavaScript, so three edits are needed: the compare
+  in the client, the check in the interface bundle, and a `steam.cfg` beside the
+  client, without which the client verifies its own executables at startup and
+  undoes the other two within one launch. `SteamClientPatch` reports what state
+  the client is in, applies whatever is missing, and reverts. Nothing hunts for
+  a fixed offset: the compare is found by the shape of the code around it, so a
+  Steam update moves it without breaking this, and anything that no longer
+  matches is reported rather than patched.
+- Whisky can start and stop the macOS Steam client itself, which it has to be
+  able to do for two reasons that come from the client rather than from choice:
+  it only looks for compatibility tools in directories named by
+  `STEAM_EXTRA_COMPAT_TOOLS_PATHS`, and its interface only accepts changes when
+  it was started with a debugging argument. The binary started is the downloaded
+  client rather than the one in Applications, because that one is a bootstrapper
+  that re-execs the real client and neither an environment nor an argument list
+  survives the hop.
+- `whisky steam-compat-run` runs a game the macOS Steam client hands over
+  through the compatibility tool. It runs the executable directly in the bottle
+  rather than through the bottle's own Steam client, because Steam already
+  launched it and a second client would hand the game the wrong one, and it
+  stays in the foreground until the game exits, because Steam treats the process
+  it spawned as the game. Everything Steam named in the environment is passed
+  through, since that is how a game finds the client it belongs to.
+- Whisky can present itself to the macOS Steam client as a compatibility tool,
+  the shape that client already knows how to drive: it picks a tool for a title,
+  runs the tool's command line with the game's executable appended, and hands it
+  an environment describing where the game and its prefix live. A game launched
+  that way belongs to Steam the way a native one does, which is what the overlay
+  and the Steam API need and what a launch started behind Steam's back cannot
+  have. `SteamCompatTool` writes the two manifests and the runner, spelling the
+  target platform the one way the client accepts, and reports the environment
+  Steam has to be started with, since the client never scans its own
+  compatibility tools directory on macOS.
+- The operations the macOS Steam client will not perform for a Windows title are
+  now available to Whisky. `SteamFrontend` reads which platforms a title ships
+  builds for, so a Windows-only one is identified rather than guessed at; reads
+  and sets the compatibility tool a title runs through; downloads a title's
+  Windows build into a chosen library folder, which takes a platform override
+  and an install command together because the override alone writes a manifest
+  and fetches nothing; and hands a launch to Whisky for a title the client
+  refuses with `AppError_29`. Names that reach a script are written as JSON
+  literals, because a bottle or tool name is user input and a quote in one would
+  otherwise end the literal early.
+- Whisky can talk to the macOS Steam client's interface. That interface is a
+  Chromium app whose behaviour is decided in JavaScript, which matters because
+  the two things standing between the macOS client and a Windows game both live
+  there rather than in the client binary: it refuses a Windows launch config
+  with `AppError_29`, and it hides the compatibility settings behind a
+  one-line check for whether the platform is Linux. `SteamDevTools` attaches to
+  the client's shared scripting context, evaluates expressions in it, and
+  installs a patch that survives the reloads the client does on its own. It
+  needs the client started with `-cef-enable-debugging`; the marker file that
+  enables this elsewhere does nothing on macOS.
+- 32-bit Windows games can render. The backend resolver only ever looked at the
+  machine and the launcher, so with GPTK installed it answered D3DMetal for
+  every program. D3DMetal and DXMT live only in the runtime's x86_64-windows
+  tree, so a 32-bit program offered either one quietly loaded Wine's builtin
+  d3d11 on wined3d and the game reported that DirectX 11 was missing. The
+  resolver now reads the executable's architecture and sends a 32-bit one to
+  DXVK, the only backend with a 32-bit payload. An executable whose headers
+  cannot be read keeps the path it took before.
+- A bottle's Steam can be pointed at a library folder that lives on macOS, so
+  the macOS Steam client and the bottle's client share one copy of a game. This
+  exists because the two clients can each do half the job: the macOS client
+  downloads Windows depots (its console takes `@sSteamCmdForcePlatformType
+  windows` and then `app_install <appid>`, and both are needed) but refuses to
+  launch them, while the bottle's client launches them but has to fetch them
+  through Wine's networking. `whisky library show` lists what a bottle shares
+  and what it could, `whisky library share` adds a folder, and
+  `whisky library unshare` takes it back out without touching the games.
+  Steam's own data folder is refused: it holds the macOS builds of native
+  games, and a Windows client scanning those decides they are the wrong build
+  and queues a redownload over them.
 - Failed dependency installs now record the last few KB of winetricks output
   in dependency-history.plist alongside the exit code, so the reason for a
   failure (such as a vc_redist checksum mismatch) is on disk next to the
@@ -88,111 +189,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of raw localization keys (#208).
 
 ### Changed
-- DLSS frame generation is now its own bottle setting, off by default, instead
-  of riding on the MetalFX toggle. Both reach MetalFX through the same bridge,
-  but frame generation ended the login session on the machine it was measured
-  on: every command buffer carrying MetalFX work failed and WindowServer wedged
-  in the GPU driver until its watchdog killed it. Upscaling is unaffected and
-  stays on. Some NVIDIA Streamline titles refuse to start with frame generation
-  off, Deep Rock Galactic among them, so those need the toggle flipped for that
-  bottle (#231).
-- The per-bottle Steam library screen has been removed; the library on the
-  landing screen does that job for every bottle at once (#206).
-- The bottle action bar now emphasizes Run as its primary control, with
-  Liquid Glass styling on macOS 26 and bordered buttons on earlier
-  releases (#210).
-- The Sequoia Compatibility Mode toggle has been removed. The fixes it
-  claimed to control ship unconditionally, so the switch changed nothing in
-  either position (#216).
+- DLSS frame generation is now its own bottle setting, separate from the MetalFX
+  toggle, and it is off by default. Upscaling and frame generation reach MetalFX
+  through the same bridge but fail differently: upscaling is measured good, and
+  frame generation deadlocks Ready or Not's RHI thread within five minutes, on
+  Metal 3 and Metal 4 alike, until the game gives up with `GameThread timed out
+  waiting for RenderThread after 120.00 secs`. The thread is parked in a wait
+  D3DMetal never releases. The same session with frame generation off and
+  nothing else changed plays clean, with the interpolator confirmed running
+  beforehand: the Metal HUD reported `Frame Interpolator Enabled` at 38 render
+  FPS against 138 presented. The switch is `CX_ACTIVE_GRAPHICS_BACKEND`, which makes
+  win32u answer `KMTQAITYPE_WDDM_2_7_CAPS` and is the only reason NVIDIA
+  Streamline will enter its DLSS-G path; leaving it unset costs nothing else.
+  A per-program D3DMetal override reads the same setting, so a game the Steam
+  launcher steered onto D3DMetal inside a DXVK bottle cannot keep frame
+  generation after the bottle turned it off.
 
 ### Fixed
-- Installing the Visual C++ Runtime no longer stalls on an invisible install
-  wizard. winetricks was run without -q, so the vc_redist installer showed
-  its setup dialog inside the prefix and waited for a click nothing in the
-  Dependencies panel prompts for -- the process never exited, the
-  winetricks.log entry was never written, and the panel stayed on "Not
-  Installed" even after a successful install. The vcrun verbs now run
-  unattended (#233).
-- Five labels showed their raw localization key instead of text: the
-  "currently using" line on the Recommended graphics card and the helper
-  under it, the detected display size next to Virtual Desktop, and the exit
-  code badge and footer in the console. Each interpolates a value, and the
-  catalog only carried the plain key.
-- "Analyze last run" and "View Latest Diagnosis" no longer open a small empty
-  sheet that only cmd-period could dismiss. The sheet was presented on a flag
-  while its content read a separate optional, which SwiftUI can evaluate
-  before the value lands; both are presented from the value itself now.
-- The bottle's "Export Diagnostic Report" and "View Latest Diagnosis" buttons
-  can enable. A recorded crash diagnosis never stamped the program's last
-  diagnosis date, so the buttons stayed disabled forever and the ZIP export
-  was unreachable.
-- The crash diagnosis sheet has a Done button. It had no control of its own,
-  so the only way out was cmd-period or closing the window behind it.
-- "Analyze last run" is disabled until the program has a run to analyze.
-  Before the first run it clicked through to nothing.
-- The crash diagnosis history on a program's page refreshes when a diagnosis
-  is recorded while the page is open, instead of waiting for it to be reopened.
-- A program pinned in a bottle created during the same session now shows up
-  in the library, the Dock menu, and the menu bar extra right away. The
-  bottle list was rebuilt at the end of creation, so the bottle page kept
-  writing to an instance the rest of the app no longer read.
-- "Terminate Wine processes when Whisky closes" (and a bottle's Always Kill
-  policy) now actually ends the bottle's processes on quit. Two things kept
-  it from working: the setting read as off until the toggle had been touched
-  once, because its default was never written to disk, and the kill was
-  queued asynchronously from the termination handler, so the app exited
-  before it ran.
-- "Audio Troubleshooting" no longer opens as a small empty sheet. Same cause
-  as the diagnosis sheet: presented on a flag while the content read a
-  separate optional; it is presented from the engine itself now.
-- The bottle's Terminal button works for bottles whose name contains a space.
-  The name was backslash-escaped inside double quotes, so the shell passed
-  the backslashes through and WhiskyCmd reported that no such bottle exists.
-- Guided troubleshooting no longer dead-ends on a findings card. Info steps
-  such as "Missing dependencies found" only carry a Continue transition, and
-  nothing followed it; the wizard now shows a Continue button there, and Skip
-  moves on as well.
-- Guided troubleshooting no longer reports "Problem resolved" when it has
-  run out of automated steps. The flows' escalation node shares the export
-  phase with the resolved node, and the wizard drew both the same way; a node
-  that hands off to the escalation fragment now shows the escalation screen
-  with its export and retry options.
-- Applying a game configuration now sets the graphics backend it lists. The
-  entry's legacy DXVK flag was written after the backend and its "off" value
-  meant "back to Recommended", so every apply ended on Recommended while the
-  toast said it had applied. The preview also no longer lists Sequoia
-  Compatibility Mode, a setting that no longer exists.
-- Export as Archive writes the bottle as `<folder>/...` entries instead of
-  its absolute path, so the archive no longer carries the user's home
-  directory name and extracts where it is opened. Neither export carries
-  AppleDouble `._` files any more.
-- The Duplicate Bottle sheet's confirm button says Duplicate, not Rename.
-- Guided troubleshooting's install step names the verb it will install after
-  a resumed session, and its game-database check sees the program the wizard
-  was opened from.
-- Cancelling a dependency install stops it. Cancel only closed the sheet,
-  leaving winetricks and the installer it had spawned running in the bottle;
-  it now cancels the install and ends the bottle's Wine processes.
-- Diagnostic exports with "Include sensitive details" off no longer carry
-  credentials in plain sight. Launch arguments were written to the archive
-  verbatim regardless of the toggle, and log redaction only rewrote the home
-  path, so a `-token` argument or a bearer token a game logged went out in a
-  ZIP the sheet described as scrubbed. Arguments and both log members now
-  have common secret shapes removed (`name=value` and `--name value` forms
-  for token, password, secret and key style names, Bearer and Basic
-  credentials, URL user info, sensitive query parameters, JWTs), and the
-  sheet says so. It is best effort by nature; the toggle still exports raw.
-- Running a winetricks verb from the bottle's Winetricks screen no longer
-  hands the bottle's path to the terminal as shell text. A bottle imported
-  from a directory whose name carried `$(...)` or backticks would have had
-  that executed in the user's terminal; the command now goes through a temp
-  script with every value quoted, the same route as the bottle's own Open
-  Terminal, which also means it follows the preferred terminal setting
-  (iTerm and Warp) instead of always opening Terminal.
-- A Windows executable whose icon declares a bitmap height of exactly
-  -2147483648 no longer crashes Whisky while the library renders its icon.
-  The parser took the absolute value of that height before checking its
-  range, and that value has no absolute value in 32 bits.
+- Turning Metal 4 off now turns it off. `D3DMDevice::MTL4OptionEnabled` seeds
+  itself from `IsAtLeastOSVersions(macOS 27)` and only reads `D3DM_MTL4` when the
+  variable is present, so omitting it left Metal 4 on for every bottle on macOS
+  27 and the toggle did nothing in the off direction. The bottle setting and the
+  per-program override both write `0` now rather than removing the variable.
+  Ready or Not's game profile forced it on besides, from a layer above the
+  bottle, and asks for Metal 3 now: on Metal 4 the title fails every command
+  buffer carrying MetalFX work, 542 in one eight minute session, and
+  WindowServer then blocks in `IOGPUFamily` until its watchdog ends the login
+  session. On Metal 3 the same sessions log none.
+- Quitting a game the Steam client launched now shuts the bottle down with it.
+  The process holding Steam's presence open was started and forgotten, ran a
+  message loop with no way out and had nothing watching it, so every session
+  left one behind and a `wineserver` alive to host it. It is now the process the
+  game runs under, and Wine is told not to count it, so the prefix closes on the
+  game and not on the last thing anyone remembered to kill.
+- A game the Steam client launches now gets the same per-program settings and
+  the same game profile a direct launch does. The compatibility tool was
+  building its own environment and ignoring both, so the graphics backend, the
+  overrides and everything else set against an executable applied or did not
+  depending on where it was started from, and Helldivers 2 kept Metal 4 through
+  Steam while the identical exe run from Whisky did not.
+- Steam no longer warns that it could not sync before every game. The macOS
+  client asks the compatibility tool to run a game's install script through
+  `legacycompat/iscriptevaluator.exe` and then does not ship that binary: the
+  directory it names is created empty on every install. Wine answered "failed to
+  open", and the client read the nonzero exit as a failed launch step. Answering
+  for it skips nothing that was ever going to run.
+- Steam finds Whisky's compatibility tool however it was started, including from
+  the Dock. The tool was going into `<steam>/compatibilitytools.d`, which is the
+  directory every guide names and the one the macOS client never reads, so it
+  was only ever found when Steam was started with an environment variable
+  pointing at it. It now goes to `/usr/local/share/steam/compatibilitytools.d`,
+  which the client scans unprompted. That directory belongs to the system until
+  an administrator says otherwise, so Whisky checks first and hands over the
+  command rather than failing with a permission error.
+- Whisky no longer gives Steam a second Dock icon. Starting it ran the
+  executable inside the app bundle, which skips LaunchServices: macOS drew a
+  separate generic icon beside the real Steam and the copy would not answer a
+  normal quit. The bundle is opened instead.
+- Whisky no longer mistakes a Windows-only Steam title for a native one. The
+  platform list stops separating them once Steam Play is on, because the client
+  synthesises `osx` into it for any title a compatibility tool covers, so
+  Helldivers 2 and a genuinely native game read the same. What still separates
+  them is the tool: the client attaches one only where there is no native build
+  to run. The platform list is still consulted where no tool exists, which is
+  the state a fresh install is in.
+- A GPTK runtime is no longer left without a D3D12 or DXGI DLL if Whisky is
+  killed while it installs one. The interposer was put in place by removing the
+  slot and then copying, so anything interrupting that window left the slot
+  empty, and the install guard then refused to repair it because there was no
+  DLL left to rename aside. The shim is now staged beside the slot and swapped
+  in by rename.
+- Games no longer crash when a video finishes playing. The runtime's D3D12
+  interposer backs each NV12 texture with a luma and a chroma texture and keeps
+  a table pairing them, but nothing ever removed an entry. Once a video ended
+  and the game released its texture, the entry held a freed pointer, and the
+  table is consulted on every resource barrier the game issues rather than only
+  on video ones. When the allocator handed that address to some later resource
+  the stale entry matched again and the barrier was mirrored onto a texture
+  nobody owned. Helldivers 2 hit it the moment its intro finished, having
+  converted thirteen hundred frames without a complaint. Pairs now go away with
+  the texture they belong to.
 - Installing the Visual C++ Runtime from the Dependencies panel no longer
   fails silently on a stale checksum. Microsoft rotates the vc_redist
   binaries in place, so the SHA256 sums pinned in the bundled winetricks go
@@ -216,11 +292,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Games that check the graphics driver version can start. D3DMetal answers the
   DXGI query with success and a version of -1, which reads back as
   65535.65535.65535.65535 and fails every minimum-driver check: Helldivers 2 put
-  a modal "GPU drivers are out of date" box in front of the game. A runtime that
-  carries the DXGI interposer is now deployed with it, answering the same version
-  Wine already publishes for the adapter so the two agree. It has to be its own
-  module rather than part of the D3D12 one, because the check happens before a
-  game touches D3D12 at all. Runtimes without it are skipped as before (#227).
+  a modal "GPU drivers are out of date" box in front of the game. The runtime
+  now interposes DXGI as well and answers with the same version Wine already
+  publishes for the adapter, so the two agree. It has to be its own module
+  rather than part of the D3D12 one, because the check happens before a game
+  touches D3D12 at all.
 - DLSS frame generation is offered to games Steam launches. Whisky steers Steam
   itself onto DXVK so its Chromium helper paints, and it was stripping
   CX_ACTIVE_GRAPHICS_BACKEND along with the rest of the DXVK-versus-D3DMetal
@@ -230,41 +306,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   D3DMetal, since DXVK has no d3d12, so stripping it left every one of them
   reporting that frame generation needs GPU hardware scheduling turned on. It
   now survives the DXVK and DXMT overrides, and is still dropped for wined3d,
-  which is the one path with no D3DMetal behind it. The variable is only set
-  at all when the bottle's frame generation toggle is on (#225, #231).
-- Games that decode video themselves no longer fall back to a broken
-  half-resolution path under D3DMetal: when the runtime ships the D3D12
-  video processor interposer, it is installed automatically alongside the
-  GPTK payload (#197).
-- The Play Test Tone button now actually plays a tone. The test executable
-  was never included in any build, so the button silently did nothing and
-  then asked whether you heard it. The tone is also gentler: 600ms with
-  fades instead of a 100ms full-scale click (#209).
-- Audio settings, the console, and program overrides no longer show raw
-  localization keys in place of text on English systems: the English source
-  strings were missing from the catalog and have been restored (#207).
-- Troubleshooting fixes now do what their cards say: the crash banner's
-  buttons open the diagnosis they promise, remediation cards actually apply
-  (winetricks installs run and report their real outcome, and a fix that
-  cannot be performed is recorded as failed rather than applied), and the
-  troubleshooting wizard is localized (#213).
-- The shader cache toggle now controls the cache DXVK actually reads, and a
-  dxvk.conf file placed in the bottle root is picked up at launch. The
-  Recommended backend applies the same availability check as the backend
-  picker, so it can no longer select a backend whose payload is missing and
-  then fail at launch (#216).
-- The audio driver and latency settings now actually take effect: they are
-  written to the bottle's Wine registry at launch, which nothing did before,
-  so the options were recorded but never applied (#214).
-- Crash diagnosis now covers games that die later in a session, not just at
-  launch: classification runs when the bottle's Wine session actually ends,
-  and it reads the start of the log as well as the end, which is where
-  missing-DLL and backend failures appear (#217).
-- A D3DMetal bottle answers when a game asks whether hardware accelerated GPU
-  scheduling is available. Wine only answers that query for a caller that says
-  it is running on D3DMetal, and nothing said so, so the answer was always that
-  the feature is not implemented. Since #231 the bottle says so only when its
-  frame generation toggle is on.
+  which is the one path with no D3DMetal behind it.
+- DLSS reaches games that use NVIDIA Streamline, which needed one more thing
+  than deploying Apple's NVAPI. Wine resolves a builtin by the name in the PE
+  export directory rather than the filename, and Apple's NVAPI ships as
+  nvapi64.dll while exporting as nvapi.dll, so the loader looked for a builtin
+  it could not find, loaded the PE without its unix half, and DllMain failed.
+  Nothing surfaced that: Streamline asked for a GPU, got nothing, and offered no
+  DLSS with no error to explain it. The same file is now installed under both
+  names, and a runtime set up before this is repaired rather than skipped.
+- Steam's helper process survives a game launch with MetalFX enabled. The entry
+  that keeps Chromium away from NVIDIA's API was only written for a direct run,
+  and a Steam launch takes the other path, where the same sync replaces each key
+  it writes. So launching a game did not merely skip the helper's protection, it
+  cleared it, and the helper died on the launch after.
+- DLSS works in games that use NVIDIA Streamline, which is most of the current
+  ones. Streamline asks NVAPI about the GPU before it will consider DLSS at all,
+  and Wine ships an nvapi64 that exports nothing, so it concluded there was no
+  NVIDIA driver and quietly offered no DLSS option, with nothing in any log to
+  say why. Apple's NVAPI is now deployed alongside the MetalFX bridge. It is
+  disabled for launcher helper processes rather than withheld from everything,
+  because Chromium probes for an NVIDIA GPU on startup and answering takes the
+  helper down. A bottle with MetalFX enabled also gets the NGX manifest a driver
+  install would have written, which Streamline logged an error for on every
+  launch.
+- DLSS frame generation works under the MetalFX bridge. Wine answers the query
+  behind "hardware accelerated GPU scheduling" only for a caller that says it is
+  running on D3DMetal, and nothing ever said so, so every game was told
+  scheduling was unavailable. NVIDIA Streamline refuses frame generation on that
+  answer, which is why turning MetalFX on did nothing for the games that use it.
+  A D3DMetal bottle, and any single program overridden to D3DMetal, now say so.
 - DirectX 12 games run again in a bottle set to DXVK or DXMT. Neither ships a
   d3d12 of its own and neither said so, so that one DLL quietly fell through to
   D3DMetal while the rest of the stack was not. A DX12 game took its adapter
@@ -272,9 +343,352 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with no error of its own to show for it. Both now turn d3d12 off, so such a
   game falls back to DirectX 11 rather than half landing on something else, and
   a bottle or a single program set to D3DMetal gets real DirectX 12 back.
-- Newly created bottles are now immediately interactive: the inFlight guard
-  is reset after a successful creation so that state-dependent actions (move,
-  export, duplicate) no longer require an app restart to become available.
+- Dependencies install again. Winetricks was run without unattended mode, so
+  anything it wanted to ask went to a prompt with nothing behind it and it
+  quit with "Operation cancelled". Visual C++ Runtime could never install:
+  Microsoft reissued the redistributable and the checksum question was the
+  prompt nobody could answer. Visual C++ now installs the 2022 runtime, which
+  carries the older ones with it, and a bottle that already has the 2019 one
+  is not reported as missing it.
+- The Windows version shown for a bottle is the one the prefix reports rather
+  than the one the settings file remembers being asked for. The two could
+  differ for good: a version change whose registry write failed, or a bottle
+  adopted from another Whisky, left a picker saying Windows 11 over a prefix
+  telling Steam it was Windows 7. The picker now applies the change before
+  writing the setting, and every launch puts a drifted prefix right.
+- A build number belongs to a Windows version. Setting one from another
+  version made a pair nothing could name: `winecfg` read it as Vista, Steam
+  read it as Windows 7, and the picker above it said Windows 11. Newer builds
+  of the same version still go through.
+- A WINEDEBUG you type yourself now wins over the diagnostics preset, which
+  used to replace it silently and send you looking through a log that never
+  had the channels you asked for.
+- Two runs starting in the same second no longer share a log file. The second
+  one replaced the file while the first kept writing into it, so a launch's
+  own output was reachable from nowhere. This is why some logs stopped right
+  after the environment listing.
+- Every language reads as words, not keys. 163 strings had a row in English only,
+  and a language that is missing a string shows the key itself rather than
+  falling back, so the library screen said `library.card.settings` in all 22
+  translated languages. The gaps now carry the English text until a
+  translation arrives.
+- Game Settings on a library card resolves the game's program before deciding
+  anything, scanning the bottle on demand when needed. It used to fall through
+  to selecting the bottle whenever the bottle had not been opened that
+  session, silently; the genuine fallback now says why it went there.
+
+### Added
+- A Debug window, File > Debug Window or Cmd-Shift-B. Pick a bottle and a
+  program, tick the Wine channels you want, launch, and the log streams in as
+  it is written, filtered by problems, fixme or trace and searchable. Follow
+  Latest Log attaches to the newest run instead, for a game started from the
+  library. The bottle's running processes sit in the lower half, so a hung
+  child can be stopped without taking the session with it.
+- Programs started from the Debug window run attached, so what the window
+  shows is the program's own output. Every other launch hands the program to
+  wineserver, which gives it a console of its own, and its output reaches
+  nothing Whisky can read.
+- Library cards are yours to arrange: rename a game, mark it a favourite, or
+  hide it. Favourites sort first, hidden cards sit behind Show Hidden, and a
+  rename follows the game rather than the file it happens to be.
+- Game Settings in a card's right-click menu opens the game's own settings,
+  the same form the bottle's Programs tab shows. A Steam game finds the
+  executable that speaks for it; when nothing single does, the bottle opens
+  instead.
+- Games launch from Spotlight. Every visible library entry is indexed by name,
+  and picking one starts it through the same whisky:// launching the url
+  scheme uses. Renames and hides keep the index current.
+- Why These Settings, on every program's settings page: the launch plan's
+  notes and each environment variable the next launch will carry, labeled
+  with the layer that set it and the reason that layer recorded.
+- A crash while Whisky is in the background lands in Notification Center, and
+  clicking it opens the diagnosis. Audio device alerts go there too when a
+  game is frontmost, with a Settings toggle to turn them off entirely.
+- Cmd-N creates a bottle again, and macOS Game Mode can engage for fullscreen
+  games now that Whisky declares it.
+
+### Changed
+- Every way of starting a program goes through one launch door, so launcher
+  fixes, the game database profile and your own overrides apply whether the
+  click came from the library, a pin, the bottle's run panel, a file drop or
+  the cli. Known games get their recommended profile on direct runs too, not
+  only through Steam.
+- The audio driver and latency preset actually reach the Wine registry,
+  synced at launch when they changed. They were settings-file decoration
+  before.
+- Troubleshooting fixes do what their cards say. The four fixes that had no
+  implementation are real or gone, winetricks installs run from the card and
+  only confirm once the verb lands, the audio buffer fix speaks the app's own
+  presets, and a flow referencing an unimplemented fix fails validation
+  instead of shipping a dead Apply button.
+- The troubleshooting wizard is translated. Every other language saw
+  hardcoded English in the one surface built for someone whose game is
+  broken.
+- Audio troubleshooting opens the guided wizard directly in its audio flow
+  instead of a separate wizard running a duplicate engine.
+- The bottle's Configuration screen leads with graphics, audio and
+  performance; the Wine plumbing follows, collapsed by default.
+- An empty library teaches adding a game: an Add a Game button opens the same
+  flow a Finder drop lands in, and the copy says drops work anywhere on the
+  window.
+- Whisky no longer claims system-wide ownership of .bat and .msi files. It
+  stays the app for .exe.
+- Report Issues in the Help menu opens the upstream tracker. This fork has no
+  issue tracker of its own, so the button used to open nothing; SUPPORT.md now
+  says which build a report belongs to.
+
+### Removed
+- The Sparkle appcast template, empty since the in-app updater went, along
+  with the feed URL nothing published to.
+
+### Fixed
+- A pinned executable that lives inside a Steam game's install folder merges
+  into the Steam card instead of showing the game twice; matching is by
+  location, not by name, so "Game" can never claim "Game II".
+- Crashes are classified when the session ends rather than seconds after
+  launch, and the classifier reads the head of long logs, where loader errors
+  actually appear.
+- Settings that did nothing were wired or removed: the shader cache toggle
+  controls the cache DXVK actually reads, a dxvk.conf in the bottle is picked
+  up at launch, and the invented network tuning variables and the Sequoia
+  compatibility toggle are gone, since the real fixes ship unconditionally.
+- Recommended graphics backend uses the same DXMT gate as the picker, so it
+  can no longer choose a backend the installed runtime cannot deliver.
+- Diagnosis remediation cards have a working Apply everywhere they appear,
+  and a fix that cannot be performed is recorded as failed rather than
+  applied.
+
+### Removed
+- The standalone audio troubleshooting engine and wizard, folded into the
+  guided troubleshooting wizard.
+- The unimplemented install-dependency fix and the unreferenced flow fragment
+  that carried it.
+- A release script that assumed signing credentials the project does not
+  have; releases ship through CI.
+
+### Added
+- Ways to launch without opening the window. Right-clicking Whisky in the Dock
+  lists the pinned games. `whisky://launch?pin=Name` and
+  `whisky://launch?steam=12345` start a game from Shortcuts, Raycast or a
+  stream deck, with `&bottle=Name` to pick when two bottles match. Dropping an
+  installer or exe from Finder anywhere on the window opens the run flow.
+
+### Changed
+- Whisky tells macOS it is a games app, so the Apps window and the App Store
+  category file it under Games rather than Utilities.
+
+### Fixed
+- The crash banner's View Diagnosis button opens the diagnosis it announced
+  instead of only dismissing the banner. The launcher section's View
+  Diagnostics and the missing-dependency Install button had the same problem,
+  posting notifications nothing observed; both now do what they say, and
+  Troubleshoot finds the right bottle instead of asking every time.
+
+### Removed
+- ClickOnce support. Games do not arrive as `.appref-ms` deployments, so the
+  detection pass, the badge, the context menu and the .NET auto-recommendation
+  are gone. A prefix containing ClickOnce artifacts still scans cleanly.
+- The Sparkle updater. It was linked and delegated but never constructed, with
+  no feed to check. Updates ship through the Homebrew cask.
+
+### Fixed
+- A new bottle is usable the moment it finishes. The spinner beside its name kept
+  running after creation had completed and only a relaunch cleared it.
+- Library recency reflects launches started in Whisky rather than reading Steam's
+  manifest dates, which carried over playtime from other machines or external sessions.
+- Steam games still read "Never run" in 2026.8.8. Recording launches only fills
+  in from the build that started doing it, so everything already installed had
+  nothing to show. Steam has been writing a last-played time into each game's
+  manifest all along, including for sessions started inside the client, so that
+  is where the time comes from now and the history you already have shows up.
+- A focused library card drew two rings, a rounded one following the card and a
+  squarer one outside it.
+
+### Fixed
+- Steam games in the library always read "Never run", and the Steam entry took
+  the credit for every launch. A Steam game starts by running the client with
+  `-applaunch`, so the run log belonged to the client rather than to the game.
+  Launches are recorded per game now, which also means "most recently played
+  first" sorts the way it says it does.
+- Refresh rebuilds the library. It reloaded only when the set of bottles changed,
+  so a game installed in Steam or a program pinned in a bottle stayed invisible
+  until the app was restarted, while the button spun as though something had
+  happened.
+- Starting something from the library shows that it is starting. A card carries a
+  spinner from the click and a badge while the game is running, rather than
+  twenty silent seconds while Wine brings a window up.
+- Card text in light mode. The backdrop faded towards transparent, so the corner
+  holding the name composited against the window and left white text on something
+  close to white.
+- The same Steam game installed in two bottles appeared as two cards sharing one
+  identity, which had them swapping artwork.
+- The warning badge on a bottle in the sidebar is a button. It means the prefix
+  still has a wineserver running, and it now stops it instead of only saying so.
+
+### Added
+- The library sorts by recency, name or bottle, and a card has a menu: run it,
+  stop it, show it in Finder, remove the pin. Cards take keyboard focus and start
+  on return, so the play button is not mouse-only.
+- Storefront clients are labelled as launchers and sit below the games, named for
+  what they are rather than for their executable, so the Steam client stops
+  appearing as `steam`.
+
+### Changed
+- The sidebar's search field is gone. The library has one, and two fields side by
+  side searching different things is a choice nobody should have to make to find
+  a game.
+- Cards are narrower and the window is wider at its minimum, so two columns fit
+  at the smallest size the window can take.
+- Pins in the bottle screen start on a single click, the same as a library card.
+- Scrolling the library no longer re-reads Steam's manifests or re-decodes every
+  banner, both of which happened on each pass.
+
+### Added
+- The app opens onto a library rather than a sidebar of bottle names. Everything
+  worth launching is there, most recently played first: programs you pinned, and
+  Steam games parsed out of the bottle. Steam games show the banner Steam already
+  cached inside the prefix, so the art arrives with nothing fetched, and anything
+  without art gets a card coloured from the icon in its own executable. A bottle
+  is one click away under Bottles, and is named on a card only when you have more
+  than one.
+- British English. Thirteen strings differ, and macOS picks it up from Language &
+  Region without anything to set in the app.
+
+### Fixed
+- The audio settings showed their own key names, so the driver picker read
+  `config.audio.driver.auto` instead of Automatic. Every string in the audio
+  feature had translations for 22 languages and no English source value. 63 keys,
+  plus 37 more across the console and program overrides that were never in the
+  catalogue at all.
+- Play Test Tone now plays a tone. The executable it runs has never been included
+  in a build, so the button ran, emitted nothing, and then asked whether you heard
+  it. The tone is also 600ms with fades now rather than a 100ms click, since a
+  click is what a broken audio path sounds like.
+
+### Changed
+- The bottle action bar reads as one control group, with Run as the only
+  prominent button rather than four that look equally important.
+
+### Added
+- Discord now sees what a bottle is running. Two switches per bottle, both off
+  by default: Whisky can publish the program it launched as your activity, and
+  games that publish their own rich presence can reach the Discord client
+  through a relay for the named pipe they expect. Neither writes anything into
+  a prefix, and the presence half needs a Discord application id supplied at
+  build time.
+- MetalFX can be enabled at all now. It is reachable only through the DLSS API,
+  which means a game calling `NVSDK_NGX_D3D12_*` in `nvngx.dll`, and the
+  payload's copy of that bridge was the one file deployment skipped, so
+  `D3DM_ENABLE_METALFX` had nothing to hook in any bottle. It is on by default
+  under D3DMetal, and only engages for a game that asks for DLSS with DLSS
+  switched on in the game's own settings.
+- Metal 4 command encoding for D3DMetal, on by default. D3DMetal checks the OS
+  version before it reads the variable and only takes that path for D3D12
+  devices, so it is inert rather than harmful on older systems and D3D11 games.
+
+### Fixed
+- DLL overrides now actually reach the prefix. The `.reg` file was written
+  without a byte order mark, which is the only thing Wine uses to recognise a
+  Unicode `.reg`, so the import matched no header and did nothing while exiting
+  successfully, and it was applied with `regedit`, which has no silent switch.
+
+### Changed
+- In sync with upstream Whisky 3.6.1, so the bottle location checks, the
+  resumable runtime downloads and the launcher DXVK resolution match what
+  upstream ships. Preview's own capability probe, which reports the first thing
+  a location cannot do that a prefix needs, is kept on top of it.
+
+### Added
+- Video in games that ask D3D12 to convert their decoded frames now plays
+  correctly under D3DMetal. D3DMetal exposes no video device at all, so a
+  game that decodes video itself and asks D3D12 to convert NV12 to RGB was
+  getting nothing back and falling into a fallback path no Windows machine
+  runs: S.T.A.L.K.E.R. Call of Pripyat Enhanced Edition drew its intro and
+  menu backgrounds at half resolution with the colour flattened to an olive
+  cast. Deploying the GPTK payload now also installs the video processor the
+  runtime ships, and installs that already have the payload pick it up at
+  launch without reimporting.
+
+### Fixed
+- Stopping every game now asks first. **Clear Shader Caches** shut Wine down
+  before wiping the cache and said nothing about it in the menu title, and
+  **Kill All Bottles** (Cmd-Shift-K) asked nothing either. Both now name the
+  bottles that are about to go down, and skip the dialog when nothing is
+  running.
+- Kill-on-quit does what it says. It scheduled the shutdown on a task that the
+  app's own teardown outran, so quitting with the setting on usually left Wine
+  running. It now waits for the shutdown, bounded so a wedged wineserver cannot
+  hold up quitting.
+- A game running in the foreground keeps the display awake. The screen saver
+  could still come in during a session driven only by a controller: the power
+  assertion that prevents it was written against a process registry nothing ever
+  wrote to. Programs Whisky launches and holds are registered now, which also
+  restores the process list's macOS PIDs and its force-quit fallback.
+- Pinned programs can be reached from the keyboard and read by VoiceOver. A pin
+  was a tap target with no button role, no focus and no label. Its green play
+  glyph now appears on hover or focus instead of sitting over the icon at all
+  times.
+- A Steam game launching from the library says what it is waiting for. It showed
+  one unlabelled spinner for up to three and a half minutes, covering both the
+  client coming up and the game starting, with no way to call it off. The card
+  names the phase now and offers a cancel during either.
+- A crash report stays until you have seen it. The banner cleared itself after
+  eight seconds, which is the window in which the game that just died still has
+  the screen, and the Notification Center copy was only posted when Whisky was
+  in the background.
+- **Run Diagnostics** no longer dead-ends. Picking a bottle scans it for
+  programs rather than showing an empty list, Analyze is disabled until there is
+  a log to read, and a run it cannot classify says so instead of doing nothing.
+- The VC++ runtime is marked installed once winetricks reports it installed. The
+  green checkmark appeared the moment the installer was handed off, so it also
+  appeared for an install that was cancelled or that failed.
+- Winetricks opens the terminal chosen in Settings, instead of always driving
+  Terminal.app and ignoring iTerm2 and Warp.
+- Updating the Wine runtime no longer removes the working one first. Backing out
+  of the setup sheet left the app with no runtime at all.
+- Cmd-I, Cmd-L, Cmd-Shift-D and Cmd-Shift-T work as printed. Each was declared
+  with an uppercase key, which silently added Shift to the real shortcut.
+- The setup sheet's error state fits. It was framed at a fixed height that its
+  icon, message and two rows of buttons overflowed, and translated text made it
+  worse.
+- A Steam game that failed to launch no longer leaves a last-played date and a
+  remembered bottle behind it. Both were written before the client was asked to
+  start.
+- A stalled Steam download is reported in the library. The check for one has
+  been running all along with nothing reading its verdict.
+- Long sessions cost less while they run. An attached game's output was carried
+  through to a consumer that discarded it, each launch left behind a crash
+  watcher that polled for as long as Whisky ran, and the sidebar kept probing
+  every bottle while Whisky sat in the background.
+- Launch environments reach the system log by name only, matching what the run's
+  own log file already did. A value can be a token.
+
+### Fixed
+- The Wine section no longer spins forever when the bottle is busy. Windows
+  Version, Build Version, Retina Mode and DPI Scaling each read the prefix
+  registry and waited on that read with no deadline, so a Wine process holding
+  the prefix left four spinners with no explanation and, for Windows Version, no
+  way to retry. Each read now gets 30 seconds, the row then offers a retry, and
+  the section says the bottle is busy rather than that the values are
+  unavailable. A read that runs out of time is cancelled rather than left
+  running.
+
+### Changed
+- **Import Bottles from Another Whisky…** is offered where it is needed. Whisky
+  Preview has its own bundle identifier, so arriving from another Whisky build
+  meant an empty list with the bottles still on disk, and the import lived only
+  in the File menu. Both empty states now offer it when there is something to
+  find.
+- **Force DX11** appears once, in Graphics beside the backend it affects. It was
+  in two sections bound to the same setting, worded differently in each.
+- **Help → Report Issues** opens the support page, which sorts out which tracker
+  a report belongs on, rather than upstream's issue chooser where anything
+  Preview-only is out of scope.
+- The bundled runtime is documented as Wine 11.14 (runtime 4.5.114). The README
+  and the dependency notes had it as Wine 10 and Wine 11.0, and the dependency
+  file's checksum table stopped two runtimes back, which is the copy a fresh
+  install is verified against.
+
 
 ## [3.6.1] - 2026-08-13 (App)
 

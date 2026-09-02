@@ -70,6 +70,36 @@ final class NVAPIBridgeTests: XCTestCase {
         XCTAssertEqual(target, GPTKImporter.unixLinkDestination)
     }
 
+    /// Wine resolves a builtin by the name in the PE export directory, and
+    /// Apple's NVAPI exports as `nvapi.dll`. A tree with only `nvapi64.dll` makes
+    /// the loader log `cannot find builtin library` and DllMain fail with
+    /// ERROR_DLL_INIT_FAILED, which is silent: Streamline asks NVAPI for a GPU,
+    /// gets nothing, and offers no DLSS with no error to explain it.
+    func testInstallAlsoLandsUnderThePEExportName() throws {
+        let (store, folder) = try makeTree()
+        try GPTKImporter.installNVAPIBridge(intoLibraryFolder: folder, usingStore: store)
+
+        XCTAssertEqual(contents(of: GPTKImporter.nvapiBridgeExportPE(inLibraryFolder: folder)), "apple nvapi")
+
+        let link = GPTKImporter.nvapiBridgeExportUnixLink(inLibraryFolder: folder)
+        let target = try FileManager.default.destinationOfSymbolicLink(atPath: link.path(percentEncoded: false))
+        XCTAssertEqual(target, GPTKImporter.unixLinkDestination)
+    }
+
+    /// A tree installed before the export-name copy existed has to report as not
+    /// installed, or `ensureNVAPIBridgeEverywhere()` skips it and the runtime
+    /// stays broken across upgrades.
+    func testATreeMissingTheExportNameCopyIsNotInstalled() throws {
+        let (store, folder) = try makeTree()
+        try GPTKImporter.installNVAPIBridge(intoLibraryFolder: folder, usingStore: store)
+        try FileManager.default.removeItem(at: GPTKImporter.nvapiBridgeExportPE(inLibraryFolder: folder))
+
+        XCTAssertFalse(GPTKImporter.isNVAPIBridgeInstalled(inLibraryFolder: folder, usingStore: store))
+
+        try GPTKImporter.installNVAPIBridge(intoLibraryFolder: folder, usingStore: store)
+        XCTAssertTrue(GPTKImporter.isNVAPIBridgeInstalled(inLibraryFolder: folder, usingStore: store))
+    }
+
     func testRemovePutsWinesPlaceholderBack() throws {
         let (store, folder) = try makeTree()
         try GPTKImporter.installNVAPIBridge(intoLibraryFolder: folder, usingStore: store)
@@ -79,6 +109,12 @@ final class NVAPIBridgeTests: XCTestCase {
         XCTAssertEqual(contents(of: GPTKImporter.nvapiBridgePE(inLibraryFolder: folder)), "wine placeholder")
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: GPTKImporter.nvapiBridgeUnixLink(inLibraryFolder: folder).path(percentEncoded: false)
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: GPTKImporter.nvapiBridgeExportPE(inLibraryFolder: folder).path(percentEncoded: false)
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: GPTKImporter.nvapiBridgeExportUnixLink(inLibraryFolder: folder).path(percentEncoded: false)
         ))
     }
 
@@ -91,21 +127,6 @@ final class NVAPIBridgeTests: XCTestCase {
         GPTKImporter.removeNVAPIBridge(fromLibraryFolder: folder, usingStore: store)
 
         XCTAssertEqual(contents(of: GPTKImporter.nvapiBridgePE(inLibraryFolder: folder)), "wine placeholder")
-    }
-
-    func testNGXManifestIsSeededOnceAndNeverOverwritten() throws {
-        let bottle = root.appending(path: "bottle")
-        let config = Wine.ngxModelConfigPath
-            .reduce(bottle) { $0.appending(path: $1) }
-            .appending(path: "nvngx_config.txt")
-
-        Wine.seedNGXModelConfig(inBottle: bottle)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: config.path(percentEncoded: false)))
-
-        // a driver install's own manifest, or the user's edit, outranks ours
-        try "someone else's manifest".write(to: config, atomically: true, encoding: .utf8)
-        Wine.seedNGXModelConfig(inBottle: bottle)
-        XCTAssertEqual(contents(of: config), "someone else's manifest")
     }
 
     func testHelpersGetNVAPIDisabledWithoutLosingTheirOtherOverrides() {

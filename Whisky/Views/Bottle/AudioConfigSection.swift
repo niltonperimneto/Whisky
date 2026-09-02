@@ -32,16 +32,11 @@ struct AudioConfigSection: View {
     @State private var audioStatus: AudioStatus = .unknown
     @State private var probeResults: [AudioProbeResult] = []
     @State private var lastTestedDate: Date?
+    @State private var showTroubleshootingWizard: Bool = false
     @State private var deviceHistory = AudioDeviceHistory()
 
     /// Debounce timer for Bluetooth device change events.
     @State private var debounceTask: Task<Void, Never>?
-
-    /// The wizard and its engine, created when it opens. Item-based so the
-    /// sheet is built from the engine that presents it; with a flag plus a
-    /// separate optional the content closure could run before the engine
-    /// landed and show an empty sheet.
-    @State private var wizardPresentation: AudioWizardPresentation?
 
     var body: some View {
         Section("Audio") {
@@ -95,26 +90,20 @@ struct AudioConfigSection: View {
             }
 
             // 8. Troubleshooting link
-            Button("Audio Troubleshooting\u{2026}") {
-                openTroubleshootingWizard()
+            Button("audio.troubleshoot.button") {
+                showTroubleshootingWizard = true
             }
         }
         .animation(.default, value: advancedMode)
         .onAppear {
             startDeviceListening()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .openAudioTroubleshooting)) { _ in
-            openTroubleshootingWizard()
-        }
-        .sheet(item: $wizardPresentation) { presentation in
-            AudioTroubleshootingWizardView(
-                engine: presentation.engine,
-                onDismiss: {
-                    wizardPresentation = nil
-                },
-                onOpenAdvanced: {
-                    advancedMode = true
-                }
+        .sheet(isPresented: $showTroubleshootingWizard) {
+            TroubleshootingWizardView(
+                bottle: bottle,
+                program: nil,
+                entryContext: .bottleDiagnostics(bottleURL: bottle.url),
+                preselectedCategory: .audio
             )
         }
     }
@@ -195,22 +184,6 @@ extension AudioConfigSection {
     }
 }
 
-// MARK: - Troubleshooting Wizard
-
-extension AudioConfigSection {
-    private func openTroubleshootingWizard() {
-        let probes: [any AudioProbe] = [
-            CoreAudioDeviceProbe(monitor: monitor),
-            WineRegistryAudioProbe(bottle: bottle),
-            WineAudioTestProbe(
-                bottle: bottle,
-                testExeURL: Bundle.main.url(forResource: "WhiskyAudioTest", withExtension: "exe")
-            )
-        ]
-        wizardPresentation = AudioWizardPresentation(engine: AudioTroubleshootingEngine(probes: probes))
-    }
-}
-
 // MARK: - Device Listening
 
 extension AudioConfigSection {
@@ -219,25 +192,17 @@ extension AudioConfigSection {
         // The @Sendable closure annotation causes a compiler warning,
         // but mutation is main-thread-safe since the callback runs on main queue.
         monitor.startListening { event in
-            Task { @MainActor in
-                // Record event in session history
-                deviceHistory.append(event)
+            // Record event in session history
+            deviceHistory.append(event)
 
-                // Debounce status update for Bluetooth connections (2-3 second delay)
-                // to avoid spurious state changes during BT negotiation.
-                debounceTask?.cancel()
-                debounceTask = Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(2))
-                    guard !Task.isCancelled else { return }
-                    audioStatus = .unknown
-                }
+            // Debounce status update for Bluetooth connections (2-3 second delay)
+            // to avoid spurious state changes during BT negotiation.
+            debounceTask?.cancel()
+            debounceTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                audioStatus = .unknown
             }
         }
     }
-}
-
-/// What the audio troubleshooting sheet is built from.
-struct AudioWizardPresentation: Identifiable {
-    let id = UUID()
-    let engine: AudioTroubleshootingEngine
 }

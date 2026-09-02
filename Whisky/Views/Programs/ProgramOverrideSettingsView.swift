@@ -33,7 +33,11 @@ struct ProgramOverrideSettingsView: View {
     @Binding var isExpanded: Bool
 
     @State private var showResetConfirmation = false
-    @State private var diagnosisPresentation: DiagnosisPresentation?
+    @State private var showDiagnosticsSheet = false
+    @State private var showProvenance = false
+    @State private var showAudioWizard = false
+    @State private var activeDiagnosis: CrashDiagnosis?
+    @State private var activeLogText: String = ""
     @State private var gameMatch: MatchResult?
     @State private var showGameConfigDetail: Bool = false
     @State private var recommendedDependencies: [DependencyDefinition] = []
@@ -64,23 +68,33 @@ struct ProgramOverrideSettingsView: View {
                         .frame(minWidth: 600, minHeight: 500)
                 }
             }
-            // Item-based so the sheet is built from the value that presents it.
-            // With isPresented plus a separate optional, the content closure can
-            // evaluate before the diagnosis lands and presents an empty sheet.
-            .sheet(item: $diagnosisPresentation) { presentation in
-                DiagnosticsView(
-                    diagnosis: presentation.diagnosis,
-                    logText: presentation.logText,
-                    programName: program.name,
-                    bottleName: bottle.settings.name,
-                    timestamp: Date(),
-                    applyBottle: bottle
-                )
-                .frame(minWidth: 600, minHeight: 400)
+            .sheet(isPresented: $showDiagnosticsSheet) {
+                if let diagnosis = activeDiagnosis {
+                    DiagnosticsView(
+                        diagnosis: diagnosis,
+                        logText: activeLogText,
+                        programName: program.name,
+                        bottleName: bottle.settings.name,
+                        timestamp: Date(),
+                        applyBottle: bottle
+                    )
+                    .frame(minWidth: 600, minHeight: 400)
+                }
             }
             .sheet(item: $dependencyToInstall) { definition in
                 DependencyInstallSheet(definition: definition, bottle: bottle)
                     .frame(minWidth: 500, minHeight: 400)
+            }
+            .sheet(isPresented: $showProvenance) {
+                LaunchPlanInspectorView(bottle: bottle, program: program)
+            }
+            .sheet(isPresented: $showAudioWizard) {
+                TroubleshootingWizardView(
+                    bottle: bottle,
+                    program: program,
+                    entryContext: .program(programURL: program.url, bottleURL: bottle.url),
+                    preselectedCategory: .audio
+                )
             }
     }
 
@@ -110,6 +124,10 @@ struct ProgramOverrideSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             }
+
+            Button("program.provenance.button") {
+                showProvenance = true
+            }
         }
     }
 
@@ -121,10 +139,9 @@ struct ProgramOverrideSettingsView: View {
                 exitCode: 1
             )
             else { return }
-            diagnosisPresentation = DiagnosisPresentation(
-                diagnosis: diagnosis,
-                logText: (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            )
+            activeLogText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            activeDiagnosis = diagnosis
+            showDiagnosticsSheet = true
         }
     }
 
@@ -136,24 +153,19 @@ struct ProgramOverrideSettingsView: View {
                 exitCode: 1
             )
             else { return }
-            diagnosisPresentation = DiagnosisPresentation(
-                diagnosis: diagnosis,
-                logText: (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-            )
+            activeLogText = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
+            activeDiagnosis = diagnosis
+            showDiagnosticsSheet = true
         }
     }
 
     // MARK: - Audio Troubleshooting Section
 
     private var audioTroubleshootingSection: some View {
-        Section("Audio") {
-            Button("Troubleshoot Audio\u{2026}") {
-                NotificationCenter.default.post(
-                    name: .openAudioTroubleshooting,
-                    object: nil
-                )
+        Section("config.title.audio") {
+            Button("audio.troubleshoot.button") {
+                showAudioWizard = true
             }
-            .help("Open audio diagnostics and troubleshooting for this bottle")
         }
     }
 
@@ -271,7 +283,8 @@ struct ProgramOverrideSettingsView: View {
                     // the picker can still display the current selection.
                     let current = program.settings.overrides?.graphicsBackend
                     let offered = GraphicsBackend.allCases.filter { backend in
-                        WhiskyWineInstaller.isBackendAvailable(backend) || backend == current
+                        WhiskyWineInstaller.isBackendAvailable(backend, for: bottle.settings.runtime)
+                            || backend == current
                     }
                     ForEach(offered, id: \.self) { backend in
                         Text(backend.displayName).tag(backend)
@@ -289,6 +302,7 @@ struct ProgramOverrideSettingsView: View {
                 // able to turn off while the bottle keeps it.
                 if resolvedOverriddenBackend == .d3dMetal {
                     Toggle("config.metal4", isOn: metal4Binding)
+                    Toggle("config.frameGeneration", isOn: frameGenerationBinding)
                 }
 
                 // "Takes effect next launch" note
@@ -638,12 +652,14 @@ struct ProgramOverrideSettingsView: View {
                     program.settings.overrides?.dxvkAsync = bottle.settings.dxvkAsync
                     program.settings.overrides?.dxvkHud = bottle.settings.dxvkHud
                     program.settings.overrides?.metal4Enabled = bottle.settings.metal4Enabled
+                    program.settings.overrides?.frameGeneration = bottle.settings.frameGeneration
                 } else {
                     program.settings.overrides?.graphicsBackend = nil
                     program.settings.overrides?.dxvk = nil
                     program.settings.overrides?.dxvkAsync = nil
                     program.settings.overrides?.dxvkHud = nil
                     program.settings.overrides?.metal4Enabled = nil
+                    program.settings.overrides?.frameGeneration = nil
                 }
             }
         )
@@ -758,6 +774,13 @@ struct ProgramOverrideSettingsView: View {
         Binding(
             get: { program.settings.overrides?.metal4Enabled ?? bottle.settings.metal4Enabled },
             set: { program.settings.overrides?.metal4Enabled = $0 }
+        )
+    }
+
+    private var frameGenerationBinding: Binding<Bool> {
+        Binding(
+            get: { program.settings.overrides?.frameGeneration ?? bottle.settings.frameGeneration },
+            set: { program.settings.overrides?.frameGeneration = $0 }
         )
     }
 
@@ -914,11 +937,3 @@ struct ProgramOverrideSettingsView: View {
 }
 
 // swiftlint:enable type_body_length
-
-/// What a diagnostics sheet is showing; `Identifiable` so it can drive
-/// `.sheet(item:)` and the sheet is never presented without a diagnosis.
-struct DiagnosisPresentation: Identifiable {
-    let id = UUID()
-    let diagnosis: CrashDiagnosis
-    let logText: String
-}
