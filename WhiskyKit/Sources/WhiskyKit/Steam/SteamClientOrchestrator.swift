@@ -18,6 +18,7 @@
 
 import Combine
 import Foundation
+import Observation
 
 public enum SteamOrchestratorError: LocalizedError, Equatable {
     /// steam.exe did not appear in the process list within the ready timeout.
@@ -50,7 +51,8 @@ public enum SteamOrchestratorError: LocalizedError, Equatable {
 ///   the status poller every 10s; sharing a snapshot stops them each running
 ///   their own `tasklist.exe`, and concurrent reads coalesce into one.
 @MainActor
-public final class SteamClientOrchestrator: ObservableObject {
+@Observable
+public final class SteamClientOrchestrator {
     public enum Phase: Equatable, Sendable {
         case startingClient
         case launching
@@ -87,10 +89,10 @@ public final class SteamClientOrchestrator: ObservableObject {
     }
 
     /// Where each in-flight launch is, keyed by App ID.
-    @Published public private(set) var phases: [Int: Phase] = [:]
+    public private(set) var phases: [Int: Phase] = [:]
     /// App IDs whose executables are currently in the bottle's process list.
-    @Published public private(set) var runningAppIds: Set<Int> = []
-    @Published public var launchError: String?
+    public private(set) var runningAppIds: Set<Int> = []
+    public var launchError: String?
 
     let bottle: Bottle
     let driver: SteamClientDriver
@@ -104,7 +106,7 @@ public final class SteamClientOrchestrator: ObservableObject {
     var processSnapshot: (processes: [WineProcess], taken: Date)?
     var snapshotRead: Task<[WineProcess], Never>?
 
-    private lazy var watch = SteamProcessWatch(pollInterval: timing.pollInterval) { [weak self] in
+    @ObservationIgnored private lazy var watch = SteamProcessWatch(pollInterval: timing.pollInterval) { [weak self] in
         await self?.runningImageNames() ?? []
     }
 

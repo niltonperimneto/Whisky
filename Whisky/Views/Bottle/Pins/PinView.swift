@@ -20,8 +20,8 @@ import SwiftUI
 import WhiskyKit
 
 struct PinView: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
     @State var pin: PinnedProgram
     @Binding var path: NavigationPath
     @Binding var toast: ToastData?

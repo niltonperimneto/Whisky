@@ -161,9 +161,9 @@ final class DebugSessionModel: ObservableObject {
         followTask = Task { [weak self] in
             for await batch in tail.lines() {
                 guard let self else { return }
-                await self.append(batch)
+                self.append(batch)
             }
-            await self?.markStopped()
+            self?.markStopped()
         }
     }
 

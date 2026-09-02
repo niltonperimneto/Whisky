@@ -336,8 +336,8 @@ private struct LibrarySettingsTarget: Identifiable {
 /// shows, hosted in a sheet because the library cannot push onto a bottle's
 /// navigation stack.
 private struct LibraryProgramSettingsSheet: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
     @Environment(\.dismiss) private var dismiss
     @State private var overridesExpanded = true
 

@@ -25,7 +25,7 @@ import WhiskyKit
 /// Advanced mode adds all controls including output device pinning and
 /// a destructive Reset Audio State button.
 struct AudioSettingsView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     let advancedMode: Bool
 
     @State private var isWritingDriver: Bool = false

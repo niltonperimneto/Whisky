@@ -25,7 +25,7 @@ import WhiskyKit
 /// Displays the fix attempt count and offers an undo option when available.
 /// Per locked decision: 3-attempt cap before escalation.
 struct FixVerifyView: View {
-    @ObservedObject var engine: TroubleshootingFlowEngine
+    @Bindable var engine: TroubleshootingFlowEngine
     let bottle: Bottle
     let program: Program?
 

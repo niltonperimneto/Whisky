@@ -25,7 +25,7 @@ import WhiskyKit
 /// Per locked escalation path decisions: offers WINEDEBUG preset re-run, diagnostic
 /// export, GitHub issue draft, and retry from a previous step.
 struct EscalationView: View {
-    @ObservedObject var engine: TroubleshootingFlowEngine
+    @Bindable var engine: TroubleshootingFlowEngine
     let bottle: Bottle
     let program: Program?
 

@@ -21,7 +21,7 @@ import SwiftUI
 import WhiskyKit
 
 struct DXVKSettingsView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     let resolvedBackend: GraphicsBackend
     let bottleURL: URL
 

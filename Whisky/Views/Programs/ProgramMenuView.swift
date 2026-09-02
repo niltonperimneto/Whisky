@@ -21,7 +21,7 @@ import SwiftUI
 import WhiskyKit
 
 struct ProgramMenuView: View {
-    @ObservedObject var program: Program
+    @Bindable var program: Program
     @Binding var path: NavigationPath
 
     var body: some View {

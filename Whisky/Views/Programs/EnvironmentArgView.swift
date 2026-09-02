@@ -43,7 +43,7 @@ class Key: Identifiable {
 }
 
 struct EnvironmentArgView: View {
-    @ObservedObject var program: Program
+    @Bindable var program: Program
     @Binding var isExpanded: Bool
 
     @FocusState var focus: Focusable?

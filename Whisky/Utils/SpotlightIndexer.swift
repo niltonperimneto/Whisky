@@ -16,7 +16,7 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-import CoreSpotlight
+@preconcurrency import CoreSpotlight
 import Foundation
 import WhiskyKit
 

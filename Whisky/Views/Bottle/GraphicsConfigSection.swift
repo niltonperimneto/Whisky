@@ -21,7 +21,7 @@ import SwiftUI
 import WhiskyKit
 
 struct GraphicsConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @AppStorage("graphicsAdvancedMode") private var advancedMode: Bool = false
     @State private var hasRunningProcesses: Bool = false
 

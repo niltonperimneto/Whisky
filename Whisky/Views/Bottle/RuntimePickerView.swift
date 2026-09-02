@@ -27,7 +27,7 @@ import WhiskyKit
 struct RuntimePickerView: View {
     private static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "RuntimePicker")
 
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var runtimes: [InstalledRuntime] = []
     @State private var loadingState: LoadingState = .success
 

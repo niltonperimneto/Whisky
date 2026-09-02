@@ -25,7 +25,7 @@ private let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: 
 
 // swiftlint:disable:next type_body_length
 struct ConfigView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var buildVersion: String = ""
     /// The version shown in the picker. Seeded from the prefix rather than from
     /// the settings file, and only written back once the prefix agrees.
