@@ -200,5 +200,5 @@ extension ContentView {
 
 #Preview {
     ContentView(showSetup: .constant(false))
-        .environmentObject(BottleVM.shared)
+        .environment(BottleVM.shared)
 }

@@ -19,6 +19,7 @@
 import AppKit
 import Combine
 import Foundation
+import Observation
 import WhiskyKit
 
 /// How the library grid is ordered.
@@ -67,19 +68,29 @@ struct LibraryRow: Identifiable {
 /// away, so everything it published (the launch phase, the running App IDs, the
 /// launch error) went nowhere.
 @MainActor
-final class LibraryModel: ObservableObject {
-    @Published private(set) var rows: [LibraryRow] = []
-    @Published var launchError: String?
-    @Published var toast: ToastData?
+@Observable
+final class LibraryModel {
+    private(set) var rows: [LibraryRow] = []
+    var launchError: String? {
+        get { orchestrators.values.compactMap(\.launchError).first ?? _launchError }
+        set {
+            if newValue == nil {
+                orchestrators.values.forEach { $0.launchError = nil }
+            }
+            _launchError = newValue
+        }
+    }
+    private var _launchError: String?
+    var toast: ToastData?
 
     /// Where each in-flight Steam launch is, per bottle.
-    @Published private var steamLaunching: [URL: [Int: SteamClientOrchestrator.Phase]] = [:]
+    private var steamLaunching: [URL: [Int: SteamClientOrchestrator.Phase]] { orchestrators.mapValues { $0.phases } }
     /// App IDs whose own processes are in the bottle's process list.
-    @Published private var steamRunning: [URL: Set<Int>] = [:]
+    private var steamRunning: [URL: Set<Int>] { orchestrators.mapValues { $0.runningAppIds } }
     /// Programs whose launch call has not returned yet.
-    @Published private var programLaunching: Set<URL> = []
+    private var programLaunching: Set<URL> = []
     /// The most recent download-stall verdict per bottle.
-    @Published private var steamDownloads: [URL: StallStatus] = [:]
+    private var steamDownloads: [URL: StallStatus] { orchestrators.mapValues { $0.downloadStatus } }
 
     var sort: LibrarySort = .recent {
         didSet {
@@ -345,28 +356,6 @@ extension LibraryModel {
 
         let made = SteamClientOrchestrator(bottle: bottle)
         let url = bottle.url
-        made.$phases
-            .sink { [weak self] phases in
-                self?.steamLaunching[url] = phases
-            }
-            .store(in: &cancellables)
-        made.$runningAppIds
-            .sink { [weak self] running in
-                self?.steamRunning[url] = running
-            }
-            .store(in: &cancellables)
-        made.$downloadStatus
-            .sink { [weak self] status in
-                self?.steamDownloads[url] = status
-            }
-            .store(in: &cancellables)
-        made.$launchError
-            .compactMap { $0 }
-            .sink { [weak self] error in
-                self?.launchError = error
-            }
-            .store(in: &cancellables)
-
         orchestrators[bottle.url] = made
         return made
     }

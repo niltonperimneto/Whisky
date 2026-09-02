@@ -31,7 +31,7 @@ import WhiskyKit
 /// Entries come from ``LibraryCatalogue``, so Steam games sit beside pinned
 /// programs and a future launcher needs no change here.
 struct LibraryView: View {
-    @EnvironmentObject var bottleVM: BottleVM
+    @Environment(BottleVM.self) var bottleVM: BottleVM
     @Binding var selectedBottle: URL?
     /// Toggled by the toolbar's refresh button. Folded into the reload trigger
     /// because the bottle list is unchanged by a refresh, so watching only that
@@ -44,7 +44,7 @@ struct LibraryView: View {
     @AppStorage("librarySort") private var sort: LibrarySort = .recent
     @AppStorage("libraryShowHidden") private var showHidden = false
 
-    @StateObject private var model = LibraryModel()
+    @State private var model = LibraryModel()
     @State private var search: String = ""
     @State private var renameTarget: LibraryRow?
     @State private var renameText: String = ""

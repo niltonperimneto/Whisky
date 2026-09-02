@@ -24,8 +24,8 @@ import WhiskyKit
 /// A window rather than a tab so it can sit on a second display beside the game
 /// it is watching, and so closing the library does not take the log with it.
 struct DebugWindowView: View {
-    @EnvironmentObject var bottleVM: BottleVM
-    @StateObject private var model = DebugSessionModel()
+    @Environment(BottleVM.self) var bottleVM: BottleVM
+    @State private var model = DebugSessionModel()
     @State private var programs: [Program] = []
 
     var body: some View {

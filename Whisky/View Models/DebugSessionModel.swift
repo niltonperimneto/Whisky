@@ -53,7 +53,8 @@ struct DebugLogLine: Identifiable, Hashable {
 /// The state behind the Debug window: what to launch, with which channels, and
 /// the log it produced.
 @MainActor
-final class DebugSessionModel: ObservableObject {
+@Observable
+final class DebugSessionModel {
     enum Filter: String, CaseIterable, Identifiable {
         case all, problems, fixme, trace
         var id: String { rawValue }
@@ -63,16 +64,16 @@ final class DebugSessionModel: ObservableObject {
     /// back through more than this by hand.
     private static let lineLimit = 5_000
 
-    @Published var bottle: Bottle?
-    @Published var program: Program?
-    @Published var channels: Set<String> = ["err", "seh"]
-    @Published var extraChannels = ""
-    @Published var filter: Filter = .all
-    @Published var search = ""
-    @Published private(set) var lines: [DebugLogLine] = []
-    @Published private(set) var isFollowing = false
-    @Published private(set) var followedLog: URL?
-    @Published private(set) var status: String?
+    var bottle: Bottle?
+    var program: Program?
+    var channels: Set<String> = ["err", "seh"]
+    var extraChannels = ""
+    var filter: Filter = .all
+    var search = ""
+    private(set) var lines: [DebugLogLine] = []
+    private(set) var isFollowing = false
+    private(set) var followedLog: URL?
+    private(set) var status: String?
 
     private var tail: LogTail?
     private var followTask: Task<Void, Never>?

@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import Observation
 import os
 import WhiskyKit
 
@@ -38,9 +39,10 @@ enum StallStatus: Equatable {
 /// notification for the UI layer. Stall notifications are rate-limited to
 /// once per bottle per session.
 @MainActor
-class SteamDownloadMonitor: ObservableObject {
-    @Published var status: StallStatus = .noDownloads
-    @Published var isMonitoring: Bool = false
+@Observable
+class SteamDownloadMonitor {
+    var status: StallStatus = .noDownloads
+    var isMonitoring: Bool = false
 
     private let stallThreshold: TimeInterval = 180
     private let samplingInterval: TimeInterval = 45

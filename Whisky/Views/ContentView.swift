@@ -24,7 +24,7 @@ import UniformTypeIdentifiers
 import WhiskyKit
 
 struct ContentView: View {
-    @EnvironmentObject var bottleVM: BottleVM
+    @Environment(BottleVM.self) var bottleVM: BottleVM
     @Binding var showSetup: Bool
 
     @State var selected: URL?
@@ -172,7 +172,7 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showMigrate) {
                 MigrateBottlesSheet()
-                    .environmentObject(bottleVM)
+                    .environment(bottleVM)
             }
             .sheet(item: $openedFileURL) { url in
                 FileOpenView(

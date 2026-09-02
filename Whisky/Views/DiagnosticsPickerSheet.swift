@@ -34,7 +34,7 @@ struct CrashDiagnosisBannerState: Identifiable {
 
 /// Sheet that lets the user select a bottle and program, then opens DiagnosticsView.
 struct DiagnosticsPickerSheet: View {
-    @EnvironmentObject var bottleVM: BottleVM
+    @Environment(BottleVM.self) var bottleVM: BottleVM
     @Environment(\.dismiss) var dismiss
 
     @State private var selectedBottle: Bottle?
