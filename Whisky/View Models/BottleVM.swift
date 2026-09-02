@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import Observation
 import os.log
 import SemanticVersion
 import WhiskyKit
@@ -91,12 +92,13 @@ private let bottleVMLogger = Logger(
 )
 
 @MainActor
-final class BottleVM: ObservableObject {
+@Observable
+final class BottleVM {
     static let shared = BottleVM()
 
     var bottlesList = BottleData()
-    @Published var bottles: [Bottle] = []
-    @Published var bottleCreationAlert: BottleCreationAlert?
+    var bottles: [Bottle] = []
+    var bottleCreationAlert: BottleCreationAlert?
 
     struct BottleCreationAlert: Identifiable {
         let id = UUID()
@@ -118,7 +120,7 @@ final class BottleVM: ObservableObject {
     /// Bottles found on disk with no registry entry, awaiting a re-import
     /// decision from the user (issue #145). Non-empty drives the recovery
     /// alert in ContentView.
-    @Published var orphanedBottles: [BottleData.OrphanedBottle] = []
+    var orphanedBottles: [BottleData.OrphanedBottle] = []
 
     /// Scans the default bottles directory for bottle folders the registry
     /// doesn't know about — pre-#136 creations, a reset registry, or a

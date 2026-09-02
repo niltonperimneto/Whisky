@@ -21,7 +21,7 @@ import WhiskyKit
 
 struct RunningProcessesView: View {
     @Bindable var bottle: Bottle
-    @StateObject private var viewModel: ProcessesViewModel
+    @State private var viewModel: ProcessesViewModel
     @State private var toast: ToastData?
     @State private var showStopConfirmation: Bool = false
     @State private var showForceStopConfirmation: Bool = false
@@ -35,7 +35,7 @@ struct RunningProcessesView: View {
     init(bottle: Bottle, windowTitle: LocalizedStringKey = "tab.processes") {
         self.bottle = bottle
         self.windowTitle = windowTitle
-        _viewModel = StateObject(wrappedValue: ProcessesViewModel(bottle: bottle))
+        _viewModel = State(initialValue: ProcessesViewModel(bottle: bottle))
     }
 
     var body: some View {

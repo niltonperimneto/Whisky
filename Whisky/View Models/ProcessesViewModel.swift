@@ -22,19 +22,20 @@ import WhiskyKit
 
 /// Drives the Processes page with hybrid polling, registry merging, and shutdown orchestration.
 @MainActor
-class ProcessesViewModel: ObservableObject {
+@Observable
+class ProcessesViewModel {
     // MARK: - Published State
 
     /// Merged, sorted process list from tasklist + registry.
-    @Published var processes: [WineProcess] = []
+    var processes: [WineProcess] = []
     /// Whether the polling loop is active.
-    @Published var isPolling: Bool = false
+    var isPolling: Bool = false
     /// Current shutdown state for UI feedback.
-    @Published var shutdownState: ShutdownState = .idle
+    var shutdownState: ShutdownState = .idle
     /// Filter mode for the process list.
-    @Published var filterMode: FilterMode = .appsOnly
+    var filterMode: FilterMode = .appsOnly
     /// Selected Wine PID for table selection.
-    @Published var selectedProcessID: Int32?
+    var selectedProcessID: Int32?
 
     // MARK: - Private
 

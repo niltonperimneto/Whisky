@@ -18,6 +18,7 @@
 
 import Combine
 import Foundation
+import Observation
 import WhiskyKit
 
 enum SteamOrchestratorError: LocalizedError {
@@ -40,7 +41,8 @@ enum SteamOrchestratorError: LocalizedError {
 /// look at it: ensures the client is up (silently), fires `-applaunch`, and
 /// watches for the game process to actually appear.
 @MainActor
-final class SteamClientOrchestrator: ObservableObject {
+@Observable
+final class SteamClientOrchestrator {
     enum Phase: Equatable {
         case startingClient
         case launching
@@ -49,11 +51,11 @@ final class SteamClientOrchestrator: ObservableObject {
     /// Where each in-flight launch is, keyed by App ID. Per-game rather than
     /// global: the grace period below runs for up to two minutes, and starting
     /// a second game while the first precompiles shaders is normal.
-    @Published private(set) var phases: [Int: Phase] = [:]
-    @Published private(set) var downloadStatus: StallStatus = .noDownloads
+    private(set) var phases: [Int: Phase] = [:]
+    var downloadStatus: StallStatus { downloadMonitor.status }
     /// App IDs whose executables are currently in the bottle's process list.
-    @Published private(set) var runningAppIds: Set<Int> = []
-    @Published var launchError: String?
+    private(set) var runningAppIds: Set<Int> = []
+    var launchError: String?
 
     private let bottle: Bottle
     private let downloadMonitor = SteamDownloadMonitor()
@@ -70,7 +72,7 @@ final class SteamClientOrchestrator: ObservableObject {
     private var snapshotRead: Task<[WineProcess], Never>?
     private let snapshotLifetime: TimeInterval = 1
 
-    private lazy var watch = SteamProcessWatch(pollInterval: .seconds(2)) { [weak self] in
+    @ObservationIgnored private lazy var watch = SteamProcessWatch(pollInterval: .seconds(2)) { [weak self] in
         await self?.runningImageNames() ?? []
     }
 
@@ -82,10 +84,7 @@ final class SteamClientOrchestrator: ObservableObject {
 
     init(bottle: Bottle) {
         self.bottle = bottle
-        downloadMonitor.$status
-            .receive(on: RunLoop.main)
-            .sink { [weak self] status in self?.downloadStatus = status }
-            .store(in: &cancellables)
+
     }
 
     /// Launches a game via `-applaunch`, bringing the client up first if needed.

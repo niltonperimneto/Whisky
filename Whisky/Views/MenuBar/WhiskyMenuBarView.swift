@@ -25,7 +25,7 @@ import WhiskyKit
 /// without the main window focused — and, paired with the "stay running"
 /// lifecycle, after the window has been closed entirely.
 struct WhiskyMenuBarView: View {
-    @EnvironmentObject private var bottleVM: BottleVM
+    @Environment(BottleVM.self) private var bottleVM: BottleVM
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {

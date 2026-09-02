@@ -24,7 +24,7 @@ import WhiskyKit
 /// identifier. Bottles are referenced in place (not copied), so the import is
 /// non-destructive.
 struct MigrateBottlesSheet: View {
-    @EnvironmentObject var bottleVM: BottleVM
+    @Environment(BottleVM.self) var bottleVM: BottleVM
     @Environment(\.dismiss) private var dismiss
 
     @State private var rows: [Row] = []

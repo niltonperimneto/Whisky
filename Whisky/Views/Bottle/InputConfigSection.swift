@@ -23,7 +23,7 @@ import WhiskyKit
 struct InputConfigSection: View {
     @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
-    @StateObject private var controllerMonitor = ControllerMonitor()
+    @State private var controllerMonitor = ControllerMonitor()
     @State private var controllersExpanded = false
 
     var body: some View {

@@ -90,7 +90,7 @@ struct WhiskyApp: App {
                 // Wide enough for two columns of library cards next to the
                 // sidebar. At 600 the grid could only ever draw one.
                 .frame(minWidth: ViewWidth.window, minHeight: 316)
-                .environmentObject(BottleVM.shared)
+                .environment(BottleVM.shared)
                 .onAppear {
                     NSWindow.allowsAutomaticWindowTabbing = false
                     Task.detached {
@@ -111,7 +111,7 @@ struct WhiskyApp: App {
                 }
                 .sheet(isPresented: $showDiagnosticsSheet) {
                     DiagnosticsPickerSheet()
-                        .environmentObject(BottleVM.shared)
+                        .environment(BottleVM.shared)
                 }
                 .sheet(isPresented: $showTroubleshootingPicker) {
                     TroubleshootingTargetPicker(
@@ -259,7 +259,7 @@ struct WhiskyApp: App {
         }
         Window("debug.window.title", id: Self.debugWindowID) {
             DebugWindowView()
-                .environmentObject(BottleVM.shared)
+                .environment(BottleVM.shared)
         }
         .defaultSize(width: 900, height: 620)
 
@@ -268,7 +268,7 @@ struct WhiskyApp: App {
         }
         MenuBarExtra("Whisky Preview", systemImage: "wineglass", isInserted: $showMenuBarExtra) {
             WhiskyMenuBarView()
-                .environmentObject(BottleVM.shared)
+                .environment(BottleVM.shared)
         }
     }
 

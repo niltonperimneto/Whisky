@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import Observation
 import GameController
 import os.log
 
@@ -127,12 +128,13 @@ struct ControllerHistoryEntry: Codable {
 /// // monitor.controllers now contains connected controllers
 /// ```
 @MainActor
-class ControllerMonitor: ObservableObject {
+@Observable
+class ControllerMonitor {
     /// The currently connected controllers.
-    @Published var controllers: [ControllerInfo] = []
+    var controllers: [ControllerInfo] = []
 
     /// The last time the controller list was refreshed.
-    @Published var lastRefreshed: Date = .init()
+    var lastRefreshed: Date = .init()
 
     /// Recent controller history for diagnostics export (bounded to last 10 entries).
     var recentHistory: [ControllerHistoryEntry] = []

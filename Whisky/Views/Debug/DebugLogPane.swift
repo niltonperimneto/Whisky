@@ -21,7 +21,7 @@ import WhiskyKit
 
 /// The live half of the Debug window: the run's log as it is written, filtered.
 struct DebugLogPane: View {
-    @ObservedObject var model: DebugSessionModel
+    @Bindable var model: DebugSessionModel
     @State private var autoScroll = true
 
     var body: some View {
