@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The Recommended graphics backend now resolves launchers (Steam and other
+  Chromium-based clients) to DXVK on every runtime. Previously a runtime
+  without the D3DMetal payload resolved launchers to DXMT, whose Direct3D
+  layer launcher UIs cannot render on, leaving the client running with no
+  window (#163).
+- Enabling DXVK now reconciles the bottle's dxgi.dll against the D3DMetal
+  payload. With the payload deployed, the builtin dxgi is Apple's forwarder,
+  which DXVK's d3d11 cannot pair with, so Wine's own backed-up dxgi is
+  installed into system32 with its builtin marker stripped and loads as a
+  true native PE. Without the payload, a stale native dxgi.dll a previous
+  DXMT launch left in the bottle's system directories is removed instead:
+  that leftover paired DXVK's d3d11 with DXMT's dxgi, which cannot create
+  window swapchains, leaving Chromium-based launchers such as Steam running
+  with no window after a switch from DXMT to DXVK (#163).
+- A Visual C++ Runtime whose installer hung under wine after installing
+  successfully is now detected. The winetricks.log entry is only written once
+  the installer exits, so the Dependencies panel kept saying "Not Installed"
+  although the runtime was in place. When the log lacks the vcruntime verb,
+  the presence of mfc140.dll in system32 -- the x64 redist's payload on the
+  default win64 bottles, which Wine does not ship as a builtin -- now counts
+  as installed, reported with heuristic confidence; a bottle whose log
+  already says installed is never probed (#233).
+
+### Removed
+- ClickOnce support. Games do not arrive as `.appref-ms` deployments, and
+  nobody spoke up for it during the window on #215. The manager, its
+  detection pass in the program scan, the badge, the context menu, the
+  .NET auto-recommendation and the `.appref-ms` file type in the run
+  panels are all gone. The ClickOnce cache filter in the executable scan
+  stays, since a prefix can still contain those artifacts.
+
+  This removes `ClickOnceManager` and the `Program(appRefURL:bottle:displayName:)`
+  initializer from WhiskyKit's public API, along with the `isClickOnce`
+  property, so the kit needs a major version bump (#215).
+
 ## [3.7.0] - 2026-08-29 (App)
 
 ### Added

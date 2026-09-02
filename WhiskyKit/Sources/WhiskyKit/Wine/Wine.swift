@@ -693,10 +693,81 @@ public class Wine {
             in: bottle.url.appending(path: "drive_c").appending(path: "windows").appending(path: "syswow64"),
             withContentsIn: Wine.dxvkFolder.appending(path: "x32")
         )
-        // DXVK-macOS ships no dxgi.dll, but when D3DMetal is deployed, the builtin dxgi is Apple's.
-        // Deploy Wine's clean dxgi.dll from the store backup with the 0x40 builtin marker stripped
-        // so it loads as a true native PE when overridden.
-        deployCleanDXGIForDXVK(bottle: bottle)
+        reconcileDXGIForDXVK(prefixRoot: bottle.url)
+    }
+
+    /// Reconciles the prefix's `dxgi.dll` with the GPTK payload state, keyed on
+    /// whether that payload is deployed.
+    ///
+    /// DXVK-macOS ships no `dxgi.dll`, so ``enableDXVK(bottle:)`` never
+    /// overwrites one and whatever the prefix already holds stays behind the
+    /// `n,b` override. Which copy is correct depends entirely on what the
+    /// builtin is right now:
+    ///
+    /// - Payload deployed: the builtin is Apple's D3DMetal forwarder, which
+    ///   cannot pair with DXVK's `d3d11`. The prefix needs Wine's own clean
+    ///   dxgi from the store, marker-stripped so the loader takes it as a true
+    ///   native PE.
+    /// - Payload absent: the builtin is Wine's own, which is the pairing DXVK
+    ///   is written against, so any native copy in the prefix is residue and
+    ///   must go.
+    ///
+    /// The store outlives an engine install but the deployed payload does not,
+    /// so a populated `originals/` alone does not mean the forwarder is in
+    /// place. Keying on the payload rather than the store is what makes the
+    /// stale-store case (originals from a previous engine, payload gone) take
+    /// the removal path instead of deploying a dxgi the current runtime never
+    /// shipped.
+    static func reconcileDXGIForDXVK(
+        prefixRoot: URL,
+        gptkOriginalsDXGI: URL = GPTKImporter.storeFolder
+            .appending(path: "originals").appending(path: "dxgi.dll"),
+        gptkPayloadIsDeployed: Bool = GPTKImporter.isDeployed()
+    ) {
+        guard gptkPayloadIsDeployed else {
+            removeStaleNativeDXGI(prefixRoot: prefixRoot)
+            return
+        }
+        deployCleanDXGI(prefixRoot: prefixRoot, from: gptkOriginalsDXGI)
+    }
+
+    /// Removes a native `dxgi.dll` the prefix must not keep under DXVK.
+    ///
+    /// DXVK-macOS ships no `dxgi.dll`, so ``enableDXVK(bottle:)`` never
+    /// overwrites one. After a bottle has launched under DXMT, its system
+    /// directories hold DXMT's *native* dxgi, and a DXVK launch then pairs
+    /// DXVK's `d3d11` with DXMT's `dxgi` under the `n,b` override. That mix
+    /// cannot create window swapchains: Chromium clients fail with
+    /// `DXGI_ERROR_UNSUPPORTED` and run with no window at all. Removing the
+    /// leftover lets the `,b` half of the override load the builtin, which is
+    /// the pairing DXVK is written against.
+    ///
+    /// Both arches are swept, because a DXMT launch writes both and a 32-bit
+    /// title otherwise keeps the bad pairing. A builtin-marked file is never
+    /// touched: that is wine's own fake DLL, exactly what DXVK expects to
+    /// defer to, and leaving it in place is what keeps this off the
+    /// per-launch prefix-mutation path.
+    ///
+    /// Whether removal is the right answer at all is decided by
+    /// ``reconcileDXGIForDXVK(prefixRoot:gptkOriginalsDXGI:gptkPayloadIsDeployed:)``,
+    /// which owns the payload predicate.
+    static func removeStaleNativeDXGI(prefixRoot: URL) {
+        let fileManager = FileManager.default
+        for dir in ["system32", "syswow64"] {
+            let dxgi = prefixRoot.appending(path: "drive_c").appending(path: "windows")
+                .appending(path: dir).appending(path: "dxgi.dll")
+            guard fileManager.fileExists(atPath: dxgi.path(percentEncoded: false)),
+                  (try? isNativePE(dxgi)) == true
+            else { continue }
+            do {
+                try fileManager.removeItem(at: dxgi)
+                Logger.wineKit.info("Removed stale native dxgi.dll from \(dir, privacy: .public)")
+            } catch {
+                Logger.wineKit.warning(
+                    "Could not remove stale native dxgi.dll: \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
     }
 
     /// Strips the "Wine builtin DLL" marker at offset 0x40 from a PE file.
@@ -712,18 +783,20 @@ public class Wine {
         try handle.write(contentsOf: Data(dosCode))
     }
 
-    /// Deploys Wine's backed-up native dxgi.dll into the prefix for DXVK bottles.
-    @MainActor
-    static func deployCleanDXGIForDXVK(bottle: Bottle) {
-        let store = GPTKImporter.storeFolder
-        let originals = store.appending(path: "originals")
-        let origDXGI = originals.appending(path: "dxgi.dll")
-        guard FileManager.default.fileExists(atPath: origDXGI.path(percentEncoded: false)) else { return }
+    /// Deploys Wine's backed-up clean `dxgi.dll` into the prefix, with the
+    /// builtin marker stripped so the loader accepts it as a true native PE.
+    ///
+    /// Only `system32` is written: GPTK deploys forwarders into
+    /// `wine/x86_64-windows` only, so the 32-bit builtin is still Wine's own
+    /// and the stored 64-bit original has no business in `syswow64`.
+    static func deployCleanDXGI(prefixRoot: URL, from gptkOriginalsDXGI: URL) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: gptkOriginalsDXGI.path(percentEncoded: false)) else { return }
 
-        let sys32DXGI = bottle.url.appending(path: "drive_c").appending(path: "windows")
+        let sys32DXGI = prefixRoot.appending(path: "drive_c").appending(path: "windows")
             .appending(path: "system32").appending(path: "dxgi.dll")
         do {
-            try FileManager.default.installFile(at: sys32DXGI, from: origDXGI)
+            try fileManager.installFile(at: sys32DXGI, from: gptkOriginalsDXGI)
             try stripBuiltinMarker(at: sys32DXGI)
         } catch {
             Logger.wineKit.warning(
