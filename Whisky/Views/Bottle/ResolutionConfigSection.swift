@@ -20,7 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct ResolutionConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @AppStorage("displayAdvancedMode") private var advancedMode: Bool = false
     @State private var hasRunningProcesses: Bool = false
     @State private var widthText: String = ""

@@ -22,8 +22,8 @@ import WhiskyKit
 /// View showing per-program crash diagnosis history with view/re-analyze/clear actions
 /// and an enhanced logging section with WINEDEBUG preset picker.
 struct DiagnosisHistoryView: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
 
     var onViewDetails: ((DiagnosisHistoryEntry) -> Void)?
     var onReanalyze: ((DiagnosisHistoryEntry) -> Void)?

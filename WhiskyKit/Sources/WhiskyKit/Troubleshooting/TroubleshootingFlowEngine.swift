@@ -19,6 +19,7 @@
 
 import Combine
 import Foundation
+import Observation
 import os.log
 
 // MARK: - Session Store Protocol
@@ -62,27 +63,28 @@ public protocol TroubleshootingSessionStoring: Sendable {
 /// engine.selectCategory(.graphics)
 /// ```
 @MainActor
-public final class TroubleshootingFlowEngine: ObservableObject {
+@Observable
+public final class TroubleshootingFlowEngine {
     // MARK: - Published State
 
     /// The current troubleshooting session state.
-    @Published public var session: TroubleshootingSession
+    public var session: TroubleshootingSession
 
     /// Whether a check is currently running asynchronously.
-    @Published public var isRunningCheck: Bool = false
+    public var isRunningCheck: Bool = false
 
     /// The current flow step node being displayed.
-    @Published public var currentNode: FlowStepNode?
+    public var currentNode: FlowStepNode?
 
     /// Whether the flow path has changed due to branching.
-    @Published public var pathChanged: Bool = false
+    public var pathChanged: Bool = false
 
     /// Explanation of why the flow path changed.
-    @Published public var pathChangeReason: String?
+    public var pathChangeReason: String?
 
     /// The most recent check result, exposed so fix views can inherit
     /// evidence (e.g. which winetricks verb the check found missing).
-    @Published public private(set) var lastCheckResult: CheckResult?
+    public private(set) var lastCheckResult: CheckResult?
 
     // MARK: - Dependencies
 

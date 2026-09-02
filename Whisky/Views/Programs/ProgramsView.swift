@@ -20,7 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct ProgramsView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var blocklist: [URL] = []
     @State private var selectedPrograms = Set<Program>()
     @State private var selectedBlockitems = Set<URL>()
@@ -170,8 +170,8 @@ struct ProgramsView: View {
 }
 
 struct ProgramItemView: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
     @Binding var path: NavigationPath
     @Binding var toast: ToastData?
     @State private var showButtons = false
@@ -269,7 +269,7 @@ struct ProgramItemView: View {
 
 struct BlocklistItemView: View {
     let blockedUrl: URL
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var showButtons: Bool = false
 
     var body: some View {

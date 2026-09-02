@@ -21,7 +21,7 @@ import WhiskyKit
 
 /// Test button row for Wine audio testing with tone confirmation flow.
 struct AudioTestButtonsView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     var onStatusUpdate: (AudioStatus) -> Void
     var onTestComplete: ([AudioProbeResult]) -> Void
     var testExeURL: URL?

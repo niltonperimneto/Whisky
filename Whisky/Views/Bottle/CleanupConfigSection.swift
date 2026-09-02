@@ -20,7 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct CleanupConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
 
     var body: some View {

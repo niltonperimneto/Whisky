@@ -22,7 +22,7 @@ import WhiskyKit
 
 /// The four actions along the bottom of a bottle.
 struct BottleActionBar: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var showWinetricksSheet: Bool
     @Binding var programLoading: Bool
     @Binding var toast: ToastData?

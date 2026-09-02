@@ -27,7 +27,7 @@ private let launcherConfigLogger = Logger(
 )
 
 struct LauncherConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
     /// Opens the latest diagnosis; supplied by ConfigView, which owns that sheet.
     var onViewDiagnostics: () -> Void = {}

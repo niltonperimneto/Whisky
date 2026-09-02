@@ -25,7 +25,7 @@ import WhiskyKit
 /// search by title and aliases, filter by rating/store/backend, and navigate
 /// to a detail view for each entry.
 struct GameConfigurationView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var entries: [GameDBEntry] = []
     @State private var searchText: String = ""
     @State private var selectedRating: CompatibilityRating?

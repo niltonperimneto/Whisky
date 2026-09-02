@@ -28,8 +28,8 @@ import WhiskyKit
 /// to switch to "Override", revealing controls with the current inherited value
 /// as the starting value (copy-on-enable).
 struct ProgramOverrideSettingsView: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
     @Binding var isExpanded: Bool
 
     @State private var showResetConfirmation = false

@@ -78,7 +78,8 @@ import SwiftUI
 /// ### Pin State
 /// - ``pinned``
 @MainActor
-public final class Program: ObservableObject, Equatable, Hashable, Identifiable {
+@Observable
+public final class Program: Equatable, Hashable, Identifiable {
     /// The ``Bottle`` that contains this program.
     public let bottle: Bottle
     /// The file system URL to the program's executable file.
@@ -96,7 +97,7 @@ public final class Program: ObservableObject, Equatable, Hashable, Identifiable 
     /// Changes to settings are automatically persisted to disk.
     /// These settings can override bottle-level defaults for locale
     /// and environment variables.
-    @Published public var settings: ProgramSettings {
+    public var settings: ProgramSettings {
         didSet { saveSettings() }
     }
 
@@ -104,7 +105,7 @@ public final class Program: ObservableObject, Equatable, Hashable, Identifiable 
     ///
     /// Setting this property automatically updates the bottle's pin list.
     /// Pinned programs appear in a separate section of the UI.
-    @Published public var pinned: Bool {
+    public var pinned: Bool {
         didSet {
             if pinned {
                 bottle.settings.pins.append(PinnedProgram(

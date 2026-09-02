@@ -24,7 +24,7 @@ import WhiskyKit
 /// Uses an adaptive 2-column grid for wider views. The "Other" category
 /// is shown at the bottom with reduced visual weight per locked decision.
 struct SymptomPickerView: View {
-    @ObservedObject var engine: TroubleshootingFlowEngine
+    @Bindable var engine: TroubleshootingFlowEngine
 
     /// Primary categories exclude "other" for separate rendering.
     private var primaryCategories: [SymptomCategory] {

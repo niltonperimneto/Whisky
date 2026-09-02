@@ -28,7 +28,7 @@ import WhiskyKit
 /// happens silently -- the user must explicitly click Install.
 struct DependencyInstallSheet: View {
     let definition: DependencyDefinition
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Environment(\.dismiss) private var dismiss
 
     @State private var stage: InstallStage = .info

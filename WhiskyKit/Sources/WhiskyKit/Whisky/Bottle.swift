@@ -75,7 +75,8 @@ import SwiftUI
 /// - ``inFlight``
 /// - ``isAvailable``
 @MainActor
-public final class Bottle: ObservableObject, Equatable, Hashable, Identifiable, @preconcurrency Comparable {
+@Observable
+public final class Bottle: Equatable, Hashable, Identifiable, @preconcurrency Comparable {
     /// The file system URL to this bottle's directory.
     public let url: URL
     /// URL to the bottle's metadata plist file.
@@ -83,22 +84,22 @@ public final class Bottle: ObservableObject, Equatable, Hashable, Identifiable, 
     /// The bottle's configuration settings.
     ///
     /// Changes to settings are automatically persisted to disk.
-    @Published public var settings: BottleSettings {
+    public var settings: BottleSettings {
         didSet { saveSettings() }
     }
 
     /// The list of discovered Windows programs in this bottle.
     ///
     /// Programs are typically populated by scanning the bottle's drive_c directory.
-    @Published public var programs: [Program] = []
+    public var programs: [Program] = []
     /// Indicates whether the bottle is currently being created or modified.
-    @Published public var inFlight: Bool = false
+    public var inFlight: Bool = false
     /// Indicates whether the installed-programs list is currently being scanned.
     ///
     /// Set while ``programs`` is being repopulated by an off-main-actor directory
     /// walk, so the UI can show a loading indicator instead of hitching the main
     /// thread on a large bottle.
-    @Published public var programsLoading: Bool = false
+    public var programsLoading: Bool = false
     /// Indicates whether the bottle's directory exists and is accessible.
     public var isAvailable: Bool = false
 

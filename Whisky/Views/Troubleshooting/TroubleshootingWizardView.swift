@@ -32,7 +32,7 @@ struct TroubleshootingWizardView: View {
     /// points that already know what hurts (the audio section's button).
     let preselectedCategory: SymptomCategory?
 
-    @StateObject private var engine: TroubleshootingFlowEngine
+    @State private var engine: TroubleshootingFlowEngine
     @Environment(\.dismiss) private var dismiss
 
     @State private var showResumeOverlay: Bool = false
@@ -60,7 +60,7 @@ struct TroubleshootingWizardView: View {
             checkRegistry: CheckRegistry(),
             sessionStore: store
         )
-        _engine = StateObject(wrappedValue: engine)
+        _engine = State(initialValue: engine)
     }
 
     var body: some View {

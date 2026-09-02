@@ -27,7 +27,7 @@ import WhiskyKit
 /// to execute the fix. Per locked decision, the Apply button is explicit and gated.
 struct FixPreviewView: View {
     let node: FlowStepNode
-    @ObservedObject var engine: TroubleshootingFlowEngine
+    @Bindable var engine: TroubleshootingFlowEngine
     let bottle: Bottle
     let program: Program?
 

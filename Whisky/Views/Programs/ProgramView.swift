@@ -21,7 +21,7 @@ import UniformTypeIdentifiers
 import WhiskyKit
 
 struct ProgramView: View {
-    @ObservedObject var program: Program
+    @Bindable var program: Program
     @State private var programLoading: Bool = false
     @State private var cachedIconImage: Image?
     @State private var toast: ToastData?

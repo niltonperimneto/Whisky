@@ -20,7 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct DiscordConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
 
     var body: some View {
         Section("config.discord") {

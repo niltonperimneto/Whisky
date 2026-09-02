@@ -25,7 +25,7 @@ import WhiskyKit
 /// Notes / Known Issues, and Provenance.
 struct GameEntryDetailView: View {
     let entry: GameDBEntry
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var selectedVariant: GameConfigVariant?
     @State private var showPreviewSheet: Bool = false
     @State private var stalenessResult: StalenessResult?

@@ -24,7 +24,7 @@ import WhiskyKit
 struct GameConfigPreviewSheet: View {
     let entry: GameDBEntry
     let variant: GameConfigVariant
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     let programURL: URL?
     @Environment(\.dismiss) private var dismiss
     @State private var changes: [ConfigChange] = []

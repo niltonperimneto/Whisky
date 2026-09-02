@@ -26,7 +26,7 @@ enum RetinaModeState: Equatable {
 
 struct WineConfigSection: View {
     private static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "ConfigView")
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
     @Binding var buildVersion: String
     @Binding var windowsVersion: WinVersion

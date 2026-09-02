@@ -24,7 +24,7 @@ import WhiskyKit
 /// Displays managed overrides from DXVK toggle and launcher presets as read-only entries,
 /// and provides the ``DLLOverrideEditor`` for editing custom bottle-level overrides.
 struct DLLOverrideConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
 
     var body: some View {

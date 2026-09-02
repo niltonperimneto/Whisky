@@ -28,7 +28,7 @@ enum BottleStage {
 }
 
 struct BottleView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @State private var path = NavigationPath()
     @State private var programLoading: Bool = false
     @State private var showWinetricksSheet: Bool = false

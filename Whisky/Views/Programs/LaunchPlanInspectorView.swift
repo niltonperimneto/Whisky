@@ -23,8 +23,8 @@ import WhiskyKit
 /// then every environment variable the next launch would carry, each labeled
 /// with the layer that won it and the reason that layer recorded.
 struct LaunchPlanInspectorView: View {
-    @ObservedObject var bottle: Bottle
-    @ObservedObject var program: Program
+    @Bindable var bottle: Bottle
+    @Bindable var program: Program
     @Environment(\.dismiss) private var dismiss
 
     @State private var planNotes: [String] = []

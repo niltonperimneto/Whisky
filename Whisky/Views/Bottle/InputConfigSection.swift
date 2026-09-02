@@ -21,7 +21,7 @@ import WhiskyKit
 
 // swiftlint:disable type_body_length
 struct InputConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @Binding var isExpanded: Bool
     @StateObject private var controllerMonitor = ControllerMonitor()
     @State private var controllersExpanded = false

@@ -26,7 +26,7 @@ import WhiskyKit
 /// last-checked timestamp, and Install action. Manages its own state and
 /// presents ``DependencyInstallSheet`` via a sheet binding.
 struct DependencyConfigSection: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
 
     @State private var statuses: [DependencyStatus] = []
     @State private var isLoading: Bool = true

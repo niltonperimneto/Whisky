@@ -20,7 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct RunningProcessesView: View {
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     @StateObject private var viewModel: ProcessesViewModel
     @State private var toast: ToastData?
     @State private var showStopConfirmation: Bool = false

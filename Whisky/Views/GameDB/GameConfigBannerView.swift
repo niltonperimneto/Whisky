@@ -24,7 +24,7 @@ import WhiskyKit
 /// and a "Not this" dismissal button.
 struct GameConfigBannerView: View {
     let matchResult: MatchResult
-    @ObservedObject var bottle: Bottle
+    @Bindable var bottle: Bottle
     let programURL: URL?
     @State private var isDismissed: Bool = false
     @State private var showDetail: Bool = false
