@@ -56,6 +56,7 @@ enum DependencyManager {
     ) async -> [DependencyStatus] {
         let (installedVerbs, fromCache) = await Winetricks.loadInstalledVerbs(for: bottle)
         let confidence: DependencyConfidence = fromCache ? .cached : .authoritative
+        let bottleURL = await MainActor.run { bottle.url }
         let now = Date()
 
         return definitions.map { definition in
@@ -63,12 +64,27 @@ enum DependencyManager {
             let installed = requiredVerbs.filter { installedVerbs.contains($0) }
             let missing = requiredVerbs.filter { !installedVerbs.contains($0) }
 
-            let installStatus: DependencyInstallStatus = if missing.isEmpty {
+            var installStatus: DependencyInstallStatus = if missing.isEmpty {
                 .installed
             } else if installed.isEmpty {
                 .notInstalled
             } else {
                 .partiallyInstalled(installed: installed, missing: missing)
+            }
+            var statusConfidence = confidence
+
+            // The vc_redist installer can hang under wine after installing
+            // successfully, so the verb never reaches winetricks.log even
+            // though the runtime is in place. Fall back to the mfc140.dll
+            // marker probe (see VCRuntimeFallback), but only when the verbs
+            // are missing from the log.
+            if VCRuntimeFallback.detectsInstallation(
+                definition: definition,
+                missingVerbs: missing,
+                bottleURL: bottleURL
+            ) {
+                installStatus = .installed
+                statusConfidence = .heuristic
             }
 
             return DependencyStatus(
@@ -76,7 +92,7 @@ enum DependencyManager {
                 definition: definition,
                 status: installStatus,
                 lastChecked: now,
-                confidence: confidence
+                confidence: statusConfidence
             )
         }
     }
@@ -86,9 +102,8 @@ enum DependencyManager {
     /// Suggests dependencies that a program likely needs based on evidence.
     ///
     /// Evidence sources (checked in order):
-    /// 1. ClickOnce programs always need .NET Framework
-    /// 2. Crash diagnosis history with ``CrashCategory/dependenciesLoading`` matches
-    /// 3. Game database entries with required winetricks verbs
+    /// 1. Crash diagnosis history with ``CrashCategory/dependenciesLoading`` matches
+    /// 2. Game database entries with required winetricks verbs
     ///
     /// Only returns recommendations backed by concrete evidence. Never
     /// recommends speculatively, per project decision.
@@ -103,7 +118,6 @@ enum DependencyManager {
     ) async -> [DependencyDefinition] {
         let programURL = await MainActor.run { program.url }
         let programName = await MainActor.run { program.name }
-        let isClickOnce = await MainActor.run { program.isClickOnce }
         let dismissed = await MainActor.run {
             program.settings.dismissedDependencyRecommendations ?? []
         }
@@ -111,14 +125,7 @@ enum DependencyManager {
         var recommended: [String: DependencyDefinition] = [:]
         let definitions = DependencyDefinition.standardDependencies
 
-        // 1. ClickOnce programs need .NET
-        if isClickOnce {
-            if let dotnet = definitions.first(where: { $0.id == "dotnet48" }) {
-                recommended[dotnet.id] = dotnet
-            }
-        }
-
-        // 2. Check crash diagnosis history for DLL-not-found patterns
+        // 1. Check crash diagnosis history for DLL-not-found patterns
         let bottleURL = await MainActor.run { bottle.url }
         let historyURL = bottleURL
             .appending(path: "Program Settings")
@@ -140,7 +147,7 @@ enum DependencyManager {
             }
         }
 
-        // 3. Check game database for required verbs
+        // 2. Check game database for required verbs
         addGameDBRecommendations(programURL: programURL, definitions: definitions, into: &recommended)
 
         // Filter out dismissed recommendations
