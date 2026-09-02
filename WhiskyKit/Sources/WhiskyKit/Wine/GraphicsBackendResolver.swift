@@ -35,8 +35,6 @@ public enum GraphicsBackendResolver {
     /// the runtime bundles it, otherwise DXVK, which ships with every runtime.
     ///
     /// - Parameters:
-    ///   - launcher: The launcher this launch targets, if any. Launchers always
-    ///     resolve to DXVK: their Chromium UIs cannot render on D3DMetal or DXMT.
     ///   - macOSVersion: The macOS version to consider. Defaults to the running system.
     ///   - runtimeInfo: The runtime record to consider. Defaults to the installed
     ///     runtime's version plist.
@@ -44,23 +42,34 @@ public enum GraphicsBackendResolver {
     ///     to checking the installed runtime.
     ///   - dxmtRuntimeNative: Whether the runtime's DXMT payload is the native
     ///     variant. Defaults to checking the installed runtime.
+    ///   - architecture: The architecture of the executable being launched.
+    ///     Defaults to `.x64`, which is the answer to give when the target is
+    ///     not known, and is what every caller that is describing a bottle
+    ///     rather than a launch wants.
     /// - Returns: A concrete ``GraphicsBackend`` (never `.recommended`).
     public static func resolve(
         for launcher: LauncherType? = nil,
         macOSVersion: MacOSVersion = .current,
         runtimeInfo: WhiskyWineVersion? = WhiskyWineInstaller.whiskyWineInfo(),
         d3dMetalInstalled: Bool = WhiskyWineInstaller.isD3DMetalInstalled(),
-        dxmtRuntimeNative: Bool = Wine.isDXMTRuntimeNative()
+        dxmtRuntimeNative: Bool = Wine.isDXMTRuntimeNative(),
+        architecture: Architecture = .x64
     ) -> GraphicsBackend {
-        // Launcher clients are Chromium and cannot render on D3DMetal or DXMT:
-        // the CEF gpu process fails to create its window swapchain and the
-        // client shows no window (or a black one). DXVK is the one backend
-        // their UIs render on, so a launcher gets it regardless of what else
-        // is installed. Games a launcher starts still resolve below.
-        if launcher != nil {
+        // D3DMetal and DXMT are both 64-bit only: the runtime carries them in
+        // x86_64-windows and leaves i386-windows as Wine's own DLLs. Offering
+        // either to a 32-bit program does not fail loudly, it quietly loads
+        // Wine's builtin d3d11 on wined3d, and the game reports that DirectX 11
+        // is not installed. DXVK is the one backend with a 32-bit payload.
+        if architecture == .x32 {
             return .dxvk
         }
         if d3dMetalInstalled {
+            // Launcher clients are Chromium and cannot render on D3DMetal:
+            // the window comes up and never paints. Games they start still get
+            // D3DMetal.
+            if launcher != nil {
+                return .dxvk
+            }
             return .d3dMetal
         }
         // The same gate the backend picker applies, not the version record
@@ -76,6 +85,39 @@ public enum GraphicsBackendResolver {
             return .dxmt
         }
         return .dxvk
+    }
+
+    /// ``resolve(macOSVersion:runtimeInfo:d3dMetalInstalled:)`` against a
+    /// specific runtime.
+    ///
+    /// D3DMetal is deployed per runtime, so "recommended" is a different answer
+    /// on a GPTK runtime than on Whisky's own — resolving against the singleton
+    /// would recommend D3DMetal to a bottle whose runtime does not carry it.
+    public static func resolve(
+        for runtime: String?,
+        launcher: LauncherType? = nil,
+        macOSVersion: MacOSVersion = .current,
+        architecture: Architecture = .x64
+    ) -> GraphicsBackend {
+        resolve(
+            for: launcher,
+            macOSVersion: macOSVersion,
+            runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: runtime),
+            d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: runtime),
+            dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime),
+            architecture: architecture
+        )
+    }
+
+    /// The architecture of an executable, or `.x64` when its headers cannot be
+    /// read.
+    ///
+    /// Falling back to `.x64` keeps an unreadable file on the path it took
+    /// before, rather than silently demoting it to DXVK.
+    public static func architecture(of url: URL) -> Architecture {
+        guard let file = try? PEFile(url: url) else { return .x64 }
+        let architecture = file.architecture
+        return architecture == .unknown ? .x64 : architecture
     }
 
     /// Returns a localized explanation for the recommended backend choice.

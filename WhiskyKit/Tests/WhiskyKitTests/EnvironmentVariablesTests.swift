@@ -54,6 +54,34 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertNil(env["WINED3DMETAL"])
     }
 
+    /// Metal only accepts a shader cache path before the process has an
+    /// MTLDevice, so the Mac driver sets it and this names the directory. The
+    /// value has to match what DXMT asks for itself or DXMT's own call
+    /// disagrees and warns on every launch.
+    func testDXMTNamesItsMetalShaderCacheDirectory() {
+        var settings = BottleSettings()
+        settings.graphicsBackend = .dxmt
+
+        var env: [String: String] = [:]
+        settings.environmentVariables(wineEnv: &env)
+
+        XCTAssertEqual(env["WINE_METAL_SHADER_CACHE_DIR"], "dxmt")
+    }
+
+    /// Only DXMT asks for it. A D3DMetal bottle has a large warm cache in the
+    /// shared location already, and moving it would throw that away.
+    func testOtherBackendsDoNotNameAMetalShaderCacheDirectory() {
+        for backend in [GraphicsBackend.dxvk, .d3dMetal, .wined3d] {
+            var settings = BottleSettings()
+            settings.graphicsBackend = backend
+
+            var env: [String: String] = [:]
+            settings.environmentVariables(wineEnv: &env)
+
+            XCTAssertNil(env["WINE_METAL_SHADER_CACHE_DIR"], "\(backend) should not set it")
+        }
+    }
+
     func testDXVKSettingsDoNotApplyUnderDXMT() {
         // dxvkHud/dxvkAsync persist in dxvkConfig but only take effect when the
         // backend is DXVK.
@@ -401,7 +429,12 @@ final class EnvironmentVariablesTests: XCTestCase {
         let managed = settings.populateBottleManagedLayer(builder: &builder)
         dllResolver.managed.append(contentsOf: managed)
 
-        Wine.applyProgramOverrides(programOverrides, builder: &builder, dllResolver: &dllResolver)
+        Wine.applyProgramOverrides(
+            programOverrides,
+            frameGeneration: settings.frameGeneration,
+            builder: &builder,
+            dllResolver: &dllResolver
+        )
 
         let (overrideString, _) = dllResolver.resolve()
         return overrideString
@@ -556,9 +589,8 @@ final class EnvironmentVariablesTests: XCTestCase {
     // MARK: - hardware scheduling is claimed only where it applies
 
     func testD3DMetalBottleClaimsHardwareSchedulingForFrameGeneration() {
-        // Wine answers the WDDM 2.7 caps query only for a caller that says it is
-        // on D3DMetal, and NVIDIA Streamline refuses DLSS frame generation
-        // without that answer.
+        // Wine answers the WDDM 2.7 caps query only when this says d3dmetal, and
+        // Streamline refuses DLSS frame generation without that answer.
         var settings = BottleSettings()
         settings.graphicsBackend = .d3dMetal
         settings.frameGeneration = true
@@ -599,57 +631,6 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
     }
 
-    // MARK: - Metal 4 is per program, because D3DMetal only takes that path for D3D12
-
-    /// Resolves the environment a program gets from a D3DMetal bottle, which is
-    /// where `D3DM_MTL4` is set, with its own overrides layered on top.
-    private func resolvedEnvironment(_ overrides: ProgramOverrides) -> [String: String] {
-        var settings = BottleSettings()
-        settings.graphicsBackend = .d3dMetal
-        var builder = EnvironmentBuilder()
-        var dllResolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
-
-        _ = settings.populateBottleManagedLayer(builder: &builder)
-        Wine.applyProgramOverrides(overrides, builder: &builder, dllResolver: &dllResolver)
-
-        return builder.resolve().environment
-    }
-
-    func testD3DMetalBottleEnablesMetal4() {
-        XCTAssertEqual(resolvedEnvironment(ProgramOverrides())["D3DM_MTL4"], "1")
-    }
-
-    func testProgramCanDisableMetal4WithoutTheBottleLosingIt() {
-        // A D3D12 title whose renderer wedges on a fence the Metal 4 submission
-        // path never signals has to be able to drop back on its own.
-        var overrides = ProgramOverrides()
-        overrides.metal4Enabled = false
-
-        XCTAssertNil(resolvedEnvironment(overrides)["D3DM_MTL4"])
-    }
-
-    func testProgramCanKeepMetal4Explicitly() {
-        var overrides = ProgramOverrides()
-        overrides.metal4Enabled = true
-
-        XCTAssertEqual(resolvedEnvironment(overrides)["D3DM_MTL4"], "1")
-    }
-
-    func testMetal4OverrideUnsetInheritsTheBottle() {
-        XCTAssertNil(ProgramOverrides().metal4Enabled)
-        XCTAssertTrue(ProgramOverrides().isEmpty)
-    }
-
-    func testMetal4OverrideSurvivesASettingsRoundTrip() throws {
-        var overrides = ProgramOverrides()
-        overrides.metal4Enabled = false
-
-        let data = try PropertyListEncoder().encode(overrides)
-        let decoded = try PropertyListDecoder().decode(ProgramOverrides.self, from: data)
-
-        XCTAssertEqual(decoded.metal4Enabled, false)
-    }
-
     /// Resolves the environment a program launch actually sees: the bottle-managed
     /// layer with the program override applied on top.
     private func resolvedEnvironment(
@@ -662,7 +643,12 @@ final class EnvironmentVariablesTests: XCTestCase {
         let managed = settings.populateBottleManagedLayer(builder: &builder)
         dllResolver.managed.append(contentsOf: managed)
 
-        Wine.applyProgramOverrides(programOverrides, builder: &builder, dllResolver: &dllResolver)
+        Wine.applyProgramOverrides(
+            programOverrides,
+            frameGeneration: settings.frameGeneration,
+            builder: &builder,
+            dllResolver: &dllResolver
+        )
 
         let (resolved, _) = builder.resolve()
         return resolved
@@ -697,11 +683,71 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
     }
 
+    func testD3DMetalProgramOverrideRespectsFrameGenerationOff() {
+        // The .d3dMetal program branch sets the claim itself, because a DXVK
+        // bottle never does. Ungated, that was a second way in.
+        var settings = BottleSettings()
+        settings.graphicsBackend = .dxvk
+
+        var overrides = ProgramOverrides()
+        overrides.graphicsBackend = .d3dMetal
+
+        let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
+        XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
+    }
+
+    func testD3DMetalProgramOverrideClaimsWhenFrameGenerationIsOn() {
+        var settings = BottleSettings()
+        settings.graphicsBackend = .dxvk
+        settings.frameGeneration = true
+
+        var overrides = ProgramOverrides()
+        overrides.graphicsBackend = .d3dMetal
+
+        let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
+        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
+    }
+
+    func testProgramCanTurnFrameGenerationOffWithoutTheBottleLosingIt() {
+        // The point of the per-program switch: one title deadlocks its RHI
+        // thread on frame generation while the rest of the bottle keeps it.
+        var settings = BottleSettings()
+        settings.graphicsBackend = .d3dMetal
+        settings.frameGeneration = true
+
+        var overrides = ProgramOverrides()
+        overrides.frameGeneration = false
+
+        let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
+        XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
+    }
+
+    func testProgramCanTurnFrameGenerationOnInsideABottleWithItOff() {
+        var settings = BottleSettings()
+        settings.graphicsBackend = .d3dMetal
+
+        var overrides = ProgramOverrides()
+        overrides.frameGeneration = true
+
+        let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
+        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
+    }
+
+    func testProgramSayingNothingAboutFrameGenerationInheritsTheBottle() {
+        var settings = BottleSettings()
+        settings.graphicsBackend = .d3dMetal
+        settings.frameGeneration = true
+
+        let env = resolvedEnvironment(bottleSettings: settings, programOverrides: ProgramOverrides())
+        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
+    }
+
     func testWineD3DProgramOverrideDropsHardwareSchedulingClaim() {
         // wined3d is the one override that switches D3DMetal off outright, so
         // there is nothing behind the claim.
         var settings = BottleSettings()
         settings.graphicsBackend = .d3dMetal
+
         settings.frameGeneration = true
 
         var overrides = ProgramOverrides()
@@ -709,48 +755,5 @@ final class EnvironmentVariablesTests: XCTestCase {
 
         let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
         XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
-    }
-
-    /// The .d3dMetal program branch claims scheduling itself, because a bottle
-    /// on another backend never does. Ungated, that was a second way in.
-    func testD3DMetalProgramOverrideRespectsFrameGenerationOff() {
-        var settings = BottleSettings()
-        settings.graphicsBackend = .dxvk
-        var builder = EnvironmentBuilder()
-        var dllResolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
-        dllResolver.managed.append(contentsOf: settings.populateBottleManagedLayer(builder: &builder))
-
-        var overrides = ProgramOverrides()
-        overrides.graphicsBackend = .d3dMetal
-        Wine.applyProgramOverrides(
-            overrides,
-            frameGeneration: settings.frameGeneration,
-            builder: &builder,
-            dllResolver: &dllResolver
-        )
-
-        let (resolved, _) = builder.resolve()
-        XCTAssertNil(resolved["CX_ACTIVE_GRAPHICS_BACKEND"])
-    }
-
-    func testD3DMetalProgramOverrideClaimsWhenFrameGenerationIsOn() {
-        var settings = BottleSettings()
-        settings.graphicsBackend = .dxvk
-        settings.frameGeneration = true
-        var builder = EnvironmentBuilder()
-        var dllResolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
-        dllResolver.managed.append(contentsOf: settings.populateBottleManagedLayer(builder: &builder))
-
-        var overrides = ProgramOverrides()
-        overrides.graphicsBackend = .d3dMetal
-        Wine.applyProgramOverrides(
-            overrides,
-            frameGeneration: settings.frameGeneration,
-            builder: &builder,
-            dllResolver: &dllResolver
-        )
-
-        let (resolved, _) = builder.resolve()
-        XCTAssertEqual(resolved["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
     }
 }

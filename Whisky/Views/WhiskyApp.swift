@@ -18,11 +18,12 @@
 //
 
 import os.log
-import Sparkle
 import SwiftUI
 import WhiskyKit
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.franke.Whisky", category: "WhiskyApp")
+private let logger = Logger(
+    subsystem: Bundle.main.bundleIdentifier ?? "com.dappermint.WhiskyPreview", category: "WhiskyApp"
+)
 
 @main
 // swiftlint:disable:next type_body_length
@@ -37,11 +38,13 @@ struct WhiskyApp: App {
     /// Scene id for the main window, used to reopen it from the menu-bar extra.
     static let mainWindowID = "main"
 
+    /// Scene id for the Debug window.
+    static let debugWindowID = "debug"
+
     /// Opt-in: show a menu-bar extra and keep Whisky running after the main
     /// window closes (see `AppDelegate.applicationShouldTerminateAfterLastWindowClosed`).
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     @State var showSetup: Bool = false
-    @State private var showMigrate: Bool = false
     @State private var showDiagnosticsSheet: Bool = false
     @State private var showTroubleshootingPicker: Bool = false
     @State private var showTroubleshootingWizard: Bool = false
@@ -54,45 +57,30 @@ struct WhiskyApp: App {
     @State private var audioDeviceToast: ToastData?
     @State private var audioMonitor = AudioDeviceMonitor()
     @State private var audioAlertTracker = AudioAlertTracker()
+    @AppStorage("audioDeviceAlerts") private var audioDeviceAlerts = true
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Environment(\.openURL) var openURL
-    private let updaterController: SPUStandardUpdaterController
+    @Environment(\.openWindow) var openWindow
 
     init() {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: SparkleUpdaterDelegate.shared
-        )
         Telemetry.startIfConsented()
     }
 
-    /// Installs the MetalFX bridge into runtimes that already hold the GPTK
-    /// payload.
+    /// Installs the D3D12 video processor and the MetalFX bridge into runtimes
+    /// that already hold the GPTK payload.
     ///
-    /// Deploying does this too, but an install that was set up before the
-    /// bridge existed never deploys again, so without this MetalFX would stay
-    /// unreachable until it happened to reimport. Idempotent, and a no-op on
-    /// runtimes whose payload does not carry the bridge.
-    private func installMetalFXBridgeIfNeeded() {
-        Task.detached(priority: .background) {
-            GPTKImporter.ensureMetalFXBridgeInstalled()
-            GPTKImporter.ensureNVAPIBridgeInstalled()
-        }
-    }
-
-    /// Installs the D3D12 video processor if the GPTK payload is already
-    /// deployed.
-    ///
-    /// Deploying does this too, but an install that was set up before the
-    /// interposer existed never deploys again, so without this it would keep
-    /// rendering video through the engine's broken fallback until it happened
-    /// to reimport. Idempotent, and a no-op on runtimes that ship no interposer.
-    private func installVideoProcessorIfNeeded() {
+    /// Deploying does both too, but an install that was set up before they
+    /// existed never deploys again, so without this it would keep rendering
+    /// video through the engine's broken fallback, and keep MetalFX
+    /// unreachable, until it happened to reimport. Idempotent, and a no-op on
+    /// runtimes and payloads that carry neither.
+    private func installGPTKExtrasIfNeeded() {
         var data = BottleData()
         let bottles = data.loadBottles().map(\.url)
         Task.detached(priority: .background) {
-            GPTKImporter.ensureVideoProcessorInstalled(bottles: bottles)
+            GPTKImporter.ensureVideoProcessorEverywhere(bottles: bottles)
+            GPTKImporter.ensureMetalFXBridgeEverywhere()
+            GPTKImporter.ensureNVAPIBridgeEverywhere()
         }
     }
 
@@ -108,14 +96,18 @@ struct WhiskyApp: App {
                     Task.detached {
                         await WhiskyApp.deleteOldLogs()
                     }
-                    installMetalFXBridgeIfNeeded()
-                    installVideoProcessorIfNeeded()
+                    installGPTKExtrasIfNeeded()
                     startAudioDeviceListening()
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .crashDiagnosisAvailable)
                 ) { notification in
                     handleCrashDiagnosisNotification(notification)
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(for: CrashNotifier.openDiagnosis)
+                ) { notification in
+                    openDiagnosisFromUserNotification(notification)
                 }
                 .sheet(isPresented: $showDiagnosticsSheet) {
                     DiagnosticsPickerSheet()
@@ -144,10 +136,6 @@ struct WhiskyApp: App {
                         )
                     }
                 }
-                .sheet(isPresented: $showMigrate) {
-                    MigrateBottlesSheet()
-                        .environmentObject(BottleVM.shared)
-                }
                 .sheet(item: $crashDiagnosisSheet) { banner in
                     DiagnosticsView(
                         diagnosis: banner.diagnosis,
@@ -168,9 +156,6 @@ struct WhiskyApp: App {
         }
         .handlesExternalEvents(matching: ["*"])
         .commands {
-            CommandGroup(after: .appInfo) {
-                SparkleView(updater: updaterController.updater)
-            }
             CommandGroup(before: .systemServices) {
                 Divider()
                 Button("open.setup") {
@@ -182,7 +167,14 @@ struct WhiskyApp: App {
                     }
                 }
             }
-            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .newItem) {
+                // Cmd-N was deleted with the stock New menu; a launcher's
+                // most natural new thing is a bottle.
+                Button("button.createBottle") {
+                    NotificationCenter.default.post(name: .whiskyCreateBottle, object: nil)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
+            }
             CommandGroup(after: .newItem) {
                 Button("open.bottle") {
                     let panel = NSOpenPanel()
@@ -202,33 +194,55 @@ struct WhiskyApp: App {
                         }
                     }
                 }
-                .keyboardShortcut("I", modifiers: [.command])
-                Button("Migrate from the Original Whisky…") {
-                    showMigrate = true
+                // Lowercase: an uppercase key equivalent implies Shift.
+                .keyboardShortcut("i", modifiers: [.command])
+                Button("migrate.menu.import") {
+                    NotificationCenter.default.post(name: .whiskyImportBottles, object: nil)
                 }
             }
             CommandGroup(after: .importExport) {
+                Button("debug.window.open") {
+                    openWindow(id: Self.debugWindowID)
+                }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("open.logs") {
                     WhiskyApp.openLogsFolder()
                 }
-                .keyboardShortcut("L", modifiers: [.command])
+                .keyboardShortcut("l", modifiers: [.command])
                 Button("kill.bottles") {
-                    WhiskyApp.killBottles()
+                    WhiskyApp.killBottlesConfirmed()
                 }
-                .keyboardShortcut("K", modifiers: [.command, .shift])
+                .keyboardShortcut("k", modifiers: [.command, .shift])
                 Button("wine.clearShaderCaches") {
-                    WhiskyApp.killBottles() // Better not make things more complicated for ourselves
-                    WhiskyApp.wipeShaderCaches()
+                    WhiskyApp.clearShaderCachesConfirmed()
+                }
+                Divider()
+                Menu("steam.patch.menu") {
+                    Button("steam.patch.menu.apply") {
+                        WhiskyApp.applySteamPatchConfirmed()
+                    }
+                    Button("steam.compattool.menu.install") {
+                        WhiskyApp.installSteamCompatTool()
+                    }
+                    Divider()
+                    Button("steam.patch.menu.revert") {
+                        WhiskyApp.revertSteamPatchConfirmed()
+                    }
                 }
             }
             CommandGroup(replacing: .help) {
                 Button("help.github") {
-                    if let url = URL(string: "https://github.com/frankea/Whisky") {
+                    if let url = URL(string: "https://github.com/dappermint/Whisky") {
                         openURL(url)
                     }
                 }
+                // Not straight to upstream's tracker: issues are disabled on
+                // the preview repo, and anything preview-only is out of scope
+                // on frankea's. SUPPORT.md is the page that sorts that out.
                 Button("help.issues") {
-                    if let url = URL(string: "https://github.com/frankea/Whisky/issues") {
+                    if let url = URL(
+                        string: "https://github.com/dappermint/Whisky/blob/preview/docs/SUPPORT.md"
+                    ) {
                         openURL(url)
                     }
                 }
@@ -236,17 +250,23 @@ struct WhiskyApp: App {
                 Button("Run Diagnostics\u{2026}") {
                     showDiagnosticsSheet = true
                 }
-                .keyboardShortcut("D", modifiers: [.command, .shift])
+                .keyboardShortcut("d", modifiers: [.command, .shift])
                 Button(String(localized: "troubleshooting.entry.helpMenu")) {
                     showTroubleshootingPicker = true
                 }
-                .keyboardShortcut("T", modifiers: [.command, .shift])
+                .keyboardShortcut("t", modifiers: [.command, .shift])
             }
         }
+        Window("debug.window.title", id: Self.debugWindowID) {
+            DebugWindowView()
+                .environmentObject(BottleVM.shared)
+        }
+        .defaultSize(width: 900, height: 620)
+
         Settings {
             SettingsView()
         }
-        MenuBarExtra("Whisky", systemImage: "wineglass", isInserted: $showMenuBarExtra) {
+        MenuBarExtra("Whisky Preview", systemImage: "wineglass", isInserted: $showMenuBarExtra) {
             WhiskyMenuBarView()
                 .environmentObject(BottleVM.shared)
         }
@@ -268,12 +288,37 @@ struct WhiskyApp: App {
             logFileURL: logFileURL
         )
 
-        // Auto-dismiss after 8 seconds
+        // Unconditional: `CrashNotificationDelegate` leaves `willPresent`
+        // unimplemented, so the system already withholds the alert while Whisky
+        // is frontmost. Gating on `!NSApp.isActive` only lost the record.
+        CrashNotifier.notify(
+            programName: programName,
+            category: diagnosis.primaryCategory,
+            programPath: programPath,
+            logFileURL: logFileURL
+        )
+
+        // The banner stays until dismissed. It used to clear itself after 8
+        // seconds, which is long enough to miss while the game still has the screen.
+    }
+
+    /// A click on the crash notification: the diagnosis is re-derived from
+    /// the log it named, the same way the launcher section reopens one.
+    private func openDiagnosisFromUserNotification(_ notification: Notification) {
+        guard let programPath = notification.userInfo?[CrashNotifier.programPathKey] as? String,
+              let logFile = notification.userInfo?[CrashNotifier.logFileKey] as? String
+        else { return }
+
+        let logFileURL = URL(fileURLWithPath: logFile)
+        let programName = URL(fileURLWithPath: programPath).deletingPathExtension().lastPathComponent
         Task {
-            try? await Task.sleep(for: .seconds(8))
-            withAnimation {
-                crashDiagnosisBanner = nil
-            }
+            guard let diagnosis = await Wine.classifyLastRun(logFileURL: logFileURL, exitCode: 1) else { return }
+            openDiagnosisFromCrash(CrashDiagnosisBannerState(
+                diagnosis: diagnosis,
+                programName: programName,
+                programPath: programPath,
+                logFileURL: logFileURL
+            ))
         }
     }
 
@@ -281,10 +326,10 @@ struct WhiskyApp: App {
         HStack {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
-            Text("Crash detected \u{2014} \(banner.programName)")
+            Text(String(format: String(localized: "crash.banner.title"), banner.programName))
                 .fontWeight(.medium)
             Spacer()
-            Button("View Diagnosis") {
+            Button("crash.banner.viewDiagnosis") {
                 openDiagnosisFromCrash(banner)
             }
             .buttonStyle(.bordered)
@@ -367,27 +412,42 @@ struct WhiskyApp: App {
     private func startAudioDeviceListening() {
         audioMonitor.startListening { event in
             Task { @MainActor in
-                guard audioAlertTracker.shouldAlert(deviceName: event.deviceName) else { return }
+                guard audioDeviceAlerts,
+                      audioAlertTracker.shouldAlert(deviceName: event.deviceName)
+                else { return }
 
+                let title: String
+                let style: ToastStyle
                 switch event.eventType {
                 case .defaultOutputChanged, .disconnected:
-                    let message = String(
-                        localized: "audio.alert.disconnected"
-                    ) + ": \(event.deviceName)"
-                    audioDeviceToast = ToastData(message: message, style: .info)
+                    title = String(localized: "audio.alert.disconnected")
+                    style = .info
                 case .reconnected:
-                    let message = String(
-                        localized: "audio.alert.reconnected"
-                    ) + ": \(event.deviceName)"
-                    audioDeviceToast = ToastData(message: message, style: .success)
+                    title = String(localized: "audio.alert.reconnected")
+                    style = .success
                 case .sampleRateChanged:
-                    // Check for low sample rate (HFP/Bluetooth issue)
-                    if let device = audioMonitor.defaultOutputDevice(),
-                       device.sampleRate < 22_050, device.sampleRate > 0 {
-                        let message = String(localized: "audio.alert.lowSampleRate")
-                            + ": \(event.deviceName)"
-                        audioDeviceToast = ToastData(message: message, style: .info)
-                    }
+                    // Only worth a word when the rate is HFP-low (Bluetooth
+                    // headset fell back to its telephony profile).
+                    guard let device = audioMonitor.defaultOutputDevice(),
+                          device.sampleRate < 22_050, device.sampleRate > 0
+                    else { return }
+                    title = String(localized: "audio.alert.lowSampleRate")
+                    style = .info
+                }
+
+                // A toast in Whisky's window is invisible exactly when it
+                // matters, mid-game with the headset gone, so background
+                // alerts go to Notification Center instead.
+                if NSApp.isActive {
+                    audioDeviceToast = ToastData(
+                        message: title + ": \(event.deviceName)", style: style
+                    )
+                } else {
+                    CrashNotifier.notifyInfo(
+                        title: title,
+                        body: event.deviceName,
+                        identifier: "audio-\(event.deviceName)"
+                    )
                 }
             }
         }
@@ -403,6 +463,191 @@ extension WhiskyApp {
             // killBottle is fire-and-forget; errors are logged internally
             Wine.killBottle(bottle: bottle)
         }
+    }
+
+    @MainActor
+    private static func runningBottles() async -> [Bottle] {
+        var running: [Bottle] = []
+        for bottle in BottleVM.shared.bottles where await Wine.isWineserverRunning(for: bottle) {
+            running.append(bottle)
+        }
+        return running
+    }
+
+    /// Asks before killing, naming the bottles that are about to go down.
+    ///
+    /// Silent when nothing is running, since there is nothing to lose.
+    @MainActor
+    static func killBottlesConfirmed() {
+        Task {
+            let running = await runningBottles()
+            guard !running.isEmpty else {
+                killBottles()
+                return
+            }
+            guard confirmStop(
+                title: String(localized: "kill.bottles.confirm.title"),
+                message: String(
+                    format: String(localized: "kill.bottles.confirm.message"),
+                    running.map(\.settings.name).joined(separator: ", ")
+                ),
+                confirmTitle: String(localized: "kill.bottles.confirm.button")
+            )
+            else { return }
+            killBottles()
+        }
+    }
+
+    /// Asks before wiping shader caches, which stops every running game first.
+    ///
+    /// The cache is rebuilt on next use; the kill is the part worth asking about,
+    /// and it was invisible from the menu title.
+    @MainActor
+    static func clearShaderCachesConfirmed() {
+        Task {
+            let running = await runningBottles()
+            if !running.isEmpty {
+                guard confirmStop(
+                    title: String(localized: "wine.clearShaderCaches.confirm.title"),
+                    message: String(
+                        format: String(localized: "wine.clearShaderCaches.confirm.message"),
+                        running.map(\.settings.name).joined(separator: ", ")
+                    ),
+                    confirmTitle: String(localized: "wine.clearShaderCaches.confirm.button")
+                )
+                else { return }
+                killBottles()
+                // Let wineserver drop the cache before it is deleted underneath it.
+                try? await Task.sleep(for: .seconds(2))
+            }
+            wipeShaderCaches()
+        }
+    }
+
+    /// Turns compatibility tools on in the macOS Steam client, after saying
+    /// plainly what that costs.
+    ///
+    /// The cost is easy to miss and worth stating before the fact: the client
+    /// stops updating itself, because the check that would restore Valve's
+    /// files is the same one that has to be off for the change to survive.
+    static func applySteamPatchConfirmed() {
+        Task { @MainActor in
+            switch SteamClientPatch.status() {
+            case .steamNotInstalled:
+                reportSteamPatch(String(localized: "steam.patch.error.notInstalled"))
+                return
+            case .applied:
+                reportSteamPatch(String(localized: "steam.patch.alreadyApplied"))
+                return
+            case let .unrecognised(part):
+                reportSteamPatch(String(localized: "steam.patch.error.notFound \(part.rawValue)"))
+                return
+            case .notApplied, .partiallyApplied:
+                break
+            }
+
+            guard confirmStop(
+                title: String(localized: "steam.patch.confirm.title"),
+                message: String(localized: "steam.patch.confirm.message"),
+                confirmTitle: String(localized: "steam.patch.confirm.button")
+            )
+            else { return }
+
+            await runSteamPatch { try SteamClientPatch.apply() }
+        }
+    }
+
+    /// Puts Steam back and lets it update itself again.
+    static func revertSteamPatchConfirmed() {
+        Task { @MainActor in
+            guard confirmStop(
+                title: String(localized: "steam.patch.revert.title"),
+                message: String(localized: "steam.patch.revert.message"),
+                confirmTitle: String(localized: "steam.patch.revert.button")
+            )
+            else { return }
+
+            await runSteamPatch { try SteamClientPatch.revert() }
+        }
+    }
+
+    /// Stops Steam, does the work, and says what happened.
+    ///
+    /// Installs Whisky as a compatibility tool Steam can find on its own.
+    ///
+    /// It goes in the one directory the macOS client scans unprompted, which
+    /// lives under `/usr/local` and belongs to root until somebody says
+    /// otherwise. That is the common first failure rather than an edge case, so
+    /// it is answered with the command that fixes it rather than with a
+    /// permission error.
+    static func installSteamCompatTool() {
+        Task { @MainActor in
+            guard let whiskyCmd = Bundle.main.url(forResource: "WhiskyCmd", withExtension: nil) else {
+                reportSteamPatch(String(localized: "steam.compattool.error.runnerMissing WhiskyCmd"))
+                return
+            }
+            guard SteamCompatTool.isWritable() else {
+                reportSteamPatch(String(
+                    format: String(localized: "steam.compattool.needsPermission %@"),
+                    SteamCompatTool.prepareCommand()
+                ))
+                return
+            }
+
+            do {
+                // Steam rewrites its configuration from memory on exit, so the
+                // mappings have to be carried over with the client down.
+                try await HostSteamProcess.quit()
+                try SteamCompatTool.installAll(
+                    whiskyCmd: whiskyCmd,
+                    runtimes: WhiskyWineInstaller.installedRuntimes().map {
+                        // The lane, not the version: the picker is a short list
+                        // of names, and the identifier carries the version for
+                        // the case where two of one lane are installed.
+                        ($0.runtime, $0.isDefault ? nil : $0.displayName)
+                    }
+                )
+                try SteamCompatTool.migrateMappings()
+                reportSteamPatch(String(localized: "steam.compattool.done"))
+            } catch {
+                reportSteamPatch(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Steam has to be down for either direction: the files being replaced are
+    /// the ones it has open, and it rewrites its own configuration on exit.
+    @MainActor
+    private static func runSteamPatch(_ work: () throws -> Void) async {
+        do {
+            try await HostSteamProcess.quit()
+            try work()
+            reportSteamPatch(String(localized: "steam.patch.done"))
+        } catch {
+            reportSteamPatch(error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private static func reportSteamPatch(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = String(localized: "steam.patch.menu")
+        alert.informativeText = message
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: String(localized: "button.ok"))
+        alert.runModal()
+    }
+
+    @MainActor
+    private static func confirmStop(title: String, message: String, confirmTitle: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        let confirm = alert.addButton(withTitle: confirmTitle)
+        confirm.hasDestructiveAction = true
+        alert.addButton(withTitle: String(localized: "button.cancel"))
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     static func openLogsFolder() {

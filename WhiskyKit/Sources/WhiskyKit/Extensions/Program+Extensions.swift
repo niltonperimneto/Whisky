@@ -34,7 +34,7 @@ public extension Notification.Name {
 
 // MARK: - Crash Signature Detection
 
-private let crashSignatures: Set<String> = [
+let crashSignatures: Set<String> = [
     "Unhandled exception",
     "page fault",
     "device lost",
@@ -47,11 +47,16 @@ private let crashSignatures: Set<String> = [
 ]
 
 public extension Program {
+    /// Fire-and-forget launch for surfaces with nowhere to put a result: the
+    /// failure is shown from here. A thin adapter over
+    /// ``launchWithUserMode(useTerminal:)``, never a second launch path.
     func run() {
-        if NSEvent.modifierFlags.contains(.shift) {
-            self.runInTerminal()
-        } else {
-            self.runInWine()
+        let useTerminal = NSEvent.modifierFlags.contains(.shift)
+        Task {
+            let result = await launchWithUserMode(useTerminal: useTerminal)
+            if case let .launchFailed(_, errorDescription) = result {
+                showRunError(message: errorDescription)
+            }
         }
     }
 
@@ -79,161 +84,6 @@ public extension Program {
             return showClipboardAlert(
                 contentType: contentType, sizeBytes: sizeBytes, textPreview: textPreview
             )
-        }
-    }
-
-    /// Launches the program respecting user's modifier key preference and returns the result.
-    /// - Parameter useTerminal: Whether to launch in Terminal mode (e.g., Shift was held).
-    ///   **Important:** Capture `NSEvent.modifierFlags.contains(.shift)` synchronously at the call site,
-    ///   before entering any async context, to avoid race conditions with key state.
-    /// - Returns: LaunchResult indicating success, terminal launch, or failure
-    @MainActor
-    func launchWithUserMode(useTerminal: Bool) async -> LaunchResult {
-        // Check for terminal mode (typically shift-click)
-        if useTerminal {
-            self.runInTerminal()
-            return .launchedInTerminal(programName: self.name)
-        }
-
-        // Normal Wine launch with program-specific settings
-        await Wine.syncAudioRegistry(bottle: bottle)
-
-        let arguments = settings.arguments.split { $0.isWhitespace }.map(String.init)
-        let environment = generateEnvironment()
-
-        do {
-            let result = try await Wine.runProgram(
-                at: self.url, args: arguments, bottle: self.bottle, environment: environment,
-                programOverrides: settings.overrides, programSettings: settings
-            )
-
-            // Track the log file URL for diagnostics
-            settings.lastLogFileURL = result.logFileURL
-
-            // The exit code and the log this instant belong to the `start
-            // /unix` stub, which returns seconds after launch, so this check
-            // only sees failures that happen immediately. Anything later is
-            // the watcher's job below.
-            if result.exitCode != 0 || logContainsCrashSignatures(result.logFileURL) {
-                triggerCrashClassification(
-                    logFileURL: result.logFileURL,
-                    exitCode: result.exitCode
-                )
-            } else {
-                watchForLateCrash(logFileURL: result.logFileURL)
-            }
-
-            return .launchedSuccessfully(programName: self.name)
-        } catch {
-            return .launchFailed(programName: self.name, errorDescription: error.localizedDescription)
-        }
-    }
-
-    /// Watches for the session actually ending, then classifies its log.
-    ///
-    /// The bottle's wineserver going idle is the end-of-session signal, the
-    /// same one Discord presence uses, and this run's log keeps growing until
-    /// then because Wine's children inherit its file descriptor. Each launch
-    /// has its own log file, so concurrent watchers never double-report one
-    /// run. The probe is deliberately one interval late; the wineserver may
-    /// not be up yet at the moment of launch.
-    private func watchForLateCrash(logFileURL: URL) {
-        let bottle = self.bottle
-        Task {
-            while true {
-                try? await Task.sleep(for: .seconds(30))
-                if logContainsCrashSignatures(logFileURL) {
-                    triggerCrashClassification(logFileURL: logFileURL, exitCode: 1)
-                    return
-                }
-                // Checked after the scan, so a crash written between the last
-                // scan and the wineserver going down still gets one look.
-                let running = await Wine.isWineserverRunning(for: bottle)
-                if !running {
-                    return
-                }
-            }
-        }
-    }
-
-    /// Checks whether the log file contains crash signatures that warrant classification.
-    ///
-    /// Reads the tail of the log file (bounded to 64 KiB) and searches for known crash
-    /// signatures. This is a lightweight heuristic before running the full classifier.
-    private func logContainsCrashSignatures(_ logFileURL: URL) -> Bool {
-        let maxBytes = 64 * 1_024
-
-        guard let handle = try? FileHandle(forReadingFrom: logFileURL) else { return false }
-        defer { try? handle.close() }
-
-        guard let end = try? handle.seekToEnd() else { return false }
-        let start = end > UInt64(maxBytes) ? end - UInt64(maxBytes) : 0
-        try? handle.seek(toOffset: start)
-
-        guard let data = try? handle.readToEnd(),
-              let text = String(data: data, encoding: .utf8)
-        else { return false }
-
-        return crashSignatures.contains(where: { text.contains($0) })
-    }
-
-    /// Triggers background crash classification and posts a notification with the result.
-    ///
-    /// Classification runs on a background task (`.utility` priority) to avoid
-    /// blocking the main thread. On completion, persists a ``DiagnosisHistoryEntry``
-    /// and posts ``Notification.Name.crashDiagnosisAvailable``.
-    private func triggerCrashClassification(logFileURL: URL, exitCode: Int32) {
-        let programPath = self.url.path(percentEncoded: false)
-        let programName = self.name
-        let bottleName = self.bottle.settings.name
-        let bottleURL = self.bottle.url
-        let activePreset = self.settings.activeWineDebugPreset
-
-        Task.detached(priority: .utility) {
-            guard let diagnosis = await Wine.classifyLastRun(
-                logFileURL: logFileURL,
-                exitCode: exitCode
-            ), !diagnosis.isEmpty
-            else {
-                return
-            }
-
-            // Build and persist a DiagnosisHistoryEntry
-            let entry = DiagnosisHistoryEntry(
-                timestamp: Date(),
-                logFileRef: logFileURL.lastPathComponent,
-                primaryCategory: diagnosis.primaryCategory ?? .otherUnknown,
-                confidenceTier: diagnosis.primaryConfidence ?? .low,
-                topSignatures: Array(diagnosis.matches.prefix(3).map(\.pattern.id)),
-                remediationCardIds: diagnosis.applicableRemediationIds,
-                wineDebugPreset: activePreset,
-                bottleIdentifier: bottleName,
-                programPath: programPath
-            )
-
-            let historyURL = bottleURL
-                .appending(path: "Program Settings")
-                .appending(path: programName)
-                .appendingPathExtension("diagnosis-history.plist")
-            var history = DiagnosisHistory.load(from: historyURL)
-            history.append(entry)
-            try? history.save(to: historyURL)
-
-            // Stamp the program so the bottle's diagnostics buttons know there
-            // is something to show; without it they never enable.
-            await MainActor.run {
-                self.settings.lastDiagnosisDate = entry.timestamp
-                // Post notification for the UI to react
-                NotificationCenter.default.post(
-                    name: .crashDiagnosisAvailable,
-                    object: nil,
-                    userInfo: [
-                        "diagnosis": diagnosis,
-                        "programPath": programPath,
-                        "logFileURL": logFileURL
-                    ]
-                )
-            }
         }
     }
 
@@ -357,34 +207,5 @@ public extension Program {
             return .autoCleared(contentType: contentType, sizeBytes: sizeBytes)
         }
         return .safe
-    }
-}
-
-extension Program {
-    func runInWine() {
-        let arguments = settings.arguments.split { $0.isWhitespace }.map(String.init)
-        let environment = generateEnvironment()
-
-        Task {
-            do {
-                let result = try await Wine.runProgram(
-                    at: self.url, args: arguments, bottle: self.bottle, environment: environment,
-                    programOverrides: settings.overrides, programSettings: settings
-                )
-
-                // Track the log file URL
-                settings.lastLogFileURL = result.logFileURL
-
-                // Trigger classification on non-zero exit or crash signatures
-                if result.exitCode != 0 || logContainsCrashSignatures(result.logFileURL) {
-                    triggerCrashClassification(
-                        logFileURL: result.logFileURL,
-                        exitCode: result.exitCode
-                    )
-                }
-            } catch {
-                self.showRunError(message: error.localizedDescription)
-            }
-        }
     }
 }

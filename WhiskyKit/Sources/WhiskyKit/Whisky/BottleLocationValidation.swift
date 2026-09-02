@@ -24,12 +24,12 @@ import Foundation
 /// initializes the prefix, so an unusable location surfaces a clear, actionable
 /// error up front instead of a cryptic late Wine failure (issue #61).
 ///
-/// Only the two checks that confidently and directly predict failure are
-/// enforced: whether the location can be written to (a probe write), and
-/// whether the volume has enough free space. Ownership is intentionally *not*
-/// checked — the bottle prefix is a freshly created subdirectory owned by the
-/// current user regardless of the parent's owner, so the probe write is the
-/// accurate predictor of whether creation will succeed.
+/// Every check performs the operation it is checking rather than inferring it
+/// from the filesystem type: whether the location can be written to, whether it
+/// can do what a prefix needs (see ``Capability``), and whether the volume has
+/// enough free space. Ownership is intentionally *not* checked — the prefix is a
+/// freshly created subdirectory owned by the current user regardless of the
+/// parent's owner, so the probes are the accurate predictor.
 public enum BottleLocationValidation {
     /// The outcome of validating a prospective bottle location.
     public enum ValidationResult: Equatable, Sendable {
@@ -37,6 +37,8 @@ public enum BottleLocationValidation {
         case valid
         /// Neither the location nor its nearest existing parent can be written to.
         case notWritable(path: String)
+        /// The volume cannot do something a Wine prefix requires.
+        case missingCapability(Capability, path: String)
         /// A mounted, consent-gated volume refused the write with a permission
         /// error, which is what a withheld Files and Folders grant looks like.
         /// Distinct from ``notWritable`` because it is the only case System
@@ -44,6 +46,37 @@ public enum BottleLocationValidation {
         case accessDenied(path: String)
         /// The volume does not have enough free space to create a bottle.
         case insufficientSpace(availableBytes: Int64, requiredBytes: Int64)
+    }
+
+    /// An operation a Wine prefix performs on its own directory.
+    ///
+    /// Checked by performing it, not by inferring it from the filesystem type.
+    /// exFAT supports all of these on macOS despite the format itself having no
+    /// notion of symlinks or permission bits.
+    public enum Capability: Equatable, Sendable {
+        /// Creating a subdirectory that is then visible.
+        case directory
+        /// Symlinks: `dosdevices/c:` points at `../drive_c`, so a prefix without
+        /// them has no drives at all.
+        case symlink
+        /// Colons in filenames, which every entry in `dosdevices` uses.
+        case driveLetterName
+        /// POSIX permission bits, which Wine sets across the prefix.
+        case posixPermissions
+
+        /// What to tell the user, naming the operation that failed.
+        public func explanation(path: String) -> String {
+            switch self {
+            case .directory:
+                String(localized: "\(path) refused to create a folder, so a bottle can't be set up there.")
+            case .symlink:
+                String(localized: "\(path) doesn't support symbolic links, which Wine needs to map its drives.")
+            case .driveLetterName:
+                String(localized: "\(path) doesn't allow colons in filenames, which Wine uses for drive letters.")
+            case .posixPermissions:
+                String(localized: "\(path) doesn't support file permissions, which Wine needs to set up a prefix.")
+            }
+        }
     }
 
     /// Minimum free space required to create a bottle. A bare prefix is well
@@ -78,6 +111,10 @@ public enum BottleLocationValidation {
             return isConsentGatedVolume(ancestor) ? .accessDenied(path: path) : .notWritable(path: path)
         case .failed:
             return .notWritable(path: path)
+        }
+
+        if let missing = missingCapability(in: ancestor, fileManager: fileManager) {
+            return .missingCapability(missing, path: url.path(percentEncoded: false))
         }
 
         // Skip the space check (fail open) if capacity can't be read, rather
@@ -118,6 +155,37 @@ public enum BottleLocationValidation {
             path.removeLast()
         }
         return fileManager.fileExists(atPath: path)
+    }
+
+    /// Performs each prefix operation in a scratch directory and reports the first
+    /// one the location refuses, or `nil` if it can host a prefix.
+    static func missingCapability(in directory: URL, fileManager: FileManager) -> Capability? {
+        let root = directory.appending(path: ".whisky-capability-probe-\(UUID().uuidString)")
+        guard (try? fileManager.createDirectory(at: root, withIntermediateDirectories: false)) != nil,
+              fileManager.fileExists(atPath: root.path(percentEncoded: false))
+        else { return .directory }
+        defer { try? fileManager.removeItem(at: root) }
+
+        let target = root.appending(path: "drive_c")
+        guard (try? fileManager.createDirectory(at: target, withIntermediateDirectories: false)) != nil
+        else { return .directory }
+
+        let link = root.appending(path: "link")
+        guard (try? fileManager.createSymbolicLink(at: link, withDestinationURL: target)) != nil,
+              (try? fileManager.destinationOfSymbolicLink(atPath: link.path(percentEncoded: false))) != nil
+        else { return .symlink }
+
+        // Built by hand: a colon reads as a scheme separator to URL, and the
+        // literal name is the point of the check.
+        let driveLetter = root.path(percentEncoded: false) + "/c:"
+        guard fileManager.createFile(atPath: driveLetter, contents: nil) else { return .driveLetterName }
+
+        guard (try? fileManager.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: target.path(percentEncoded: false)
+        )) != nil
+        else { return .posixPermissions }
+
+        return nil
     }
 
     /// Why a write probe did not succeed, kept apart so a refusal can be told

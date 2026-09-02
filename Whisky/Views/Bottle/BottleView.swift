@@ -87,13 +87,115 @@ struct BottleView: View {
                 .scrollDisabled(true)
             }
             .bottomBar {
-                BottleActionBar(
-                    bottle: bottle,
-                    showWinetricksSheet: $showWinetricksSheet,
-                    programLoading: $programLoading,
-                    toast: $toast,
-                    onLaunch: updateStartMenu
-                )
+                // One container so the four capsules read as a single control
+                // group and blend when they are close, rather than four
+                // separate slabs of glass sitting next to each other.
+                GlassEffectContainer(spacing: 8) {
+                    HStack {
+                        Spacer()
+                        Button("button.cDrive") {
+                            bottle.openCDrive()
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("bottle.openCDrive")
+                        Button("button.terminal") {
+                            bottle.openTerminal()
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("bottle.openTerminal")
+                        Button("button.winetricks") {
+                            showWinetricksSheet.toggle()
+                        }
+                        .buttonStyle(.glass)
+                        .accessibilityIdentifier("bottle.openWinetricks")
+                        Button("button.run") {
+                            let panel = NSOpenPanel()
+                            panel.allowsMultipleSelection = false
+                            panel.canChooseDirectories = false
+                            panel.canChooseFiles = true
+                            panel.allowedContentTypes = [
+                                UTType.exe,
+                                UTType(exportedAs: "com.microsoft.msi-installer"),
+                                UTType(exportedAs: "com.microsoft.bat"),
+                                UTType(exportedAs: "com.microsoft.msix-package"),
+                                UTType(exportedAs: "com.microsoft.appx-package"),
+                                UTType(exportedAs: "com.microsoft.windows-internet-shortcut")
+                            ]
+                            panel.directoryURL = bottle.url.appending(path: "drive_c")
+                            panel.begin { result in
+                                programLoading = true
+                                Task(priority: .userInitiated) {
+                                    if result == .OK {
+                                        if let url = panel.urls.first {
+                                            Telemetry.capture(.firstProgramLaunchAttempted)
+                                            do {
+                                                if url.pathExtension == "bat" {
+                                                    try await Wine.runBatchFile(url: url, bottle: bottle)
+                                                } else {
+                                                    // Through the one program door, which
+                                                    // carries overrides, launcher fixes and
+                                                    // the GameDB profile for every entry
+                                                    // point alike.
+                                                    let result = await Program(url: url, bottle: bottle)
+                                                        .launchWithUserMode(useTerminal: false)
+                                                    if case let .launchFailed(_, message) = result {
+                                                        throw LaunchPanelError.failed(message)
+                                                    }
+                                                }
+                                                await MainActor.run {
+                                                    withAnimation {
+                                                        toast = ToastData(
+                                                            message: String(
+                                                                localized: "status.launched \(url.lastPathComponent)"
+                                                            ),
+                                                            style: .success
+                                                        )
+                                                    }
+                                                }
+                                            } catch {
+                                                let errDesc = switch error {
+                                                case let LaunchPanelError.failed(message): message
+                                                default: error.localizedDescription
+                                                }
+                                                await MainActor.run {
+                                                    withAnimation {
+                                                        toast = ToastData(
+                                                            message: String(
+                                                                localized: "status.launchFailed \(errDesc)"
+                                                            ),
+                                                            style: .error,
+                                                            autoDismiss: false
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            await MainActor.run {
+                                                programLoading = false
+                                            }
+                                        }
+                                    } else {
+                                        await MainActor.run {
+                                            programLoading = false
+                                        }
+                                    }
+                                    await updateStartMenu()
+                                }
+                            }
+                        }
+                        // Running a program is the reason the app exists, so it is
+                        // the only prominent control on this bar.
+                        .buttonStyle(.glassProminent)
+                        .accessibilityIdentifier("bottle.runProgram")
+                        .disabled(programLoading)
+                        if programLoading {
+                            Spacer()
+                                .frame(width: 10)
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                    }
+                    .padding()
+                }
             }
             .task {
                 await updateStartMenu()
@@ -101,11 +203,7 @@ struct BottleView: View {
             .disabled(!bottle.isAvailable)
             .navigationTitle(bottle.settings.name)
             .navigationSubtitle(
-                bottle.settings.graphicsBackend == .recommended
-                    ? String(
-                        localized: "bottle.subtitle.autoBackend \(GraphicsBackendResolver.resolve().displayName)"
-                    )
-                    : ""
+                bottle.settings.graphicsBackend == .recommended ? autoBackendSubtitle : ""
             )
             .accessibilityIdentifier("bottleDetail")
             .toast($toast)
@@ -126,8 +224,7 @@ struct BottleView: View {
                     name: BottleOperations.nextDuplicateName(
                         baseName: bottle.settings.name,
                         existingNames: BottleVM.shared.bottles.map(\.settings.name)
-                    ),
-                    confirmTitle: "duplicate.bottle.confirm"
+                    )
                 ) { newName in
                     Task {
                         do {
@@ -186,6 +283,13 @@ struct BottleView: View {
 }
 
 extension BottleView {
+    /// Resolved against the bottle's own runtime: D3DMetal is deployed per
+    /// runtime, so "recommended" is a different backend on each.
+    var autoBackendSubtitle: String {
+        let backend = GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+        return String(localized: "bottle.subtitle.autoBackend \(backend.displayName)")
+    }
+
     private func updateStartMenu() async {
         await bottle.updateInstalledPrograms()
 
@@ -206,4 +310,10 @@ extension BottleView {
             }
         }
     }
+}
+
+/// A launch failure reported by the program door, rethrown so the run panel's
+/// error path handles an exe and a batch file the same way.
+private enum LaunchPanelError: Error {
+    case failed(String)
 }

@@ -1,26 +1,227 @@
 name: Release
 
+# Builds Whisky Preview and attaches the DMG to the release for the tag that
+# triggered it. Tags are cut from `preview`; `main` tracks upstream and is never
+# released from.
+#
+# There is no Developer ID for this fork, so the app is ad-hoc signed and cannot
+# be notarized. Gatekeeper therefore blocks a plain double-click of the DMG; the
+# supported install path is the Homebrew cask, which strips the quarantine bit.
+# To move to a real identity later: add DEVELOPER_ID_P12 / DEVELOPER_ID_PASSWORD
+# / NOTARY_* secrets, import the cert before the build step, drop the ad-hoc
+# CODE_SIGN_IDENTITY override, and add a notarytool submit + stapler staple.
+
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['app-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing app-vX.Y.Z tag to build and upload
+        required: true
 
 permissions:
-  contents: read
+  contents: write
+
+env:
+  XCODE_VERSION: 'latest-stable'
 
 jobs:
   release:
-    name: Release
-    runs-on: ubuntu-latest
+    name: Build and publish
+    # macos-26: the app's deployment target is 26.0, so an older runner cannot
+    # launch it, and the UI tests fail before they start.
+    runs-on: macos-26
     steps:
-      # The official Homebrew cask `whisky` tracks the original (archived) Whisky
-      # project and is not controlled by this fork, so it is not bumped here. This
-      # fork's Homebrew distribution is the frankea/homebrew-whisky tap, updated by
-      # the UpdateHomebrewTap workflow (see docs/ReleaseWorkflow.md for BREW_TOKEN).
-
-      - name: Release Info
+      - name: Resolve tag
+        id: tag
         env:
-          TAG_NAME: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
         run: |
-          echo "Release $TAG_NAME published"
-          echo "Distribution: GitHub Releases and the frankea/homebrew-whisky tap"
-          echo "Download: https://github.com/frankea/Whisky/releases"
+          set -euo pipefail
+          # Validate the whole tag, not just the version: TAG reaches GITHUB_OUTPUT and
+          # then `actions/checkout`'s ref, so an embedded newline would forge step outputs.
+          if ! printf '%s' "$TAG" | grep -qE '^app-v[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::'${TAG}' is not an app-vX.Y.Z tag."
+            exit 1
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#app-v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Check the tag matches MARKETING_VERSION
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          marketing="$(grep -m1 'MARKETING_VERSION = ' Whisky.xcodeproj/project.pbxproj \
+            | sed -E 's/.*MARKETING_VERSION = ([^;]+);.*/\1/')"
+          if [ "$marketing" != "$VERSION" ]; then
+            echo "::error::tag says ${VERSION} but MARKETING_VERSION is ${marketing}."
+            exit 1
+          fi
+
+      - name: Cache SPM Dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/Library/Developer/Xcode/DerivedData/*/SourcePackages
+            .build
+            WhiskyKit/.build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      # Signed with a self-signed cert, so TCC sees one stable identity instead of a
+      # fresh one per build. Gatekeeper trusts it no more than ad-hoc; the point is
+      # that Files and Folders consent survives an update. Without the secret the
+      # build still works, just ad-hoc, and consent resets on every release.
+      - name: Import the signing identity
+        id: signing
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CERT_P12:-}" ]; then
+            echo "::warning::No MACOS_CERT_P12; falling back to ad-hoc signing."
+            echo "identity=-" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/identity.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/identity.p12" -k "$keychain" -P "$CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s $(security list-keychains -d user | tr -d ' "') "$keychain"
+          rm -f "$RUNNER_TEMP/identity.p12"
+          # The cert is self-signed, so it is never a *trusted* identity; ask for all.
+          hash="$(security find-identity -p codesigning "$keychain" | awk '/"/ {print $2; exit}')"
+          [ -n "$hash" ] || { echo "::error::identity did not import"; exit 1; }
+          echo "identity=$hash" >> "$GITHUB_OUTPUT"
+          echo "keychain=$keychain" >> "$GITHUB_OUTPUT"
+
+      # The id is not in the repository: it belongs to whoever owns the Discord
+      # application users see. Without the secret the build is still valid, it
+      # just reports presence unavailable and leaves the toggle disabled.
+      - name: Supply the Discord application id
+        env:
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          target=WhiskyKit/Sources/WhiskyKit/Discord/Local/client-id.txt
+          if [ -z "${DISCORD_CLIENT_ID:-}" ]; then
+            echo "::notice::no DISCORD_CLIENT_ID secret, Discord presence ships disabled"
+            exit 0
+          fi
+          printf '%s\n' "$DISCORD_CLIENT_ID" > "$target"
+          echo "wrote $target"
+
+      - name: Build
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+          KEYCHAIN: ${{ steps.signing.outputs.keychain }}
+        run: |
+          set -euo pipefail
+          # CODE_SIGN_IDENTITY reaches every target, including the SPM resource
+          # bundles, and those default to automatic signing, which demands a
+          # development team we do not have. Manual style drops that requirement.
+          args=(-project Whisky.xcodeproj -scheme Whisky -configuration Release build
+                -derivedDataPath build/dd SKIP_SWIFTLINT_BUILD_PHASE=YES
+                "CODE_SIGN_IDENTITY=$IDENTITY" "CODE_SIGN_STYLE=Manual" "DEVELOPMENT_TEAM=")
+          if [ -n "${KEYCHAIN:-}" ]; then
+            args+=("OTHER_CODE_SIGN_FLAGS=--keychain $KEYCHAIN")
+          fi
+          xcodebuild "${args[@]}"
+
+      - name: Verify the signature and its entitlements
+        env:
+          IDENTITY: ${{ steps.signing.outputs.identity }}
+        run: |
+          set -euo pipefail
+          app="build/dd/Build/Products/Release/Whisky Preview.app"
+          [ -d "$app" ] || { echo "::error::$app not found"; exit 1; }
+          codesign --verify --strict --verbose=2 "$app"
+          # Wine maps JIT pages; without this entitlement every bottle fails to launch.
+          # The dots in the key are keypath separators to plutil, hence the escaping.
+          codesign -d --entitlements - --xml "$app" \
+            | plutil -extract 'com\.apple\.security\.cs\.allow-unsigned-executable-memory' raw - \
+            | grep -qx 'true'
+          # A cdhash requirement means the cert was not used, and TCC consent would
+          # reset for every user on this release.
+          if [ "$IDENTITY" != "-" ]; then
+            codesign -d -r- "$app" 2>&1 | grep -q 'certificate root' \
+              || { echo "::error::signed ad-hoc despite a certificate being available"; exit 1; }
+          fi
+          codesign -d -r- "$app" 2>&1 | grep designated >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package DMG
+        id: dmg
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          app="build/dd/Build/Products/Release/Whisky Preview.app"
+          staging="$(mktemp -d)"
+          cp -R "$app" "$staging/"
+          ln -s /Applications "$staging/Applications"
+          dmg="Whisky-Preview-${VERSION}.dmg"
+          hdiutil create -volname "Whisky Preview" -srcfolder "$staging" -ov -format UDZO "$dmg"
+          sha="$(shasum -a 256 "$dmg" | awk '{print $1}')"
+          echo "dmg=${dmg}" >> "$GITHUB_OUTPUT"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "### \`${dmg}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "sha256: \`${sha}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          DMG: ${{ steps.dmg.outputs.dmg }}
+          SHA: ${{ steps.dmg.outputs.sha }}
+        run: |
+          set -euo pipefail
+          notes="$(printf '%s\n\n%s\n' \
+            'Self-signed, not notarized. Install with the cask:' \
+            '`brew install --cask dappermint/tap/whisky-preview`')"
+          notes="$(printf '%s\nsha256 `%s`\n' "$notes" "$SHA")"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --notes "$notes"
+          else
+            gh release create "$TAG" --title "Whisky Preview ${TAG#app-v}" --notes "$notes"
+          fi
+          gh release upload "$TAG" "$DMG" --clobber
+
+      # Kept in this workflow rather than its own: `release`-triggered workflows run
+      # the file from the default branch, and ours is `main`, which tracks upstream.
+      # A tag push runs the tag's own file, so this is the only trigger that reaches
+      # our definition.
+      - name: Bump the Homebrew cask
+        env:
+          BREW_TOKEN: ${{ secrets.BREW_TOKEN }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA: ${{ steps.dmg.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BREW_TOKEN:-}" ]; then
+            {
+              echo "Cask not bumped: no BREW_TOKEN secret."
+              echo ""
+              echo '`scripts/bump-cask.sh '"${VERSION} ${SHA}"'`'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          scripts/bump-cask.sh "$VERSION" "$SHA"

@@ -46,17 +46,9 @@ extension Winetricks {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         let winetricksPath = resourcesURL.appending(path: "winetricks").path(percentEncoded: false)
         process.arguments = ["bash", winetricksPath, "list-installed"]
-        process.environment = [
-            "WINEPREFIX": bottleURL.path(percentEncoded: false),
-            "WINE": "wine64",
-            "PATH": [
-                WhiskyWineInstaller.binFolder.path(percentEncoded: false),
-                resourcesURL.path(percentEncoded: false),
-                "/usr/bin",
-                "/bin"
-            ].joined(separator: ":"),
-            "HOME": NSHomeDirectory()
-        ]
+        process.environment = await MainActor.run {
+            Winetricks.processEnvironment(for: bottle, resourcesURL: resourcesURL)
+        }
 
         let stdout = Pipe()
         process.standardOutput = stdout

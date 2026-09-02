@@ -61,8 +61,8 @@ struct BottleCreationView: View {
                     panel.begin { result in
                         if result == .OK, let url = panel.urls.first {
                             newBottleURL = url
-                            // Probing here is what makes macOS ask, while the sheet
-                            // is still up and the request has visible cause.
+                            // Probing here surfaces the consent prompt, and any capability the
+                            // location lacks, while the user is still choosing it.
                             locationIssue = validate(url)
                         }
                     }
@@ -131,8 +131,7 @@ struct BottleCreationView: View {
     )
 
     func submit() {
-        // The default location never passes through the panel, so it is probed
-        // here or not at all.
+        // The default location never passes through the panel, so validate again here.
         guard let issue = validate(newBottleURL) else {
             newlyCreatedBottleURL = BottleVM.shared.createNewBottle(
                 bottleName: newBottleName,

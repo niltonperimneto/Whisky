@@ -89,17 +89,20 @@ public enum GPTKImporter {
     static let forwarderDLLNames = ["d3d10.dll", "d3d11.dll", "d3d12.dll", "dxgi.dll"]
 
     /// Apple's NVIDIA bridges. `nvngx-on-metalfx` is deployed, under its export
-    /// name, because it is the only route to MetalFX, see
+    /// name, because it is the only route to MetalFX — see
     /// ``installMetalFXBridge(intoLibraryFolder:usingStore:)``.
     ///
-    /// `nvapi64` is deployed too, and kept away from launcher helpers per
-    /// executable rather than withheld from everything. Chromium probes for an
-    /// NVIDIA GPU and answering makes it load D3DMetal, which takes Steam's
-    /// helper process down, so that risk is real; withholding the DLL is just
-    /// not the only way out of it, and it costs DLSS everywhere. See
-    /// ``installNVAPIBridge(intoLibraryFolder:usingStore:)`` for why the DLL has
-    /// to be there, and `Wine.disablingNVAPI(in:)` for the half that keeps
-    /// Chromium out of it.
+    /// `nvapi64` is deployed too, and disabled per launcher helper instead of
+    /// withheld from everything. It used to stay in the store because Chromium
+    /// probes for an NVIDIA GPU and answering makes it load D3DMetal, which takes
+    /// Steam's helper process down. That risk is real, but the claim that came
+    /// with it, that NGX reports DLSS available anyway, is not: Streamline asks
+    /// nvapi64 about the GPU first and, finding wine's no-export placeholder,
+    /// concludes there is no NVIDIA driver and never calls NGX at all. Measured
+    /// on Deep Rock Galactic: zero `NVSDK_NGX_*` calls in a relay trace without
+    /// it, and DLSS absent from the menu; with it, NGX initialises and the option
+    /// appears. See `WineDLLOverrideRegistry.disablingNVAPI(in:)` for the half
+    /// that keeps Chromium away from it.
     static let nvidiaBridgeDLLNames = ["nvapi64.dll", "nvngx-on-metalfx.dll"]
 
     /// Apple's NVAPI, deployed under the name it ships as; wine's own `nvapi64`
@@ -107,6 +110,18 @@ public enum GPTKImporter {
     static let nvapiBridgeName = "nvapi64.dll"
     /// Its unix half, sharing the payload's dylib like every other bridge.
     static let nvapiBridgeUnixName = "nvapi64.so"
+
+    /// The name Wine's loader resolves the builtin under. `find_builtin_dll()`
+    /// matches on the PE export directory's name rather than the filename, and
+    /// Apple's NVAPI exports as `nvapi.dll`, so a tree holding only `nvapi64.dll`
+    /// makes the loader log `cannot find builtin library` and `DllMain` fail with
+    /// `ERROR_DLL_INIT_FAILED`. Games still load it as `nvapi64.dll`; this is the
+    /// name the loader looks up behind that. The MetalFX bridge avoids the same
+    /// trap by installing under its export name outright, which NVAPI cannot do:
+    /// the filename is what games ask for.
+    static let nvapiBridgeExportName = "nvapi.dll"
+    /// The unix half under the export name, for the same reason.
+    static let nvapiBridgeExportUnixName = "nvapi.so"
 
     /// Enough bytes to hold the winebuild marker at offset 0x40.
     static let builtinMarkerMinimumLength = 0x50

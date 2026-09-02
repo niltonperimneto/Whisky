@@ -6,16 +6,18 @@
 	<string>0.80</string>
 	<key>dxvkVersion</key>
 	<string>1.10.3</string>
+	<key>gptkCapable</key>
+	<true/>
 	<key>sha256</key>
-	<string>01f3a1b43b98065fe20c529c1023b61dd79a6d2ad93bba6040865f646481ccf3</string>
+	<string>86a4b36bdee567bbd25273798b90b2e68c672764d72c2dc273daec2942dbe843</string>
 	<key>version</key>
 	<dict>
 		<key>major</key>
-		<integer>3</integer>
+		<integer>4</integer>
 		<key>minor</key>
-		<integer>1</integer>
+		<integer>6</integer>
 		<key>patch</key>
-		<integer>1</integer>
+		<integer>4</integer>
 	</dict>
 </dict>
 </plist>

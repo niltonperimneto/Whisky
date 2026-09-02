@@ -1,8 +1,11 @@
 name: Documentation
 
+# Publishes from `preview`, the branch this fork releases from. `main` tracks
+# upstream and must not overwrite our Pages site (it serves WhiskyWineVersion.plist,
+# which the app reads to find the runtime).
 on:
   push:
-    branches: [main]
+    branches: [preview]
     paths:
       - 'WhiskyKit/**'
       - 'dist/pages/**'
@@ -26,10 +29,9 @@ env:
 jobs:
   build-docs:
     name: Build Documentation
-    # macos-15, same as CI: latest-stable Xcode on macos-14 is a generation
-    # older, and its SDK predates Sendable annotations the kit now relies on
-    # (NSImage in IconCache), so the docs build fails where CI passes.
-    runs-on: macos-15
+    # macos-26: the app's deployment target is 26.0, so an older runner cannot
+    # launch it, and the UI tests fail before they start.
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@v6

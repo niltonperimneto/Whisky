@@ -24,7 +24,12 @@ import WhiskyKit
 // MARK: - Bottle Creation Errors
 
 enum BottleCreationError: LocalizedError, Equatable {
-    case directoryCreationFailed
+    /// Carries the underlying failure: without it the cause of a creation
+    /// failure is unrecoverable from a log after the fact.
+    case directoryCreationFailed(reason: String)
+    /// `createDirectory` reported success but the directory was not on disk
+    /// afterwards, even on re-check.
+    case directoryNotVisible(path: String)
     case metadataCreationFailed
     case wineVersionChangeFailed
     case persistenceSaveFailed
@@ -38,8 +43,13 @@ enum BottleCreationError: LocalizedError, Equatable {
 
     var errorDescription: String? {
         switch self {
-        case .directoryCreationFailed:
-            String(localized: "bottle.creation.error.directoryCreationFailed")
+        case let .directoryCreationFailed(reason):
+            "\(String(localized: "bottle.creation.error.directoryCreationFailed")) (\(reason))"
+        case let .directoryNotVisible(path):
+            String(localized: """
+            The bottle folder was created without error but is not on disk: \(path). \
+            The drive may have been disconnected, or its filesystem may be inconsistent.
+            """)
         case .metadataCreationFailed:
             String(localized: "bottle.creation.error.metadataCreationFailed")
         case .wineVersionChangeFailed:
@@ -64,6 +74,8 @@ func bottleLocationRefusal(_ result: BottleLocationValidation.ValidationResult) 
         String(format: String(localized: "bottle.creation.preflight.notWritable"), path)
     case let .accessDenied(path):
         String(format: String(localized: "bottle.creation.preflight.accessDenied"), path)
+    case let .missingCapability(capability, path):
+        capability.explanation(path: path)
     case let .insufficientSpace(available, required):
         String(
             format: String(localized: "bottle.creation.preflight.insufficientSpace"),
@@ -74,7 +86,7 @@ func bottleLocationRefusal(_ result: BottleLocationValidation.ValidationResult) 
 }
 
 private let bottleVMLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "com.franke.Whisky",
+    subsystem: Bundle.whiskyBundleIdentifier,
     category: "BottleVM"
 )
 
@@ -168,7 +180,7 @@ final class BottleVM: ObservableObject {
                 throw BottleCreationError.locationUnsuitable(message: refusal)
             }
 
-            try createBottleDirectory(at: request.newBottleDir)
+            try await createBottleDirectory(at: request.newBottleDir)
 
             // Create bottle on main actor (since Bottle is @MainActor)
             let createdBottle = Bottle(bottleUrl: request.newBottleDir, inFlight: true)
@@ -191,30 +203,35 @@ final class BottleVM: ObservableObject {
             createdBottle.saveBottleSettings()
 
             try persistBottleCreation(request: request)
-            // Reload while the bottle is still in flight so the reload keeps
-            // this instance. Reloading after clearing the flag replaced it,
-            // and the selected bottle page kept writing to the old one: its
-            // first pin never reached the library, the Dock menu, or the menu
-            // bar extra until the next reload.
-            loadBottles()
-            createdBottle.isAvailable = true
+            // Clear before the reload: loadBottles keeps in-flight instances alive by
+            // url, so a bottle still marked in-flight here spins until the app restarts.
             createdBottle.inFlight = false
+            loadBottles()
             Telemetry.capture(.firstBottleCreated)
         } catch {
             handleBottleCreationFailure(error, request: request, bottle: bottle)
         }
     }
 
-    private func createBottleDirectory(at url: URL) throws {
+    private func createBottleDirectory(at url: URL) async throws {
         let fileManager = FileManager.default
-        try fileManager.createDirectory(
-            at: url,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
-        guard fileManager.fileExists(atPath: url.path(percentEncoded: false)) else {
-            throw BottleCreationError.directoryCreationFailed
+        do {
+            try fileManager.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            let nsError = error as NSError
+            throw BottleCreationError.directoryCreationFailed(
+                reason: "\(nsError.domain) \(nsError.code): \(nsError.localizedDescription)"
+            )
         }
+
+        // An external volume has been seen reporting the directory absent
+        // immediately after a successful create, so re-check before giving up.
+        let path = url.path(percentEncoded: false)
+        for attempt in 0 ..< 3 {
+            if fileManager.fileExists(atPath: path) { return }
+            if attempt < 2 { try? await Task.sleep(for: .milliseconds(50)) }
+        }
+        throw BottleCreationError.directoryNotVisible(path: path)
     }
 
     private func persistBottleCreation(request: BottleCreationRequest) throws {
@@ -252,139 +269,5 @@ final class BottleVM: ObservableObject {
             bottles.remove(at: index)
         }
         try? FileManager.default.removeItem(at: request.newBottleDir)
-    }
-
-    private func makeBottleCreationDiagnostics(
-        bottleName: String,
-        winVersion: WinVersion,
-        bottleURL: URL,
-        newBottleDir: URL,
-        error: Error
-    ) -> String {
-        func redactHome(_ path: String) -> String {
-            let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
-            return path.replacingOccurrences(of: home, with: "~")
-        }
-
-        let context = BottleCreationDiagnosticsContext(
-            bottleName: bottleName,
-            winVersion: winVersion,
-            bottleURL: bottleURL,
-            newBottleDir: newBottleDir,
-            redactHome: redactHome
-        )
-
-        let lines = makeBottleCreationDiagnosticsLines(
-            context: context,
-            whiskyVersionString: formattedWhiskyVersion(),
-            nsError: error as NSError
-        )
-
-        // Keep diagnostics bounded for copy/paste.
-        return lines.joined(separator: "\n").prefix(4_000).description
-    }
-
-    private struct BottleCreationDiagnosticsContext {
-        let bottleName: String
-        let winVersion: WinVersion
-        let bottleURL: URL
-        let newBottleDir: URL
-        let bottleURLPath: String
-        let newBottleDirPath: String
-        let bottleDataPath: String
-
-        init(
-            bottleName: String,
-            winVersion: WinVersion,
-            bottleURL: URL,
-            newBottleDir: URL,
-            redactHome: (String) -> String
-        ) {
-            self.bottleName = bottleName
-            self.winVersion = winVersion
-            self.bottleURL = bottleURL
-            self.newBottleDir = newBottleDir
-            bottleURLPath = redactHome(bottleURL.path(percentEncoded: false))
-            newBottleDirPath = redactHome(newBottleDir.path(percentEncoded: false))
-            bottleDataPath = redactHome(BottleData.bottleEntriesDir.path(percentEncoded: false))
-        }
-    }
-
-    private func formattedWhiskyVersion() -> String {
-        let whiskyVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
-        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? ""
-        guard !whiskyVersion.isEmpty else { return "unknown" }
-        return buildNumber.isEmpty ? whiskyVersion : "\(whiskyVersion) (\(buildNumber))"
-    }
-
-    private func makeBottleCreationDiagnosticsLines(
-        context: BottleCreationDiagnosticsContext,
-        whiskyVersionString: String,
-        nsError: NSError
-    ) -> [String] {
-        var lines: [String] = []
-        lines.reserveCapacity(32)
-
-        lines.append("Whisky Bottle Creation Diagnostics (Issue #61)")
-        lines.append("Timestamp: \(Date().formatted())")
-        lines.append("")
-        appendBottleCreationInputLines(into: &lines, context: context)
-        appendBottleCreationSystemLines(into: &lines, whiskyVersionString: whiskyVersionString)
-        appendBottleCreationFilesystemLines(into: &lines, context: context)
-        appendBottleCreationErrorLines(into: &lines, nsError: nsError)
-
-        return lines
-    }
-
-    private func appendBottleCreationInputLines(
-        into lines: inout [String],
-        context: BottleCreationDiagnosticsContext
-    ) {
-        lines.append("[INPUT]")
-        lines.append("Bottle Name: \(context.bottleName)")
-        lines.append("Windows Version: \(context.winVersion)")
-        lines.append("Target Folder: \(context.bottleURLPath)")
-        lines.append("New Bottle Dir: \(context.newBottleDirPath)")
-        lines.append("")
-    }
-
-    private func appendBottleCreationSystemLines(
-        into lines: inout [String],
-        whiskyVersionString: String
-    ) {
-        lines.append("[SYSTEM]")
-        lines.append("macOS Version: \(MacOSVersion.current.description)")
-        lines.append("Whisky Version: \(whiskyVersionString)")
-        let whiskyWineInstalled = WhiskyWineInstaller.isWhiskyWineInstalled() ? "yes" : "no"
-        lines.append("WhiskyWine Installed: \(whiskyWineInstalled)")
-        if let whiskyWineVersion = WhiskyWineInstaller.whiskyWineVersion() {
-            lines.append("WhiskyWine Version: \(whiskyWineVersion)")
-        }
-        lines.append("")
-    }
-
-    private func appendBottleCreationFilesystemLines(
-        into lines: inout [String],
-        context: BottleCreationDiagnosticsContext
-    ) {
-        lines.append("[FILESYSTEM]")
-        let fileManager = FileManager.default
-        let targetFolderExists = fileManager
-            .fileExists(atPath: context.bottleURL.path(percentEncoded: false)) ? "yes" : "no"
-        let newBottleDirExists = fileManager
-            .fileExists(atPath: context.newBottleDir.path(percentEncoded: false)) ? "yes" : "no"
-        lines.append("Target folder exists: \(targetFolderExists)")
-        lines.append("New bottle dir exists: \(newBottleDirExists)")
-        lines.append("BottleData file: \(context.bottleDataPath)")
-        lines.append("")
-    }
-
-    private func appendBottleCreationErrorLines(
-        into lines: inout [String],
-        nsError: NSError
-    ) {
-        lines.append("[ERROR]")
-        lines.append("Error: \(nsError.localizedDescription)")
-        lines.append("NSError: domain=\(nsError.domain) code=\(nsError.code)")
     }
 }

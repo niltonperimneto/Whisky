@@ -58,7 +58,9 @@ struct Whisky: AsyncParsableCommand {
             Remove.self,
             Run.self,
             Games.self,
+            Library.self,
             Launch.self,
+            SteamCompatRun.self,
             Shortcut.self,
             Shellenv.self
             /* Install.self,
@@ -135,7 +137,11 @@ extension Whisky {
         mutating func run() throws {
             // Should be sanitised
             let bottleURL = URL(filePath: path)
-            let settings = try BottleSettings.decode(from: bottleURL)
+            // decode(from:) takes the Metadata.plist, not the bottle. Handing it
+            // the directory looks like it works, because fileExists is true for
+            // one, so it skips creating defaults and then fails reading it.
+            let metadataURL = bottleURL.appending(path: "Metadata").appendingPathExtension("plist")
+            let settings = try BottleSettings.decode(from: metadataURL)
             var bottlesList = BottleData()
             bottlesList.paths.append(bottleURL)
             print("Bottle \"\(settings.name)\" added.")
@@ -548,6 +554,292 @@ extension Whisky {
                 ])
             }
             print(table.render())
+        }
+    }
+
+    struct Library: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "library",
+            abstract: "Share a macOS Steam library folder with a bottle.",
+            discussion: """
+            The macOS Steam client can fetch Windows depots, its console takes \
+            `@sSteamCmdForcePlatformType windows` and then `app_install <appid>`, \
+            but it refuses to launch them. A folder both clients can see joins \
+            the two halves: the macOS client downloads into it, the bottle's \
+            client launches out of it.
+
+            Steam's own folder cannot be shared. It holds the macOS builds of \
+            native games, and a Windows client scanning those decides they are \
+            the wrong build and queues a redownload over them. Add a separate \
+            folder in Steam under Settings, Storage, and share that one.
+            """,
+            subcommands: [LibraryShow.self, LibraryShare.self, LibraryUnshare.self],
+            defaultSubcommand: LibraryShow.self
+        )
+
+        @MainActor
+        static func bottle(named name: String) throws -> Bottle {
+            var bottlesList = BottleData()
+            guard let bottle = bottlesList.loadBottles().first(where: { $0.settings.name == name })
+            else { throw DomainError("A bottle with that name doesn't exist.") }
+            return bottle
+        }
+
+        static func folder(at path: String) -> URL {
+            URL(filePath: (path as NSString).expandingTildeInPath).standardizedFileURL
+        }
+    }
+
+    struct LibraryShow: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "show",
+            abstract: "List the library folders a bottle shares, and the ones it could."
+        )
+
+        @Argument(help: "Name of the bottle to inspect")
+        var bottleName: String
+
+        @MainActor
+        mutating func run() async throws {
+            let bottle = try Library.bottle(named: bottleName)
+            let shared = SharedSteamLibrary.shared(bottleURL: bottle.url)
+
+            var table = TextTable(headers: ["Status", "Path"])
+            for folder in shared {
+                table.addRow(values: ["shared", folder.path(percentEncoded: false)])
+            }
+            for folder in HostSteam.libraryFolders() where !shared.contains(folder) {
+                let status = folder == HostSteam.defaultRoot ? "steam's own" : "available"
+                table.addRow(values: [status, folder.path(percentEncoded: false)])
+            }
+            print(table.render())
+        }
+    }
+
+    struct LibraryShare: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "share",
+            abstract: "Add a macOS Steam library folder to a bottle's Steam."
+        )
+
+        @Argument(help: "Name of the bottle")
+        var bottleName: String
+
+        @Argument(help: "Path of the library folder to share")
+        var path: String
+
+        @MainActor
+        mutating func run() async throws {
+            let bottle = try Library.bottle(named: bottleName)
+            let folder = Library.folder(at: path)
+            do {
+                try SharedSteamLibrary.share(folder: folder, bottleURL: bottle.url)
+            } catch {
+                throw DomainError(error.localizedDescription)
+            }
+            print("Shared \(folder.path(percentEncoded: false)) with \(bottleName).")
+        }
+    }
+
+    struct LibraryUnshare: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "unshare",
+            abstract: "Remove a library folder from a bottle's Steam, keeping the games."
+        )
+
+        @Argument(help: "Name of the bottle")
+        var bottleName: String
+
+        @Argument(help: "Path of the library folder to remove")
+        var path: String
+
+        @MainActor
+        mutating func run() async throws {
+            let bottle = try Library.bottle(named: bottleName)
+            let folder = Library.folder(at: path)
+            do {
+                try SharedSteamLibrary.unshare(folder: folder, bottleURL: bottle.url)
+            } catch {
+                throw DomainError(error.localizedDescription)
+            }
+            print("Removed \(folder.path(percentEncoded: false)) from \(bottleName).")
+        }
+    }
+
+    struct SteamCompatRun: AsyncParsableCommand {
+        static let configuration = CommandConfiguration(
+            commandName: "steam-compat-run",
+            abstract: "Run a game the macOS Steam client handed to Whisky.",
+            discussion: """
+            Not for typing. The macOS Steam client runs this through the \
+            compatibility tool Whisky installs, with the App ID first and the \
+            game's command line after a bare `--`.
+
+            The executable is run directly in the bottle rather than through \
+            the bottle's own Steam client. Steam already launched this, so \
+            going through a second client would put two of them in the picture \
+            and hand the game the wrong one.
+
+            This stays in the foreground until the game exits, because Steam \
+            treats the process it spawned as the game: returning early would \
+            end the session the moment the game started, and take the overlay \
+            and the play time with it.
+            """
+        )
+
+        @Argument(help: "Steam App ID of the game")
+        var appId: Int
+
+        @Option(name: .long, help: "Name of the bottle to run in")
+        var bottle: String?
+
+        /// Which runtime the tool Steam picked belongs to.
+        ///
+        /// Whisky installs one compatibility tool per installed runtime, so the
+        /// client's own Compatibility picker is the switch between them. The
+        /// runner for each names its runtime here.
+        @Option(name: .long, help: "Identifier of the runtime the compatibility tool belongs to")
+        var runtime: String?
+
+        @Argument(parsing: .postTerminator, help: "The game's command line, after a bare --")
+        var command: [String] = []
+
+        /// The bottle this App ID runs in, named explicitly or resolved.
+        /// What this launch resolved, on stderr, where Steam keeps it.
+        ///
+        /// The overlay line is written either way: whether the client asked for
+        /// it is worth being able to read off a run that went wrong.
+        private func reportLaunch(plan: LaunchPlan) {
+            for note in plan.provenance {
+                FileHandle.standardError.write(Data("\(note)\n".utf8))
+            }
+
+            let overlay = SteamCompatTool.overlayEnvironment()[SteamCompatTool.dyldInsertKey]
+            FileHandle.standardError.write(Data(
+                "Steam overlay: \(overlay ?? "not injected")\n".utf8
+            ))
+
+            for (key, value) in SteamCompatTool.diagnosticEnvironment().sorted(by: { $0.key < $1.key }) {
+                FileHandle.standardError.write(Data("Diagnostic: \(key)=\(value)\n".utf8))
+            }
+        }
+
+        @MainActor
+        private func resolveTarget() throws -> Bottle {
+            var bottlesList = BottleData()
+            let bottles = bottlesList.loadBottles()
+
+            if let bottleName = bottle {
+                guard let named = bottles.first(where: { $0.settings.name == bottleName }) else {
+                    throw DomainError("A bottle with that name doesn't exist.")
+                }
+                return named
+            }
+
+            // Each tool is a runtime, so the client picking one means "run this
+            // in the bottle that uses that runtime". Narrowing the candidates is
+            // what makes that true without writing anything: a runtime belongs
+            // to the bottle, and setting it here would reconfigure every other
+            // game installed in the same bottle.
+            guard let runtime else {
+                return try SteamLauncher.resolveBottle(appId: appId, in: bottles)
+            }
+            let candidates = SteamLauncher.bottles(bottles, on: runtime)
+            guard !candidates.isEmpty else {
+                throw DomainError(
+                    "No bottle runs on the runtime \(runtime). Make one in Whisky, set it to that "
+                        + "runtime, and install the game into it."
+                )
+            }
+            return try SteamLauncher.resolveBottle(appId: appId, in: candidates)
+        }
+
+        @MainActor
+        mutating func run() async throws {
+            guard let executable = command.first else {
+                throw DomainError("No executable was passed after --.")
+            }
+
+            let target = try resolveTarget()
+
+            // Steam resolves cloud save paths inside the prefix directory it
+            // allocated, which the game never writes to because it runs in the
+            // bottle. Pointing that at the bottle is what makes Steam Cloud
+            // find the saves instead of reporting that it could not sync.
+            if let compatData = ProcessInfo.processInfo.environment["STEAM_COMPAT_DATA_PATH"] {
+                do {
+                    try SteamCompatTool.linkPrefix(
+                        bottleURL: target.url, compatDataPath: URL(filePath: compatData)
+                    )
+                } catch {
+                    // Worth saying, never worth refusing to launch over.
+                    FileHandle.standardError.write(Data(
+                        "Could not link the prefix for Steam Cloud: \(error.localizedDescription)\n".utf8
+                    ))
+                }
+            }
+
+            // The prefix has to name the bridge, and know where Steam is and
+            // who is signed in, before the game's steam_api looks for any of
+            // it. Cheap after the first launch: every value is read off disk
+            // and the import only runs for the ones that are missing.
+            do { try await SteamCompatTool.seedPrefix(bottle: target) } catch {
+                FileHandle.standardError.write(Data(
+                    "Could not seed the prefix for Steam: \(error.localizedDescription)\n".utf8
+                ))
+            }
+
+            // The per program settings are the same ones the app's own launch
+            // path uses. Without them a game Steam started ignores the graphics
+            // backend, the overrides and everything else set against its exe,
+            // and behaves differently depending on where it was launched from.
+            let program = Program(url: URL(filePath: executable), bottle: target, peFile: nil)
+
+            // The App ID is a hard identifier, so the same GameDB profile the
+            // app's own launcher applies is available here for free. Without
+            // this a game the client started is the one launch path in Whisky
+            // that ignores its own profile.
+            let plan = LaunchResolver.plan(
+                steamAppId: appId,
+                exeName: URL(filePath: executable).lastPathComponent,
+                userOverrides: program.settings.overrides
+            )
+            reportLaunch(plan: plan)
+
+            let result = try await Wine.runProgram(
+                at: URL(filePath: executable),
+                args: Array(command.dropFirst()),
+                bottle: target,
+                // Steam described this session in the environment before running
+                // the tool, and that is how the game finds the client it belongs
+                // to. Building a fresh environment and dropping it would leave
+                // the game with no Steam at all.
+                environment: SteamCompatTool.passthroughEnvironment()
+                    .merging(SteamCompatTool.overlayEnvironment()) { _, overlay in overlay }
+                    .merging(program.generateEnvironment()) { steam, _ in steam }
+                    .merging(SteamCompatTool.diagnosticEnvironment()) { _, debug in debug },
+                programOverrides: plan.overrides,
+                programSettings: program.settings,
+                gameProfileEnvironment: plan.gameProfileEnvironment,
+                // The App ID matched the GameDB by a hard identifier, so this is
+                // the best name any launch path has for the Dock tile, and the
+                // client's own library art is the best picture of the game.
+                displayName: plan.title,
+                steamAppId: appId,
+                // The game's own name and art, but not for the processes it
+                // starts beside itself. Helldivers 2 runs its crash handler as
+                // a sibling, and handing it the game's identity makes the
+                // engine name both after the same preloader link.
+                identityScope: .program,
+                keepAttached: true,
+                // Steam runs a game from its install root, not from wherever
+                // the executable happens to sit inside it.
+                workingDirectory: SteamCompatTool.workingDirectory(for: URL(filePath: executable))
+            )
+
+            if result.exitCode != 0 {
+                throw ExitCode(result.exitCode)
+            }
         }
     }
 

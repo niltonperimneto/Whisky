@@ -50,20 +50,18 @@ extension Winetricks {
     ///   - verb: The winetricks verb name to install (e.g. "vcrun2019").
     ///   - bottle: The bottle whose prefix to install into.
     ///   - timeout: Maximum time in seconds before the process is terminated.
-    ///     Defaults to 600 seconds (10 minutes).
+    ///     Defaults to 1800 seconds. dotnet48 alone is a 10 minute job on a
+    ///     good day, and the old 600 killed it mid-install.
     /// - Returns: An ``AsyncStream`` of progress events.
     static func installVerb(
         _ verb: String,
         for bottle: Bottle,
-        timeout: TimeInterval = 600
+        timeout: TimeInterval = 1_800
     ) -> AsyncStream<WinetricksInstallProgress> {
         AsyncStream { continuation in
-            let task = Task {
+            Task {
                 await executeVerbInstall(verb, for: bottle, timeout: timeout, continuation: continuation)
             }
-            // A consumer that stops iterating (the install sheet's Cancel)
-            // cancels the install rather than leaving it running headless.
-            continuation.onTermination = { _ in task.cancel() }
         }
     }
 
@@ -83,13 +81,16 @@ extension Winetricks {
     ) -> AsyncStream<(verb: String, progress: WinetricksInstallProgress)> {
         AsyncStream { continuation in
             let task = Task {
-                for verb in verbs where !Task.isCancelled {
+                for verb in verbs {
+                    guard !Task.isCancelled else { break }
                     for await progress in installVerb(verb, for: bottle) {
                         continuation.yield((verb: verb, progress: progress))
                     }
                 }
                 continuation.finish()
             }
+            // Ending the stream has to end the work, or a consumer that walks
+            // away leaves the loop running every remaining verb.
             continuation.onTermination = { _ in task.cancel() }
         }
     }
@@ -102,38 +103,27 @@ extension Winetricks {
     /// binaries in place, so the checksums pinned in the bundled winetricks go
     /// stale between releases and the unattended install aborts with exit 1 on
     /// the SHA256 mismatch (winetricks#2195).
-    ///
-    /// They also get `-q` (W_OPT_UNATTENDED, adds `/q` to the redist install):
-    /// without it the vc_redist installer shows its wizard and waits for a
-    /// click nothing in the panel prompts for, so the process never exits and
-    /// the winetricks.log entry is never written. Scoped to the vcrun verbs
-    /// until other verbs are checked for unattended behavior.
     private static func configureInstallProcess(
         verb: String,
-        bottleURL: URL,
+        environment: [String: String],
         resourcesURL: URL
     ) -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         let winetricksPath = resourcesURL.appending(path: "winetricks").path(percentEncoded: false)
-        var arguments = ["bash", winetricksPath]
+        // -q is not a nicety: with no tty behind it, any prompt winetricks
+        // raises reads EOF and it quits with "Operation cancelled". Microsoft
+        // reissuing vc_redist.x86.exe made vcrun2019 prompt on a checksum
+        // mismatch, and that is exactly how it failed.
+        var arguments = ["bash", winetricksPath, "-q"]
+        // The same reissue rotates the checksum winetricks has on file, which
+        // it treats as a failed download rather than a prompt.
         if verb.hasPrefix("vcrun") {
             arguments.append("--force")
-            arguments.append("-q")
         }
         arguments.append(verb)
         process.arguments = arguments
-        process.environment = [
-            "WINEPREFIX": bottleURL.path(percentEncoded: false),
-            "WINE": "wine64",
-            "PATH": [
-                WhiskyWineInstaller.binFolder.path(percentEncoded: false),
-                resourcesURL.path(percentEncoded: false),
-                "/usr/bin",
-                "/bin"
-            ].joined(separator: ":"),
-            "HOME": NSHomeDirectory()
-        ]
+        process.environment = environment
         return process
     }
 
@@ -165,8 +155,6 @@ extension Winetricks {
     ) async {
         continuation.yield(.preparing)
 
-        let bottleURL = await MainActor.run { bottle.url }
-
         guard let resourcesURL = Bundle.main.url(
             forResource: "cabextract",
             withExtension: nil
@@ -178,16 +166,29 @@ extension Winetricks {
             return
         }
 
-        let process = configureInstallProcess(verb: verb, bottleURL: bottleURL, resourcesURL: resourcesURL)
+        let environment = await MainActor.run {
+            Winetricks.processEnvironment(for: bottle, resourcesURL: resourcesURL)
+        }
+        let process = configureInstallProcess(
+            verb: verb, environment: environment, resourcesURL: resourcesURL
+        )
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        process.standardInput = FileHandle.nullDevice
         attachOutputHandlers(stdout: stdoutPipe, stderr: stderrPipe, continuation: continuation)
 
         do {
             try process.run()
             logger.info("Started winetricks install for verb '\(verb)'")
+            // A consumer that stops listening mid-install (a cancelled sheet,
+            // a cancelled wrapper stream) takes the child down with it, the
+            // same way the timeout does; the install would otherwise keep
+            // running against the prefix with nothing watching it.
+            continuation.onTermination = { _ in
+                if process.isRunning { process.terminate() }
+            }
         } catch {
             logger.error("Failed to launch winetricks install: \(error.localizedDescription)")
             continuation.yield(.failed(error.localizedDescription))
@@ -195,14 +196,7 @@ extension Winetricks {
             return
         }
 
-        await withTaskCancellationHandler {
-            await awaitProcessCompletion(process, verb: verb, timeout: timeout)
-        } onCancel: {
-            if process.isRunning {
-                logger.info("winetricks install '\(verb)' cancelled, terminating")
-                process.terminate()
-            }
-        }
+        await awaitProcessCompletion(process, verb: verb, timeout: timeout)
         stdoutPipe.fileHandleForReading.readabilityHandler = nil
         stderrPipe.fileHandleForReading.readabilityHandler = nil
 
@@ -230,5 +224,33 @@ extension Winetricks {
         }
         process.waitUntilExit()
         timeoutTask.cancel()
+    }
+}
+
+// MARK: - Environment
+
+extension Winetricks {
+    /// The environment a winetricks process needs to talk to this bottle.
+    ///
+    /// Built from the same layers a launch uses, because the wineserver a
+    /// bottle already has running was started with those. Wine refuses to join
+    /// a server whose sync mode it does not share, so a winetricks run carrying
+    /// a bare environment dies at its first `wine cmd.exe` with "Server is
+    /// running with WINEMSYNC but this process is not", and winetricks reports
+    /// that as an empty `%AppData%` and stops. Which is to say: every verb
+    /// failed whenever a game or Steam was open.
+    @MainActor
+    static func processEnvironment(for bottle: Bottle, resourcesURL: URL) -> [String: String] {
+        var environment = Wine.constructWineEnvironment(for: bottle)
+        environment["WINEPREFIX"] = bottle.url.path(percentEncoded: false)
+        environment["WINE"] = "wine64"
+        environment["HOME"] = NSHomeDirectory()
+        environment["PATH"] = [
+            WhiskyWineInstaller.binFolder(for: bottle.settings.runtime).path(percentEncoded: false),
+            resourcesURL.path(percentEncoded: false),
+            "/usr/bin",
+            "/bin"
+        ].joined(separator: ":")
+        return environment
     }
 }

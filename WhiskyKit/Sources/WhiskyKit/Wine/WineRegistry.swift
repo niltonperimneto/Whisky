@@ -28,8 +28,8 @@ public enum RegistryType: String {
 /// Reads registry values straight from a prefix's `.reg` files, so callers
 /// that cannot afford a Wine process (checks, previews) still see the
 /// current state.
-enum WineRegistryFile {
-    static func readValue(bottleURL: URL, key: String, valueName: String) -> String? {
+public enum WineRegistryFile {
+    public static func readValue(bottleURL: URL, key: String, valueName: String) -> String? {
         let regFileName: String
         if key.hasPrefix("HKCU") || key.hasPrefix("HKEY_CURRENT_USER") {
             regFileName = "user.reg"
@@ -123,8 +123,20 @@ public extension Wine {
         return String(value)
     }
 
+    /// Writes the build number reported by the prefix.
+    ///
+    /// Refuses a build the bottle's Windows version cannot carry: the version
+    /// and the build are read together by everything that asks what Windows
+    /// this is, and a pair that disagrees is worse than either alone.
+    ///
+    /// - Throws: ``WineInterfaceError/buildVersionMismatch(_:_:)`` when the
+    ///   number belongs to a different Windows version.
     @MainActor
     static func changeBuildVersion(bottle: Bottle, version: Int) async throws {
+        let windowsVersion = bottle.settings.windowsVersion
+        guard windowsVersion.accepts(build: version) else {
+            throw WineInterfaceError.buildVersionMismatch(windowsVersion, version)
+        }
         try await addRegistryKey(
             bottle: bottle,
             key: RegistryKey.currentVersion.rawValue,

@@ -223,27 +223,15 @@ extension FixPreviewView {
     private var resolvedParams: [String: String] {
         var params = node.params ?? [:]
         if node.fixId == "install-winetricks-verb", params["verb"] == nil,
-           let missing = missingVerbsEvidence,
-           let first = missing.split(separator: ",").first {
-            params["verb"] = first.trimmingCharacters(in: .whitespaces)
+           let missing = engine.lastCheckResult?.evidence["missing"], !missing.isEmpty {
+            // Every missing verb, not the first: installing one of four and
+            // then verifying all four fails the flow three times and
+            // escalates without the fix it promised ever having been tried.
+            params["verb"] = missing.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .joined(separator: ", ")
         }
         return params
-    }
-
-    /// The `missing` evidence of the most recent check on the path here.
-    ///
-    /// Read from the session rather than `lastCheckResult`: that one is not
-    /// persisted, so a resumed session offered to install "unknown".
-    private var missingVerbsEvidence: String? {
-        if let missing = engine.lastCheckResult?.evidence["missing"] {
-            return missing
-        }
-        for step in engine.session.stepHistory.reversed() {
-            if let missing = engine.session.checkResults[step.nodeId]?.evidence["missing"] {
-                return missing
-            }
-        }
-        return nil
     }
 
     private func loadPreview() {
@@ -261,11 +249,12 @@ extension FixPreviewView {
         let params = resolvedParams
 
         if fixId == "install-winetricks-verb" {
-            guard let verb = params["verb"] else {
+            guard let verbParam = params["verb"] else {
                 engine.skipStep()
                 return
             }
-            installVerb(verb, fixId: fixId)
+            let verbs = verbParam.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            installVerbs(verbs, fixId: fixId)
             return
         }
 
@@ -290,25 +279,24 @@ extension FixPreviewView {
         isApplying = false
     }
 
-    /// Runs the winetricks install for real and only confirms the attempt
-    /// once the verb actually landed.
-    private func installVerb(_ verb: String, fixId: String) {
+    /// Runs the winetricks installs for real and only confirms the attempt
+    /// once every verb actually landed.
+    private func installVerbs(_ verbs: [String], fixId: String) {
         isApplying = true
-        engine.applyFix(fixId: fixId, beforeValue: nil, afterValue: verb)
+        engine.applyFix(fixId: fixId, beforeValue: nil, afterValue: verbs.joined(separator: ", "))
         Task {
-            var exitCode: Int32?
-            var failure: String?
-            for await progress in Winetricks.installVerb(verb, for: bottle) {
+            var failed = false
+            for await (_, progress) in Winetricks.installVerbs(verbs, for: bottle) {
                 switch progress {
-                case let .completed(code): exitCode = code
-                case let .failed(message): failure = message
+                case let .completed(code): if code != 0 { failed = true }
+                case .failed: failed = true
                 case .preparing, .output: break
                 }
             }
-            if failure == nil, exitCode == 0 {
-                engine.confirmFixApplied(fixId: fixId)
-            } else {
+            if failed {
                 engine.markFixFailed(fixId: fixId)
+            } else {
+                engine.confirmFixApplied(fixId: fixId)
             }
             isApplying = false
         }

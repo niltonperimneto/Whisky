@@ -43,7 +43,7 @@ public protocol TroubleshootingSessionStoring: Sendable {
 
 /// A JSON-driven state machine that navigates troubleshooting flow graphs.
 ///
-/// Generalizes the ``AudioTroubleshootingEngine`` pattern into a category-agnostic
+/// A category-agnostic
 /// engine that loads flow definitions from JSON, runs checks via a ``CheckRegistry``,
 /// branches on normalized outcomes, and auto-saves session state.
 ///
@@ -92,7 +92,7 @@ public final class TroubleshootingFlowEngine: ObservableObject {
     private let sessionStore: any TroubleshootingSessionStoring
 
     private let logger = Logger(
-        subsystem: "com.franke.Whisky",
+        subsystem: Bundle.whiskyBundleIdentifier,
         category: "TroubleshootingFlowEngine"
     )
 

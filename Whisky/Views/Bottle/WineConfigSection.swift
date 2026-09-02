@@ -29,6 +29,7 @@ struct WineConfigSection: View {
     @ObservedObject var bottle: Bottle
     @Binding var isExpanded: Bool
     @Binding var buildVersion: String
+    @Binding var windowsVersion: WinVersion
     @Binding var retinaModeState: RetinaModeState
     @Binding var dpiConfig: Int
     @Binding var winVersionLoadingState: LoadingState
@@ -36,18 +37,36 @@ struct WineConfigSection: View {
     @Binding var retinaModeLoadingState: LoadingState
     @Binding var dpiConfigLoadingState: LoadingState
     @Binding var dpiSheetPresented: Bool
+    /// True when a read timed out rather than failed, which means the prefix is
+    /// busy rather than broken.
+    var prefixBusy = false
+    var onRetryWindowsVersion: (() -> Void)?
     var onRetryBuildVersion: (() -> Void)?
+    /// Set when a typed build belongs to a different Windows version. Shown
+    /// under the field rather than written to the prefix.
+    @State private var buildVersionMismatch: String?
     var onRetryRetinaMode: (() -> Void)?
     var onRetryDpi: (() -> Void)?
 
     var body: some View {
         Section("config.title.wine", isExpanded: $isExpanded) {
+            RuntimePickerView(bottle: bottle)
+            if prefixBusy {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .foregroundStyle(.orange)
+                    Text("config.prefixBusy")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             SettingItemView(
                 title: "config.winVersion",
                 description: "config.winVersion.info",
-                loadingState: winVersionLoadingState
+                loadingState: winVersionLoadingState,
+                onRetry: onRetryWindowsVersion
             ) {
-                Picker("config.winVersion", selection: $bottle.settings.windowsVersion) {
+                Picker("config.winVersion", selection: $windowsVersion) {
                     ForEach(WinVersion.allCases.reversed(), id: \.self) {
                         Text($0.pretty())
                     }
@@ -59,25 +78,20 @@ struct WineConfigSection: View {
                 loadingState: buildVersionLoadingState,
                 onRetry: onRetryBuildVersion
             ) {
-                TextField(
-                    "config.buildVersion.notSet",
-                    text: $buildVersion
-                )
-                .multilineTextAlignment(.trailing)
-                .textFieldStyle(PlainTextFieldStyle())
-                .onSubmit {
-                    guard let version = Int(buildVersion) else { return }
-                    buildVersionLoadingState = .modifying
-                    Task(priority: .userInitiated) {
-                        do {
-                            try await Wine.changeBuildVersion(bottle: bottle, version: version)
-                            buildVersionLoadingState = .success
-                        } catch {
-                            Self.logger.error(
-                                "Failed to change build version: \(error.localizedDescription)"
-                            )
-                            buildVersionLoadingState = .failed
-                        }
+                VStack(alignment: .trailing, spacing: 4) {
+                    TextField(
+                        "config.buildVersion.notSet",
+                        text: $buildVersion
+                    )
+                    .multilineTextAlignment(.trailing)
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .onSubmit { submitBuildVersion() }
+
+                    if let buildVersionMismatch {
+                        Text(buildVersionMismatch)
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .multilineTextAlignment(.trailing)
                     }
                 }
             }
@@ -164,6 +178,38 @@ struct WineConfigSection: View {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+extension WineConfigSection {
+    /// Writes the typed build number, or explains why it was not written.
+    ///
+    /// The version and the build are read together by everything that asks what
+    /// Windows this is, so a build from another version is refused here rather
+    /// than left for a program to trip over.
+    private func submitBuildVersion() {
+        buildVersionMismatch = nil
+        guard let version = Int(buildVersion) else { return }
+
+        let windowsVersion = bottle.settings.windowsVersion
+        guard windowsVersion.accepts(build: version) else {
+            buildVersionMismatch = String(
+                localized: "config.buildVersion.mismatch \(windowsVersion.pretty()) \(windowsVersion.defaultBuild)"
+            )
+            onRetryBuildVersion?()
+            return
+        }
+
+        buildVersionLoadingState = .modifying
+        Task(priority: .userInitiated) {
+            do {
+                try await Wine.changeBuildVersion(bottle: bottle, version: version)
+                buildVersionLoadingState = .success
+            } catch {
+                Self.logger.error("Failed to change build version: \(error.localizedDescription)")
+                buildVersionLoadingState = .failed
             }
         }
     }

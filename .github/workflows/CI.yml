@@ -13,14 +13,14 @@ on:
   # the `changes` job below and a skipped run reports no status — required-check
   # names would need a carve-out for it.
   push:
-    branches: [main]
+    branches: [main, preview]
     paths-ignore: &docs-paths
       - '**.md'
       - 'docs/**'
       - 'images/**'
       - 'LICENSE'
   pull_request:
-    branches: [main]
+    branches: [main, preview]
     paths-ignore: *docs-paths
   workflow_dispatch:
 
@@ -86,6 +86,21 @@ jobs:
             echo "Run ./scripts/british-english.py locally and commit the result."
             exit 1
           }
+      # The same trap in every other language: translations land per release,
+      # strings are added between them, and a German user reads
+      # `library.card.settings` rather than English.
+      - name: Check every locale carries every string
+        run: |
+          ./scripts/locale-coverage.py --check || {
+            echo ""
+            echo "Run ./scripts/locale-coverage.py locally and commit the result."
+            exit 1
+          }
+      # The other two ways a key renders as its own raw text: an entry with
+      # translations but no English source, and a key used in code that was
+      # never added to the catalog. Both have shipped before.
+      - name: Check every key has an English source and a catalog entry
+        run: ./scripts/check-strings.py
 
   # Detects which areas a PR touches so macOS jobs can be skipped when they
   # can't be affected. Runs on every event; the outputs are only consulted for
@@ -113,7 +128,9 @@ jobs:
   build:
     name: Build all schemes
     needs: [lint, format]
-    runs-on: macos-15
+    # macos-26: the app's deployment target is 26.0, so an older runner cannot
+    # launch it, and the UI tests fail before they start.
+    runs-on: macos-26
 
     steps:
       - name: Checkout
@@ -159,8 +176,9 @@ jobs:
       # at runtime but the build stays green — so assert on the built artifact.
       - name: Verify bundled app resources
         run: |
-          # Ask for the exact product path rather than globbing DerivedData:
-          # a loose glob can also catch WhiskyUITests-Runner.app.
+          # Ask for the exact product path rather than globbing: this fork's
+          # PRODUCT_NAME is "Whisky Preview", and a glob loose enough to catch that
+          # also catches WhiskyUITests-Runner.app.
           app=$(xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug \
             -showBuildSettings 2>/dev/null \
             | awk -F' = ' '
@@ -200,7 +218,9 @@ jobs:
     name: WhiskyUITests
     needs: [lint, format, changes]
     if: github.event_name != 'pull_request' || needs.changes.outputs.app == 'true'
-    runs-on: macos-15
+    # macos-26: the app's deployment target is 26.0, so an older runner cannot
+    # launch it, and the UI tests fail before they start.
+    runs-on: macos-26
 
     steps:
       - name: Checkout
@@ -282,7 +302,9 @@ jobs:
   test:
     name: Run Tests
     needs: [lint, format]
-    runs-on: macos-15
+    # macos-26: the app's deployment target is 26.0, so an older runner cannot
+    # launch it, and the UI tests fail before they start.
+    runs-on: macos-26
     
     steps:
       - name: Checkout

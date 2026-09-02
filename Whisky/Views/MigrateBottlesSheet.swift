@@ -19,9 +19,10 @@
 import SwiftUI
 import WhiskyKit
 
-/// Lets the user import bottles created by the archived original Whisky app, which this
-/// fork doesn't see automatically because it uses a different bundle identifier. Bottles
-/// are referenced in place (not copied), so the import is non-destructive.
+/// Lets the user import bottles created by another Whisky build, which this one doesn't
+/// see automatically because each build keys its bottle directory on its own bundle
+/// identifier. Bottles are referenced in place (not copied), so the import is
+/// non-destructive.
 struct MigrateBottlesSheet: View {
     @EnvironmentObject var bottleVM: BottleVM
     @Environment(\.dismiss) private var dismiss
@@ -59,17 +60,12 @@ struct MigrateBottlesSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Import Bottles from the Original Whisky")
+            Text("migrate.title")
                 .font(.headline)
-            Text(
-                """
-                These bottles were created by the archived original Whisky app. Importing references \
-                them in place — your files aren't moved or copied, and the original app keeps working.
-                """
-            )
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
+            Text("migrate.subtitle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding()
     }
@@ -81,7 +77,7 @@ struct MigrateBottlesSheet: View {
                 Image(systemName: "tray")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("No bottles from the original Whisky were found.")
+                Text("migrate.empty")
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -106,12 +102,12 @@ struct MigrateBottlesSheet: View {
     private var footer: some View {
         HStack {
             if !rows.isEmpty {
-                Button(allSelected ? "Deselect All" : "Select All", action: toggleAll)
+                Button(allSelected ? "migrate.deselectAll" : "migrate.selectAll", action: toggleAll)
             }
             Spacer()
-            Button("Cancel", role: .cancel) { dismiss() }
+            Button("button.cancel", role: .cancel) { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            Button("Import Selected", action: importSelected)
+            Button("migrate.importSelected", action: importSelected)
                 .keyboardShortcut(.defaultAction)
                 .disabled(selectedCount == 0)
         }

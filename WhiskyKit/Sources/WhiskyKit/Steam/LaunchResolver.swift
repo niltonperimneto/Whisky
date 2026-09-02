@@ -32,6 +32,9 @@ public struct LaunchPlan {
     /// Human-readable notes on where the configuration came from, for
     /// logging and provenance UI.
     public let provenance: [String]
+    /// The matched game's real title, which is the name worth showing in the
+    /// Dock. `nil` without a GameDB match, leaving the executable's own name.
+    public let title: String?
 }
 
 /// Turns a Steam App ID into a ``LaunchPlan`` by matching the GameDB and
@@ -55,8 +58,44 @@ public enum LaunchResolver {
         userOverrides: ProgramOverrides? = nil,
         entries: [GameDBEntry]? = nil
     ) -> LaunchPlan {
+        plan(
+            metadata: ProgramMetadata(exeName: exeName ?? "", steamAppId: steamAppId),
+            userOverrides: userOverrides,
+            entries: entries
+        )
+    }
+
+    /// Builds the launch plan for a directly-run executable, so a game
+    /// started from its exe gets the same GameDB treatment as one started
+    /// through Steam.
+    ///
+    /// Matching here has no hard identifier, only the exe's name and path, so
+    /// it leans on ``GameMatcher/bestMatch(metadata:against:)`` being
+    /// conservative: high confidence, an unambiguous winner, and a penalty on
+    /// generic names. A miss costs nothing but the plan falling back to the
+    /// user's own overrides.
+    public static func plan(
+        forProgramAt url: URL,
+        userOverrides: ProgramOverrides? = nil,
+        entries: [GameDBEntry]? = nil
+    ) -> LaunchPlan {
+        plan(
+            metadata: ProgramMetadata(
+                exeName: url.lastPathComponent,
+                exeURL: url,
+                installPath: url.deletingLastPathComponent().path(percentEncoded: false)
+            ),
+            userOverrides: userOverrides,
+            entries: entries
+        )
+    }
+
+    private static func plan(
+        metadata: ProgramMetadata,
+        userOverrides: ProgramOverrides?,
+        entries: [GameDBEntry]?
+    ) -> LaunchPlan {
         let database = entries ?? GameDBLoader.loadDefaults()
-        let metadata = ProgramMetadata(exeName: exeName ?? "", steamAppId: steamAppId)
 
         guard let match = GameMatcher.bestMatch(metadata: metadata, against: database),
               let variant = match.recommendedVariant
@@ -64,7 +103,8 @@ public enum LaunchResolver {
             return LaunchPlan(
                 overrides: userOverrides ?? ProgramOverrides(),
                 gameProfileEnvironment: [:],
-                provenance: []
+                provenance: [],
+                title: nil
             )
         }
 
@@ -75,7 +115,8 @@ public enum LaunchResolver {
             gameProfileEnvironment: variant.environmentVariables ?? [:],
             provenance: [
                 "gamedb: \(match.entry.title) — \(variant.label) (\(match.explanation))"
-            ]
+            ],
+            title: match.entry.title
         )
     }
 

@@ -62,6 +62,27 @@ struct GameProfileLayerTests {
         #expect(env["CONTESTED"] == "program-user")
         #expect(env["not a valid key!"] == nil)
     }
+
+    @Test("A WINEDEBUG the user typed survives the diagnostic preset")
+    @MainActor func userWinedebugBeatsPreset() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let bottle = Bottle(bottleUrl: tempDir, inFlight: false, isAvailable: true)
+        var settings = ProgramSettings()
+        settings.activeWineDebugPreset = .dllLoad
+
+        let withUserValue = Wine.constructWineEnvironment(
+            for: bottle,
+            environment: ["WINEDEBUG": "+file"],
+            programSettings: settings
+        )
+        #expect(withUserValue["WINEDEBUG"] == "+file")
+
+        let presetOnly = Wine.constructWineEnvironment(for: bottle, programSettings: settings)
+        #expect(presetOnly["WINEDEBUG"] == WineDebugPreset.dllLoad.winedebugValue)
+    }
 }
 
 @Suite("LaunchResolver Tests")
@@ -76,6 +97,7 @@ struct LaunchResolverTests {
                     "title": "Casualties: Unknown Demo",
                     "rating": "unverified",
                     "steamAppId": 4576510,
+                    "exeNames": ["casualties.exe"],
                     "variants": [
                         {
                             "id": "recommended",
@@ -155,5 +177,37 @@ struct LaunchResolverTests {
 
         #expect(plan.overrides.isEmpty)
         #expect(plan.gameProfileEnvironment.isEmpty)
+    }
+
+    @Test("A direct run plans from its exe name, same as through Steam")
+    func directRunPlansFromExeName() throws {
+        let exe = URL(fileURLWithPath: "/tmp/bottle/drive_c/Games/CU/casualties.exe")
+        let plan = try LaunchResolver.plan(forProgramAt: exe, entries: fixtureEntries())
+
+        #expect(plan.overrides.graphicsBackend == .dxvk)
+        #expect(plan.gameProfileEnvironment["DXVK_FRAME_RATE"] == "120")
+        #expect(plan.provenance.count == 1)
+    }
+
+    @Test("A direct run's user overrides still win")
+    func directRunUserOverridesWin() throws {
+        var user = ProgramOverrides()
+        user.graphicsBackend = .dxmt
+
+        let exe = URL(fileURLWithPath: "/tmp/bottle/drive_c/Games/CU/casualties.exe")
+        let plan = try LaunchResolver.plan(forProgramAt: exe, userOverrides: user, entries: fixtureEntries())
+
+        #expect(plan.overrides.graphicsBackend == .dxmt)
+        #expect(plan.overrides.performancePreset == .unity)
+    }
+
+    @Test("An unknown exe plans nothing, so a miss costs nothing")
+    func unknownExePlansNothing() throws {
+        let exe = URL(fileURLWithPath: "/tmp/bottle/drive_c/Tools/editor.exe")
+        let plan = try LaunchResolver.plan(forProgramAt: exe, entries: fixtureEntries())
+
+        #expect(plan.overrides.isEmpty)
+        #expect(plan.gameProfileEnvironment.isEmpty)
+        #expect(plan.provenance.isEmpty)
     }
 }

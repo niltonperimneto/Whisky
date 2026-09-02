@@ -40,13 +40,23 @@ enum LibrarySort: String, CaseIterable, Identifiable {
 
 /// A library entry plus what the grid needs to draw it. `bottleName` and
 /// `lastPlayed` are presentation, which is why they live here rather than in
-/// ``LibraryEntry``.
+/// ``LibraryEntry``; `record` is the entry's persisted state, when it has any.
 struct LibraryRow: Identifiable {
     let item: LibraryEntry
     let bottleName: String?
     let lastPlayed: Date?
+    let record: GameRecord?
 
     var id: String { item.id }
+
+    /// A rename wins, then a launcher's proper name (which is how the Steam
+    /// client stops reading "steam"), then whatever the source called it.
+    var name: String {
+        record?.displayName ?? item.launcher?.displayName ?? item.name
+    }
+
+    var isFavourite: Bool { record?.favourite == true }
+    var isHidden: Bool { record?.hidden == true }
 }
 
 /// Builds the library and owns what is currently starting or running.
@@ -62,12 +72,14 @@ final class LibraryModel: ObservableObject {
     @Published var launchError: String?
     @Published var toast: ToastData?
 
-    /// App IDs with a launch in flight, per bottle.
-    @Published private var steamLaunching: [URL: Set<Int>] = [:]
+    /// Where each in-flight Steam launch is, per bottle.
+    @Published private var steamLaunching: [URL: [Int: SteamClientOrchestrator.Phase]] = [:]
     /// App IDs whose own processes are in the bottle's process list.
     @Published private var steamRunning: [URL: Set<Int>] = [:]
     /// Programs whose launch call has not returned yet.
     @Published private var programLaunching: Set<URL> = []
+    /// The most recent download-stall verdict per bottle.
+    @Published private var steamDownloads: [URL: StallStatus] = [:]
 
     var sort: LibrarySort = .recent {
         didSet {
@@ -89,16 +101,46 @@ final class LibraryModel: ObservableObject {
     func state(for entry: LibraryEntry) -> LibraryEntryState {
         switch entry.launch {
         case let .program(url):
-            programLaunching.contains(url) ? .launching : .idle
+            programLaunching.contains(url) ? .launching(.program) : .idle
         case let .steam(appID):
             if steamRunning[entry.bottleURL]?.contains(appID) == true {
                 .running
-            } else if steamLaunching[entry.bottleURL]?.contains(appID) == true {
-                .launching
+            } else if let phase = steamLaunching[entry.bottleURL]?[appID] {
+                switch phase {
+                case .startingClient: .launching(.startingClient)
+                case .launching: .launching(.waitingForGame)
+                }
             } else {
                 .idle
             }
         }
+    }
+
+    /// A Steam download that has stopped making progress, if there is one.
+    ///
+    /// The monitor behind this has always run; nothing read its verdict, so a
+    /// game sat on "launching" with no way to learn the client was stuck
+    /// downloading it.
+    var stalledDownload: (bottleURL: URL, minutes: Int)? {
+        for (url, status) in steamDownloads {
+            switch status {
+            case let .likelyStalled(duration), let .confirmedStall(duration, _):
+                return (url, max(1, Int(duration / 60)))
+            case .noDownloads, .downloading:
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// Whether this row's launch can still be abandoned.
+    ///
+    /// A Steam launch owns a cancellable task for its whole grace period. A
+    /// program launch does not: the call returns before the program does, so
+    /// there is nothing left holding it.
+    func canCancelLaunch(_ row: LibraryRow) -> Bool {
+        guard case let .steam(appID) = row.item.launch else { return false }
+        return steamLaunching[row.item.bottleURL]?[appID] != nil
     }
 
     // MARK: - Building
@@ -120,13 +162,15 @@ final class LibraryModel: ObservableObject {
             // off the main actor, and it needs nothing but the bottle URL.
             let pinned = PinnedLibrarySource.items(inBottleAt: url, settings: bottle.settings)
             let steam = await Task.detached { SteamLibrarySource.entries(inBottleAt: url) }.value
+            let records = GameRecordStore(bottleURL: url).records()
 
             for item in LibraryCatalogue.merge([pinned, steam]) {
                 built.append(
                     LibraryRow(
                         item: item,
                         bottleName: showBottleName ? bottle.settings.name : nil,
-                        lastPlayed: lastPlayed(for: item, routed: routed)
+                        lastPlayed: lastPlayed(for: item, records: records, routed: routed),
+                        record: records[item.recordID]
                     )
                 )
             }
@@ -135,13 +179,21 @@ final class LibraryModel: ObservableObject {
         }
 
         rows = sorted(built)
+        SpotlightIndexer.reindex(rows: rows)
     }
 
     /// When an entry was last started in Whisky.
+    ///
+    /// The game record is the source: it is stamped on every launch and keyed
+    /// by identity. The run log and the routing table cover launches from
+    /// before records existed, so nobody's history resets on update.
     private func lastPlayed(
-        for item: LibraryEntry, routed: [Int: Date]
+        for item: LibraryEntry, records: [GameRecordID: GameRecord], routed: [Int: Date]
     ) -> Date? {
-        switch item.launch {
+        if let stamped = records[item.recordID]?.lastPlayedInWhisky {
+            return stamped
+        }
+        return switch item.launch {
         case let .program(url):
             RunLogStore.load(for: url.lastPathComponent, in: item.bottleURL)
                 .entries.map(\.startTime).max()
@@ -152,11 +204,15 @@ final class LibraryModel: ObservableObject {
 
     /// Launchers last whatever the sort is. A storefront client is how you reach
     /// a game, not one of them, and it would otherwise take the top of the grid
-    /// on recency because every game launch runs it.
+    /// on recency because every game launch runs it. Favourites first among the
+    /// games, because marking one is the person saying where it should sit.
     private func sorted(_ rows: [LibraryRow]) -> [LibraryRow] {
         rows.sorted { first, second in
             if first.item.isLauncher != second.item.isLauncher {
                 return second.item.isLauncher
+            }
+            if first.isFavourite != second.isFavourite {
+                return first.isFavourite
             }
             return switch sort {
             case .recent: byRecency(first, second)
@@ -176,7 +232,7 @@ final class LibraryModel: ObservableObject {
     }
 
     private func byName(_ first: LibraryRow, _ second: LibraryRow) -> Bool {
-        first.item.name.localizedStandardCompare(second.item.name) == .orderedAscending
+        first.name.localizedStandardCompare(second.name) == .orderedAscending
     }
 
     private func byBottle(_ first: LibraryRow, _ second: LibraryRow) -> Bool {
@@ -184,6 +240,47 @@ final class LibraryModel: ObservableObject {
         let rhs = second.bottleName ?? ""
         guard lhs == rhs else { return lhs.localizedStandardCompare(rhs) == .orderedAscending }
         return byName(first, second)
+    }
+}
+
+// MARK: - Persisted state
+
+extension LibraryModel {
+    func setFavourite(_ row: LibraryRow, _ value: Bool) {
+        applyRecordChange(row) { $0.favourite = value }
+    }
+
+    func setHidden(_ row: LibraryRow, _ value: Bool) {
+        applyRecordChange(row) { $0.hidden = value }
+    }
+
+    /// An empty or unchanged-from-source name clears the rename rather than
+    /// storing a copy of it, so the card follows the source if it ever renames.
+    func rename(_ row: LibraryRow, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sourceName = row.item.launcher?.displayName ?? row.item.name
+        applyRecordChange(row) {
+            $0.displayName = trimmed.isEmpty || trimmed == sourceName ? nil : trimmed
+        }
+    }
+
+    /// Writes one change through the bottle's record store and refreshes just
+    /// that row, because a full reload walks Steam's manifests to answer a
+    /// question whose answer is already on screen.
+    private func applyRecordChange(_ row: LibraryRow, _ mutate: (inout GameRecord) -> Void) {
+        let store = GameRecordStore(bottleURL: row.item.bottleURL)
+        store.update(row.item.recordID, mutate)
+        guard let index = rows.firstIndex(where: { $0.id == row.id }) else { return }
+        rows[index] = LibraryRow(
+            item: row.item,
+            bottleName: row.bottleName,
+            lastPlayed: row.lastPlayed,
+            record: store.record(for: row.item.recordID)
+        )
+        rows = sorted(rows)
+        // Renames and hides must reach Spotlight, or a hidden game keeps
+        // launching from search under its old name.
+        SpotlightIndexer.reindex(rows: rows)
     }
 }
 
@@ -220,20 +317,12 @@ extension LibraryModel {
     }
 
     private func launchProgram(at url: URL, in bottle: Bottle) {
-        // Through the bottle's own program list where possible, so the launch
-        // picks up that program's overrides rather than only the bottle's.
-        guard let program = bottle.programs.first(where: { $0.url == url }) else {
-            programLaunching.insert(url)
-            Task {
-                defer { programLaunching.remove(url) }
-                do {
-                    try await Wine.runProgram(at: url, bottle: bottle)
-                } catch {
-                    launchError = error.localizedDescription
-                }
-            }
-            return
-        }
+        // A scanned program where one exists, otherwise materialized from the
+        // URL: `bottle.programs` stays empty until a bottle view scans it, and
+        // the library is the landing screen, so most launches used to take a
+        // bare fallback that carried no overrides at all.
+        let program = bottle.programs.first(where: { $0.url == url })
+            ?? Program(url: url, bottle: bottle)
 
         programLaunching.insert(url)
         Telemetry.capture(.firstProgramLaunchAttempted)
@@ -254,16 +343,21 @@ extension LibraryModel {
             return existing
         }
 
-        let made = SteamClientOrchestrator(bottle: bottle, driver: AppSteamClientDriver(bottle: bottle))
+        let made = SteamClientOrchestrator(bottle: bottle)
         let url = bottle.url
         made.$phases
             .sink { [weak self] phases in
-                self?.steamLaunching[url] = Set(phases.keys)
+                self?.steamLaunching[url] = phases
             }
             .store(in: &cancellables)
         made.$runningAppIds
             .sink { [weak self] running in
                 self?.steamRunning[url] = running
+            }
+            .store(in: &cancellables)
+        made.$downloadStatus
+            .sink { [weak self] status in
+                self?.steamDownloads[url] = status
             }
             .store(in: &cancellables)
         made.$launchError
