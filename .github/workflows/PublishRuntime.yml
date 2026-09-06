@@ -18,6 +18,13 @@ on:
       version:
         description: "runtime version to publish, e.g. 4.5.112; empty means the newest built"
         type: string
+      channel:
+        description: "release channel; canary artifacts never update the production endpoint"
+        type: choice
+        options:
+          - stable
+          - canary
+        default: stable
       force:
         description: "publish even if it is not newer than what Pages serves"
         type: boolean
@@ -32,7 +39,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RUNTIME_REPO: dappermint/winecx-gptk
+  STABLE_RUNTIME_REPO: dappermint/winecx-gptk
+  CANARY_RUNTIME_REPO: niltonperimneto/winecx-gptk
   PLIST: dist/pages/WhiskyWineVersion.plist
 
 jobs:
@@ -54,19 +62,29 @@ jobs:
           # attacker-shaped even when only a maintainer can send one
           WANT_VERSION: ${{ inputs.version }}
           FORCE: ${{ inputs.force }}
+          CHANNEL: ${{ inputs.channel || 'stable' }}
         run: |
           set -euo pipefail
+
+          if [ "$CHANNEL" = "canary" ]; then
+            producer_prefix="runtime-canary-v"
+            runtime_repo="$CANARY_RUNTIME_REPO"
+          else
+            producer_prefix="runtime-v"
+            runtime_repo="$STABLE_RUNTIME_REPO"
+          fi
+          echo "runtime_repo=$runtime_repo" >> "$GITHUB_OUTPUT"
 
           if [ -n "$WANT_VERSION" ]; then
             want="$WANT_VERSION"
           else
             # the release list is ordered by creation, and a rebuild of an older
             # tree can be created later, so sort by version rather than trusting it
-            want=$(gh release list --repo "$RUNTIME_REPO" --limit 50 \
+            want=$(gh release list --repo "$runtime_repo" --limit 50 \
                      --json tagName --jq '.[].tagName' \
-                   | sed -n 's/^runtime-v//p' | sort -V | tail -1)
+                   | sed -n "s/^${producer_prefix}//p" | sort -V | tail -1)
           fi
-          [ -n "$want" ] || { echo "::error::no runtime-v* releases in $RUNTIME_REPO"; exit 1; }
+          [ -n "$want" ] || { echo "::error::no ${producer_prefix}* releases in $runtime_repo"; exit 1; }
 
           case "$want" in
             [0-9]*.[0-9]*.[0-9]*) ;;
@@ -81,14 +99,15 @@ jobs:
           PY
           )
 
-          echo "pages serves $have, newest built is $want"
+          echo "pages serves $have, newest $CHANNEL build is $want"
           newest=$(printf '%s\n%s\n' "$have" "$want" | sort -V | tail -1)
-          if [ "$want" = "$have" ] || { [ "$newest" = "$have" ] && [ "$FORCE" != "true" ]; }; then
+          if [ "$CHANNEL" = "stable" ] && { [ "$want" = "$have" ] || { [ "$newest" = "$have" ] && [ "$FORCE" != "true" ]; }; }; then
             echo "nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
             echo "go=false" >> "$GITHUB_OUTPUT"
           else
             echo "go=true" >> "$GITHUB_OUTPUT"
             echo "version=$want" >> "$GITHUB_OUTPUT"
+            echo "producer_tag=${producer_prefix}${want}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Download the runtime and check it
@@ -96,9 +115,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.pick.outputs.version }}
+          PRODUCER_TAG: ${{ steps.pick.outputs.producer_tag }}
+          CHANNEL: ${{ inputs.channel || 'stable' }}
+          RUNTIME_REPO: ${{ steps.pick.outputs.runtime_repo }}
         run: |
           set -euo pipefail
-          gh release download "runtime-v$VERSION" --repo "$RUNTIME_REPO" \
+          gh release download "$PRODUCER_TAG" --repo "$RUNTIME_REPO" \
             --pattern 'Libraries.tar.gz' \
             --pattern 'Libraries.tar.gz.sha256' \
             --pattern 'WhiskyWineVersion.plist'
@@ -120,6 +142,33 @@ jobs:
             echo "::error::asset is stamped $stamped but the tag says $VERSION"
             exit 1
           }
+          advertised_channel=$(python3 - <<'PY'
+          import plistlib
+          with open("WhiskyWineVersion.plist", "rb") as f:
+              print(plistlib.load(f).get("releaseChannel", "stable"))
+          PY
+          )
+          [ "$advertised_channel" = "$CHANNEL" ] || {
+            echo "::error::asset channel is $advertised_channel but dispatch selected $CHANNEL"
+            exit 1
+          }
+          if [ "$CHANNEL" = "canary" ]; then
+            wine_version=$(python3 - <<'PY'
+          import plistlib
+          with open("WhiskyWineVersion.plist", "rb") as f:
+              print(plistlib.load(f).get("wineVersion", ""))
+          PY
+            )
+            [ -n "$wine_version" ] || {
+              echo "::error::canary metadata does not declare wineVersion"
+              exit 1
+            }
+            tar -tzf Libraries.tar.gz > runtime-contents.txt
+            grep -Eq '^\.?/?Libraries/RuntimeManifest\.json$' runtime-contents.txt || {
+              echo "::error::canary runtime has no RuntimeManifest.json"
+              exit 1
+            }
+          fi
           echo "stamped version matches the tag"
 
       - name: Publish the release the app downloads from
@@ -127,22 +176,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.pick.outputs.version }}
+          PRODUCER_TAG: ${{ steps.pick.outputs.producer_tag }}
+          CHANNEL: ${{ inputs.channel || 'stable' }}
+          RUNTIME_REPO: ${{ steps.pick.outputs.runtime_repo }}
         run: |
           set -euo pipefail
-          tag="v$VERSION"
-          notes="Wine runtime $VERSION, built by [$RUNTIME_REPO](https://github.com/$RUNTIME_REPO/releases/tag/runtime-v$VERSION).
+          if [ "$CHANNEL" = "canary" ]; then
+            tag="canary-v$VERSION"
+          else
+            tag="v$VERSION"
+          fi
+          notes="Wine runtime $VERSION ($CHANNEL), built by [$RUNTIME_REPO](https://github.com/$RUNTIME_REPO/releases/tag/$PRODUCER_TAG).
 
-          Whisky downloads this automatically; there is nothing to install by hand."
+          Stable runtimes are downloaded automatically. Canary runtimes remain opt-in and install side by side."
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" Libraries.tar.gz Libraries.tar.gz.sha256 --clobber
           else
+            prerelease_args=()
+            [ "$CHANNEL" = "canary" ] && prerelease_args+=(--prerelease)
             gh release create "$tag" Libraries.tar.gz Libraries.tar.gz.sha256 \
+              "${prerelease_args[@]}" \
               --title "Wine runtime $VERSION" --notes "$notes"
           fi
 
       - name: Point Pages at it
-        if: steps.pick.outputs.go == 'true'
+        if: steps.pick.outputs.go == 'true' && (inputs.channel == 'stable' || inputs.channel == '')
         env:
           VERSION: ${{ steps.pick.outputs.version }}
         run: |
@@ -162,7 +221,7 @@ jobs:
           plutil -p "$PLIST" 2>/dev/null || cat "$PLIST"
 
       - name: Commit and redeploy
-        if: steps.pick.outputs.go == 'true'
+        if: steps.pick.outputs.go == 'true' && (inputs.channel == 'stable' || inputs.channel == '')
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.pick.outputs.version }}

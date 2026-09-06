@@ -189,6 +189,28 @@
       "remediationActionIds": ["reinstall-prefix"]
     },
     {
+      "id": "steam-networking-socket-control-assert",
+      "category": "networkingLaunchers",
+      "severity": "critical",
+      "confidence": 0.99,
+      "substringPrefilter": "No control data returned even though we asked for TOS?",
+      "regex": "No control data returned even though we asked for TOS\\?",
+      "tags": ["steam", "network", "socket", "assert"],
+      "captureGroups": null,
+      "remediationActionIds": ["steam-networking-runtime-info"]
+    },
+    {
+      "id": "eos-external-service-configuration-failure",
+      "category": "networkingLaunchers",
+      "severity": "warning",
+      "confidence": 0.65,
+      "substringPrefilter": "ConnectExternalServiceConfigurationFailure",
+      "regex": "ConnectExternalServiceConfigurationFailure",
+      "tags": ["eos", "steam", "authentication", "network"],
+      "captureGroups": null,
+      "remediationActionIds": ["steam-networking-runtime-info"]
+    },
+    {
       "id": "network-winhttp-tls",
       "category": "networkingLaunchers",
       "severity": "error",

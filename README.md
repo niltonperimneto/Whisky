@@ -196,6 +196,9 @@ of this is tied to your identity.
 - **[Support](docs/SUPPORT.md)** - Where to file bugs and what to expect from a single-maintainer fork
 - **[Governance & continuity](docs/GOVERNANCE.md)** - Who maintains this and the honest bus-factor situation
 - **[Runtime dependencies](docs/DEPENDENCIES.md)** - The bundled Wine/DXVK/D3DMetal/DXMT versions and their upstream sources
+- **[Runtime and PEAK implementation plan](WhiskyWine-11.17-Implementation-Plan.md)** - Current canary status, Wine socket work, Bleeding Edge plans, qualification, and promotion gates
+- **[Logging and process-detection plan](LoggingPlan.md)** - Completed log-tail/process tracking work and remaining diagnostics milestones
+- **[Release workflow](docs/ReleaseWorkflow.md)** - Stable, Canary, and planned Bleeding Edge artifact ownership and promotion rules
 
 WhiskyKit, the core framework powering Whisky, has comprehensive API documentation:
 

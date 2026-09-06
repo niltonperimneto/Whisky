@@ -23,9 +23,26 @@ import WhiskyKit
 
 private let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "ConfigView")
 
+enum ConfigTab: Int, CaseIterable, Identifiable {
+    case general, graphics, integration, advanced
+    var id: Int { self.rawValue }
+
+    var title: LocalizedStringKey {
+        switch self {
+        case .general: return "General"
+        case .graphics: return "Graphics"
+        case .integration: return "Integration"
+        case .advanced: return "Advanced"
+        }
+    }
+}
+
 // swiftlint:disable:next type_body_length
 struct ConfigView: View {
     @Bindable var bottle: Bottle
+    @State private var selectedTab: ConfigTab = .general
+    @State private var searchText: String = ""
+
     @State private var buildVersion: String = ""
     /// The version shown in the picker. Seeded from the prefix rather than from
     /// the settings file, and only written back once the prefix agrees.
@@ -68,133 +85,133 @@ struct ConfigView: View {
         }
     }
 
-    @AppStorage("wineSectionExpanded") private var wineSectionExpanded: Bool = false
-    @AppStorage("performanceSectionExpanded") private var performanceSectionExpanded: Bool = true
-    @AppStorage("launcherSectionExpanded") private var launcherSectionExpanded: Bool = false
-    @AppStorage("inputSectionExpanded") private var inputSectionExpanded: Bool = false
-    @AppStorage("dllOverrideSectionExpanded") private var dllOverrideSectionExpanded: Bool = false
-    @AppStorage("cleanupSectionExpanded") private var cleanupSectionExpanded: Bool = false
-
     var body: some View {
-        Form {
-            // What a game feels first comes first; the Wine plumbing that
-            // built this screen's reputation sits below, collapsed.
-            GraphicsConfigSection(bottle: bottle)
-            AudioConfigSection(bottle: bottle)
-            PerformanceConfigSection(bottle: bottle, isExpanded: $performanceSectionExpanded)
-            ResolutionConfigSection(bottle: bottle)
-            InputConfigSection(bottle: bottle, isExpanded: $inputSectionExpanded)
-            LauncherConfigSection(
-                bottle: bottle,
-                isExpanded: $launcherSectionExpanded,
-                onViewDiagnostics: loadLatestDiagnosisAndView
-            )
-            DiscordConfigSection(bottle: bottle)
-            DependencyConfigSection(bottle: bottle)
-            WineConfigSection(
-                bottle: bottle,
-                isExpanded: $wineSectionExpanded,
-                buildVersion: $buildVersion,
-                windowsVersion: $windowsVersion,
-                retinaModeState: $retinaModeState,
-                dpiConfig: $dpiConfig,
-                winVersionLoadingState: $winVersionLoadingState,
-                buildVersionLoadingState: $buildVersionLoadingState,
-                retinaModeLoadingState: $retinaModeLoadingState,
-                dpiConfigLoadingState: $dpiConfigLoadingState,
-                dpiSheetPresented: $dpiSheetPresented,
-                prefixBusy: prefixBusy,
-                onRetryWindowsVersion: loadWindowsVersion,
-                onRetryBuildVersion: loadBuildName,
-                onRetryRetinaMode: loadRetinaMode,
-                onRetryDpi: loadDpi
-            )
-            DLLOverrideConfigSection(bottle: bottle, isExpanded: $dllOverrideSectionExpanded)
-            gameConfigRevertSection
-            Section("Diagnostics") {
-                Text("Analyze Wine crash output for troubleshooting guidance")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if hasActiveSession {
-                    TroubleshootingEntryBanner(bannerType: .resumeSession) {
-                        showTroubleshootingWizard = true
+        VStack(spacing: 0) {
+            if searchText.isEmpty {
+                Picker("", selection: $selectedTab) {
+                    ForEach(ConfigTab.allCases) { tab in
+                        Text(tab.title).tag(tab)
                     }
                 }
-
-                Button(String(localized: "troubleshooting.entry.startGuided")) {
-                    showTroubleshootingWizard = true
-                }
-
-                Button("Export Diagnostic Report\u{2026}") {
-                    loadLatestDiagnosisAndExport()
-                }
-                .disabled(latestDiagnosis == nil && mostRecentlyDiagnosedProgram == nil)
-
-                Button("View Latest Diagnosis") {
-                    loadLatestDiagnosisAndView()
-                }
-                .disabled(mostRecentlyDiagnosedProgram == nil)
-
-                TroubleshootingHistoryView(
-                    bottleURL: bottle.url,
-                    programURL: nil
-                )
+                .pickerStyle(.segmented)
+                .padding()
             }
-            Section("Stability") {
-                Button("Generate Stability Diagnostics") {
-                    Task {
-                        stabilityDiagnosticReport = await StabilityDiagnostics.generateDiagnosticReport(for: bottle)
-                        showStabilityDiagnostics = true
-                    }
+            Form {
+                if !searchText.isEmpty || selectedTab == .general {
+                    RuntimePickerView(bottle: bottle)
+                    WineConfigSection(
+                        bottle: bottle,
+                        buildVersion: $buildVersion,
+                        windowsVersion: $windowsVersion,
+                        retinaModeState: $retinaModeState,
+                        dpiConfig: $dpiConfig,
+                        winVersionLoadingState: $winVersionLoadingState,
+                        buildVersionLoadingState: $buildVersionLoadingState,
+                        retinaModeLoadingState: $retinaModeLoadingState,
+                        dpiConfigLoadingState: $dpiConfigLoadingState,
+                        dpiSheetPresented: $dpiSheetPresented,
+                        prefixBusy: prefixBusy,
+                        onRetryWindowsVersion: loadWindowsVersion,
+                        onRetryBuildVersion: loadBuildName,
+                        onRetryRetinaMode: loadRetinaMode,
+                        onRetryDpi: loadDpi
+                    )
+                    DependencyConfigSection(bottle: bottle)
                 }
-                .help("Generates a bounded, privacy-safe report for issue triage.")
 
-                Button {
-                    Task {
-                        isRepairingPrefix = true
-                        defer {
-                            bottle.clearWineUsernameCache()
-                            isRepairingPrefix = false
-                        }
-                        do {
-                            try await Wine.repairPrefix(bottle: bottle)
-                            // Validate immediately after repair to confirm directories were created
-                            let result = WinePrefixValidation.validatePrefix(for: bottle)
-                            if result.isValid {
-                                prefixRepairResult = .success
-                            } else {
-                                prefixRepairResult = .failure(
-                                    String(localized: "config.repairPrefix.validationFailed")
-                                )
+                if !searchText.isEmpty || selectedTab == .graphics {
+                    GraphicsConfigSection(bottle: bottle)
+                    PerformanceConfigSection(bottle: bottle)
+                    ResolutionConfigSection(bottle: bottle)
+                    InputConfigSection(bottle: bottle)
+                }
+
+                if !searchText.isEmpty || selectedTab == .integration {
+                    AudioConfigSection(bottle: bottle)
+                    LauncherConfigSection(
+                        bottle: bottle,
+                        bottleIsRunning: ProcessRegistry.shared.hasActiveProcesses(for: bottle.url),
+                        onViewDiagnostics: loadLatestDiagnosisAndView
+                    )
+                    DiscordConfigSection(bottle: bottle)
+                }
+
+                if !searchText.isEmpty || selectedTab == .advanced {
+                    DLLOverrideConfigSection(bottle: bottle)
+                    gameConfigRevertSection
+                    Section("Diagnostics") {
+                        Text("Analyze Wine crash output for troubleshooting guidance")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if hasActiveSession {
+                            TroubleshootingEntryBanner(bannerType: .resumeSession) {
+                                showTroubleshootingWizard = true
                             }
-                        } catch {
-                            prefixRepairResult = .failure(error.localizedDescription)
                         }
-                    }
-                } label: {
-                    HStack {
-                        Text("config.repairPrefix")
-                        if isRepairingPrefix {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.leading, 4)
+                        Button(String(localized: "troubleshooting.entry.startGuided")) {
+                            showTroubleshootingWizard = true
                         }
+                        Button("Export Diagnostic Report…") {
+                            loadLatestDiagnosisAndExport()
+                        }
+                        .disabled(latestDiagnosis == nil && mostRecentlyDiagnosedProgram == nil)
+                        Button("View Latest Diagnosis") {
+                            loadLatestDiagnosisAndView()
+                        }
+                        .disabled(mostRecentlyDiagnosedProgram == nil)
+                        TroubleshootingHistoryView(
+                            bottleURL: bottle.url,
+                            programURL: nil
+                        )
                     }
+                    Section("Stability") {
+                        Button("Generate Stability Diagnostics") {
+                            Task {
+                                stabilityDiagnosticReport = await StabilityDiagnostics
+                                    .generateDiagnosticReport(for: bottle)
+                                showStabilityDiagnostics = true
+                            }
+                        }
+                        .help("Generates a bounded, privacy-safe report for issue triage.")
+                        Button {
+                            Task {
+                                isRepairingPrefix = true
+                                defer {
+                                    bottle.clearWineUsernameCache()
+                                    isRepairingPrefix = false
+                                }
+                                do {
+                                    try await Wine.repairPrefix(bottle: bottle)
+                                    let result = WinePrefixValidation.validatePrefix(for: bottle)
+                                    if result.isValid {
+                                        prefixRepairResult = .success
+                                    } else {
+                                        prefixRepairResult = .failure(
+                                            String(localized: "config.repairPrefix.validationFailed")
+                                        )
+                                    }
+                                } catch {
+                                    prefixRepairResult = .failure(error.localizedDescription)
+                                }
+                            }
+                        } label: {
+                            HStack {
+                                Text("config.repairPrefix")
+                                if isRepairingPrefix {
+                                    ProgressView().controlSize(.small).padding(.leading, 4)
+                                }
+                            }
+                        }
+                        .disabled(isRepairingPrefix)
+                        .help("config.repairPrefix.help")
+                    }
+                    CleanupConfigSection(bottle: bottle)
                 }
-                .disabled(isRepairingPrefix)
-                .help("config.repairPrefix.help")
             }
-            CleanupConfigSection(bottle: bottle, isExpanded: $cleanupSectionExpanded)
+            .formStyle(.grouped)
         }
-        .formStyle(.grouped)
-        .animation(.whiskyDefault, value: wineSectionExpanded)
-        .animation(.whiskyDefault, value: launcherSectionExpanded)
-        .animation(.whiskyDefault, value: inputSectionExpanded)
-        .animation(.whiskyDefault, value: performanceSectionExpanded)
-        .animation(.whiskyDefault, value: dllOverrideSectionExpanded)
-        .animation(.whiskyDefault, value: cleanupSectionExpanded)
-        .sheet(isPresented: $showTroubleshootingWizard) {
+        .searchable(text: $searchText)
+                .sheet(isPresented: $showTroubleshootingWizard) {
             TroubleshootingWizardView(
                 bottle: bottle,
                 program: nil,

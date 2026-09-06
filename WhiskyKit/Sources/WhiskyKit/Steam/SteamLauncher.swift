@@ -69,6 +69,12 @@ public enum SteamLauncher {
             userOverrides: installURL.flatMap { userOverrides(forInstallURL: $0, bottle: bottle) }
         )
         let steamExe = steamRoot.appending(path: "steam.exe")
+        let requestedGameBackend = plan.overrides.graphicsBackend ?? bottle.settings.graphicsBackend
+        let gameBackend = requestedGameBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+            : requestedGameBackend
+        let descendantRoutes = (installURL.map { SteamLibrary.executableURLs(under: $0) } ?? [])
+            .map { Wine.BackendRoute(executableName: $0.lastPathComponent, backend: gameBackend) }
 
         return Task {
             await Wine.syncAudioRegistry(bottle: bottle)
@@ -83,6 +89,7 @@ public enum SteamLauncher {
                 // client is only the vehicle and it starts other games too.
                 identityScope: .program,
                 overridesApplyToDescendants: true,
+                descendantBackendRoutes: descendantRoutes,
                 // The client hands the game its own handles, so an attached
                 // client is what puts the game's output in the run's log. This
                 // task holds the call for the whole session, which is what the
@@ -127,6 +134,20 @@ public enum SteamLauncher {
     /// Finds the bottle to launch an App ID from: the remembered route when it
     /// still has the game installed, otherwise the first bottle that does.
     ///
+    /// Resolves both the game and the bottle it was found in.
+    @MainActor
+    public static func resolveGame(
+        appId: Int, in bottles: [Bottle], routing: GameRouting = GameRouting()
+    ) throws -> (game: SteamGame, bottle: Bottle) {
+        let bottle = try resolveBottle(appId: appId, in: bottles, routing: routing)
+        guard let game = SteamLibrary.enumerate(bottleURL: bottle.url)
+            .first(where: { $0.appId == appId })
+        else {
+            throw SteamLaunchError.gameNotFound(appId: appId)
+        }
+        return (game, bottle)
+    }
+
     /// - Parameters:
     ///   - appId: The Steam App ID to locate.
     ///   - bottles: The bottles to search.

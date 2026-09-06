@@ -81,6 +81,12 @@ public struct BottleLauncherConfig: Codable, Equatable {
     /// Default: 60000ms (60 seconds)
     var networkTimeout: Int = 60_000
 
+    /// How Whisky handles runtime networking features used by Steam/EOS.
+    var networkCompatibilityMode: NetworkCompatibilityMode = .off
+
+    /// Prevents supported launcher overlays from being injected into games.
+    var blockInjectedOverlays: Bool = false
+
     /// Whether to automatically apply DXVK when launcher requires it.
     ///
     /// Some launchers (Rockstar) will not render UI without DXVK.
@@ -97,8 +103,26 @@ public struct BottleLauncherConfig: Codable, Equatable {
         self.gpuSpoofing = try container.decodeIfPresent(Bool.self, forKey: .gpuSpoofing) ?? true
         self.gpuVendor = container.decodeLenientIfPresent(GPUVendor.self, forKey: .gpuVendor) ?? .nvidia
         self.networkTimeout = try container.decodeIfPresent(Int.self, forKey: .networkTimeout) ?? 60_000
+        self.networkCompatibilityMode = container.decodeLenientIfPresent(
+            NetworkCompatibilityMode.self,
+            forKey: .networkCompatibilityMode
+        ) ?? .off
+        self.blockInjectedOverlays = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .blockInjectedOverlays
+        ) ?? false
         self.autoEnableDXVK = try container.decodeIfPresent(Bool.self, forKey: .autoEnableDXVK) ?? true
     }
+}
+
+/// Bottle-level policy for Wine networking capabilities used by game services.
+public enum NetworkCompatibilityMode: String, Codable, CaseIterable, Sendable {
+    /// Preserve the runtime's normal networking behavior.
+    case off
+    /// Use a compatibility runtime only when its cached capability result requires it.
+    case automatic
+    /// Require a runtime verified for SteamNetworkingSockets ancillary data.
+    case strict
 }
 
 /// Launcher detection mode for dual-mode configuration system.

@@ -100,6 +100,24 @@ final class DLLOverrideRegistryTests: XCTestCase {
         XCTAssertTrue(Wine.helperExecutables(for: url).isEmpty)
     }
 
+    func testD3DMetalRouteForcesBuiltinGraphicsModules() {
+        let route = Wine.BackendRoute(executableName: "PEAK.exe", backend: .d3dMetal)
+        let parsed = Wine.parseDLLOverrides(route.dllOverrides)
+
+        XCTAssertEqual(parsed["d3d11"], "b")
+        XCTAssertEqual(parsed["d3d12"], "b")
+        XCTAssertEqual(parsed["dxgi"], "b")
+    }
+
+    func testDXVKRouteDoesNotContainD3D12() {
+        let route = Wine.BackendRoute(executableName: "steamwebhelper.exe", backend: .dxvk)
+        let parsed = Wine.parseDLLOverrides(route.dllOverrides)
+
+        XCTAssertEqual(parsed["d3d11"], "n,b")
+        XCTAssertEqual(parsed["dxgi"], "n,b")
+        XCTAssertNil(parsed["d3d12"])
+    }
+
     func testUnknownExecutableCarriesNothing() {
         XCTAssertTrue(Wine.helperExecutables(for: URL(filePath: "/B/thing.exe")).isEmpty)
     }

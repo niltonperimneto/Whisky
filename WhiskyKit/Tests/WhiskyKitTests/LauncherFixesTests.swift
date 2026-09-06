@@ -157,7 +157,7 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         XCTAssertEqual(bottle.settings.detectedLauncher, .steam)
         XCTAssertEqual(bottle.settings.launcherLocale, .english)
         XCTAssertTrue(bottle.settings.dxvk)
-        XCTAssertTrue(bottle.settings.dxvkAsync)
+        XCTAssertFalse(bottle.settings.dxvkAsync)
         XCTAssertTrue(bottle.settings.gpuSpoofing)
         XCTAssertEqual(bottle.settings.networkTimeout, 90_000)
 
@@ -167,7 +167,7 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         XCTAssertEqual(persisted.detectedLauncher, .steam)
         XCTAssertEqual(persisted.launcherLocale, .english)
         XCTAssertTrue(persisted.dxvk)
-        XCTAssertTrue(persisted.dxvkAsync)
+        XCTAssertFalse(persisted.dxvkAsync)
         XCTAssertTrue(persisted.gpuSpoofing)
         XCTAssertEqual(persisted.networkTimeout, 90_000)
     }
@@ -190,7 +190,7 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
     }
 
     @MainActor
-    func testForceReappliesSteamDXVKSettings() {
+    func testForceDoesNotEnableAsyncCompilationForSteamCEF() {
         let bottle = makeBottle()
         bottle.settings.dxvk = true
         bottle.settings.dxvkAsync = false
@@ -198,6 +198,6 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         LauncherFixes.apply(to: bottle, launcher: .steam, force: true)
 
         XCTAssertTrue(bottle.settings.dxvk)
-        XCTAssertTrue(bottle.settings.dxvkAsync)
+        XCTAssertFalse(bottle.settings.dxvkAsync)
     }
 }

@@ -182,6 +182,9 @@ public extension Process {
                     emitsOutput: context.emitsOutput
                 )
                 try context.fileHandle?.closeWineLog()
+                if let fileHandle = context.fileHandle {
+                    WineSubprocessTracker.shared.unregisterSession(handle: fileHandle)
+                }
             } catch {
                 Logger.wineKit.error("Error while clearing data: \(error)")
             }
@@ -228,6 +231,9 @@ public extension Process {
             Logger.wineKit.warning("\(line, privacy: .public)")
         }
         fileHandle?.writeWineLog(line: line)
+        if let fileHandle {
+            WineSubprocessTracker.shared.processLine(line, for: fileHandle)
+        }
     }
 
     private func logTermination(name: String) {

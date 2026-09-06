@@ -27,7 +27,7 @@ enum RetinaModeState: Equatable {
 struct WineConfigSection: View {
     private static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "ConfigView")
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
+
     @Binding var buildVersion: String
     @Binding var windowsVersion: WinVersion
     @Binding var retinaModeState: RetinaModeState
@@ -49,7 +49,7 @@ struct WineConfigSection: View {
     var onRetryDpi: (() -> Void)?
 
     var body: some View {
-        Section("config.title.wine", isExpanded: $isExpanded) {
+        Section("config.title.wine") {
             RuntimePickerView(bottle: bottle)
             if prefixBusy {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

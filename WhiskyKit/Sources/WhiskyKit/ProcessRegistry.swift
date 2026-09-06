@@ -142,7 +142,11 @@ public final class ProcessRegistry: @unchecked Sendable {
             for info in processes where info.pid == pid {
                 var mutableProcesses = processes
                 mutableProcesses.remove(info)
-                activeProcesses[bottleURL] = mutableProcesses
+                if mutableProcesses.isEmpty {
+                    activeProcesses.removeValue(forKey: bottleURL)
+                } else {
+                    activeProcesses[bottleURL] = mutableProcesses
+                }
 
                 releaseDisplayWakeAssertionIfIdleLocked()
 
@@ -170,7 +174,14 @@ public final class ProcessRegistry: @unchecked Sendable {
     public func getAllProcesses() -> [URL: Set<ProcessInfo>] {
         lock.lock()
         defer { lock.unlock() }
-        return activeProcesses
+        return activeProcesses.filter { !$0.value.isEmpty }
+    }
+
+    /// Returns whether any active processes exist across all bottles.
+    public var hasActiveProcesses: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return totalProcessCountLocked() > 0
     }
 
     /// Returns the number of active processes for a specific bottle.

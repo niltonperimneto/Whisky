@@ -32,6 +32,10 @@ public enum GPTKImportError: LocalizedError, Equatable {
     case versionUnreadable
     /// No imported payload exists in the store to deploy or remove.
     case storeEmpty
+    /// A shared Wine runtime cannot be changed while any tracked Wine process is active.
+    case runtimeBusy
+    /// Files copied into the runtime do not match the imported GPTK payload.
+    case deploymentVerificationFailed
 
     public var errorDescription: String? {
         switch self {
@@ -45,6 +49,10 @@ public enum GPTKImportError: LocalizedError, Equatable {
             String(localized: "gptk.error.versionUnreadable")
         case .storeEmpty:
             String(localized: "gptk.error.storeEmpty")
+        case .runtimeBusy:
+            "GPTK runtime maintenance was postponed because a bottle is running."
+        case .deploymentVerificationFailed:
+            "The GPTK payload did not pass verification after deployment."
         }
     }
 }
@@ -82,6 +90,13 @@ public struct GPTKStoreRecord: Codable, Equatable, Sendable {
 /// process that runs D3DMetal code. Only runtimes that advertise
 /// `gptkCapable` in their version plist get the payload deployed.
 public enum GPTKImporter {
+    /// Returns the runtime-specific clean DXGI backup after upgrading stores
+    /// created before originals were split by runtime.
+    static func originalDXGI(inStore store: URL, runtime: String?) throws -> URL {
+        try migrateFlatOriginals(inStore: store)
+        return originalsFolder(inStore: store, key: originalsKey(for: runtime))
+            .appending(path: "dxgi.dll")
+    }
     static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "GPTKImporter")
 
     /// The D3D forwarders Apple ships, and the only ones deployed. GPTK 4 has

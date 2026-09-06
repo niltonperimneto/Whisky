@@ -189,6 +189,7 @@ public struct BottleSettings: Codable, Equatable {
         self.customDLLOverrides = []
     }
 
+    // swiftlint:disable:next function_body_length
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.fileVersion = try container.decodeIfPresent(SemanticVersion.self, forKey: .fileVersion) ?? Self
@@ -241,6 +242,16 @@ public struct BottleSettings: Codable, Equatable {
             [DLLOverrideEntry].self,
             forKey: .customDLLOverrides
         ) ?? []
+        normalizeLegacyGraphicsConfig(hasGraphicsConfig: hasGraphicsConfig)
+    }
+
+    private mutating func normalizeLegacyGraphicsConfig(hasGraphicsConfig: Bool) {
+        // Once the modern backend field exists it is authoritative. Keep the
+        // legacy mirror coherent so older readers and diagnostics cannot report
+        // the opposite state from the backend Whisky will actually launch.
+        if hasGraphicsConfig {
+            dxvkConfig.dxvk = graphicsConfig.backend == .dxvk
+        }
     }
 
     /// The display name of this bottle.
@@ -623,6 +634,18 @@ public struct BottleSettings: Codable, Equatable {
         set { launcherConfig.networkTimeout = newValue }
     }
 
+    /// Runtime-level compatibility policy for Steam/EOS networking.
+    public var networkCompatibilityMode: NetworkCompatibilityMode {
+        get { launcherConfig.networkCompatibilityMode }
+        set { launcherConfig.networkCompatibilityMode = newValue }
+    }
+
+    /// Whether supported injected overlays are blocked for this bottle.
+    public var blockInjectedOverlays: Bool {
+        get { launcherConfig.blockInjectedOverlays }
+        set { launcherConfig.blockInjectedOverlays = newValue }
+    }
+
     /// Whether to automatically enable DXVK when launcher requires it.
     ///
     /// Rockstar Games Launcher requires DXVK to render logo screen.
@@ -871,11 +894,9 @@ public struct BottleSettings: Codable, Equatable {
         var managedDLLOverrides: [(entry: DLLOverrideEntry, source: DLLOverrideSource)] = []
 
         // Resolve the graphics backend (`.recommended` -> concrete backend)
-        let resolvedBackend = if graphicsBackend == .recommended {
-            resolvedBackend ?? GraphicsBackendResolver.resolve(for: runtime)
-        } else {
-            graphicsBackend
-        }
+        let resolvedBackend = resolvedBackend ?? (graphicsBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: runtime)
+            : graphicsBackend)
 
         // Backend-conditional env vars and DLL overrides
         switch resolvedBackend {
@@ -1030,7 +1051,18 @@ public struct BottleSettings: Codable, Equatable {
     public func populateLauncherManagedLayer(
         builder: inout EnvironmentBuilder
     ) -> [(entry: DLLOverrideEntry, source: DLLOverrideSource)] {
-        var launcherDLLOverrides: [(entry: DLLOverrideEntry, source: DLLOverrideSource)] = []
+        let launcherDLLOverrides: [(entry: DLLOverrideEntry, source: DLLOverrideSource)] = []
+
+        // Overlay blocking is an independent bottle policy. It must not be
+        // coupled to launcher compatibility or to any graphics backend.
+        for (key, value) in OverlayBlockingPolicy.environment(enabled: blockInjectedOverlays) {
+            builder.set(
+                key,
+                value,
+                layer: .launcherManaged,
+                reason: "Bottle policy blocks supported injected overlays"
+            )
+        }
 
         guard launcherCompatibilityMode else { return launcherDLLOverrides }
 
@@ -1045,12 +1077,9 @@ public struct BottleSettings: Codable, Equatable {
             }
             launcherProvidesLocale = fixDetails.contains { $0.key == "LC_ALL" }
 
-            // Auto-enable DXVK DLL overrides if launcher requires it
-            if autoEnableDXVK, launcher.requiresDXVK {
-                for entry in DLLOverrideResolver.dxvkPreset {
-                    launcherDLLOverrides.append((entry: entry, source: .launcher(launcher.displayName)))
-                }
-            }
+            // Backend steering is handled once by Wine.GraphicsLaunchPlan. DLL
+            // overrides here would be merged with the selected game backend and
+            // could create a DXVK/DXMT/D3DMetal hybrid configuration.
         }
 
         // Apply locale override if specified (not using launcher default)

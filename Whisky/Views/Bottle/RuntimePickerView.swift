@@ -32,8 +32,8 @@ struct RuntimePickerView: View {
     @State private var loadingState: LoadingState = .success
 
     var body: some View {
-        Group {
-            if runtimes.count > 1 {
+        Section("config.runtime") {
+
                 SettingItemView(
                     title: "config.runtime",
                     description: "config.runtime.info",
@@ -46,7 +46,6 @@ struct RuntimePickerView: View {
                     }
                     .labelsHidden()
                 }
-            }
         }
         .task { runtimes = WhiskyWineInstaller.installedRuntimes() }
     }

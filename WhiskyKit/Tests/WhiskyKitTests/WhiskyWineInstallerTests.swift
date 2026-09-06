@@ -277,6 +277,7 @@ final class WhiskyWineInstallerTests: XCTestCase {
         let sourceDir = tempDir.appendingPathComponent("Libraries")
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try Data("marker".utf8).write(to: sourceDir.appendingPathComponent("marker.txt"))
+        try makeInstallableRuntime(in: sourceDir)
 
         let tarball = tempDir.appendingPathComponent("archive").appendingPathExtension("tar.gz")
         let tar = Process()
@@ -302,6 +303,7 @@ final class WhiskyWineInstallerTests: XCTestCase {
         let sourceDir = tempDir.appendingPathComponent("Libraries")
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try Data("marker".utf8).write(to: sourceDir.appendingPathComponent("marker.txt"))
+        try makeInstallableRuntime(in: sourceDir)
 
         let tarball = tempDir.appendingPathComponent("archive").appendingPathExtension("tar.gz")
         let tar = Process()
@@ -343,6 +345,7 @@ final class WhiskyWineInstallerTests: XCTestCase {
         let sourceDir = tempDir.appendingPathComponent("Libraries")
         try FileManager.default.createDirectory(at: sourceDir, withIntermediateDirectories: true)
         try Data("marker".utf8).write(to: sourceDir.appendingPathComponent("marker.txt"))
+        try makeInstallableRuntime(in: sourceDir)
 
         let tarball = tempDir.appendingPathComponent("archive").appendingPathExtension("tar.gz")
         let tar = Process()
@@ -378,6 +381,17 @@ final class WhiskyWineInstallerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: stale.path), "Stale runtime contents are replaced")
         let extracted = destination.appendingPathComponent("Libraries/marker.txt")
         XCTAssertTrue(FileManager.default.fileExists(atPath: extracted.path))
+    }
+
+    private func makeInstallableRuntime(in folder: URL) throws {
+        let bin = folder.appendingPathComponent("Wine/bin")
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try Data("fake wine".utf8).write(to: bin.appendingPathComponent("wine64"))
+        let plist: [String: Any] = [
+            "version": ["major": 1, "minor": 0, "patch": 0]
+        ]
+        try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+            .write(to: folder.appendingPathComponent("WhiskyWineVersion.plist"))
     }
 }
 

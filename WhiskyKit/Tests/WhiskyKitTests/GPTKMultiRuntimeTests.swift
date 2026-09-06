@@ -103,6 +103,24 @@ struct GPTKMultiRuntimeTests {
         ))
     }
 
+    @Test("Resolving DXGI migrates a legacy flat backup before launch")
+    func resolvingDXGIMigratesFlatOriginals() throws {
+        let store = try makeImportedStore(in: tempDir)
+        let runtime = tempDir.appending(path: "Libraries")
+        try makeRuntime(at: runtime, marker: "default wine")
+        try writeRuntimeVersion(at: runtime, 1, 0, 0)
+        try makeFlatOriginals(inStore: store, from: runtime, version: "1.0.0")
+
+        let dxgi = try GPTKImporter.originalDXGI(inStore: store, runtime: nil)
+
+        #expect(dxgi == GPTKImporter.originalsFolder(inStore: store, key: "default")
+            .appending(path: "dxgi.dll"))
+        #expect(FileManager.default.fileExists(atPath: dxgi.path(percentEncoded: false)))
+        #expect(!FileManager.default.fileExists(
+            atPath: store.appending(path: "originals/dxgi.dll").path(percentEncoded: false)
+        ))
+    }
+
     @Test("Migrating a migrated store changes nothing")
     func migrationIsIdempotent() throws {
         let store = try makeImportedStore(in: tempDir)

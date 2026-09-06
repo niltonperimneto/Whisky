@@ -16,7 +16,6 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-import Combine
 import Foundation
 import Observation
 import WhiskyKit
@@ -59,7 +58,6 @@ final class SteamClientOrchestrator {
 
     private let bottle: Bottle
     private let downloadMonitor = SteamDownloadMonitor()
-    private var cancellables: Set<AnyCancellable> = []
     private var trackingTask: Task<Void, Never>?
     private var executableNamesByAppId: [Int: Set<String>] = [:]
     /// The in-flight client startup, so concurrent launches await one attempt

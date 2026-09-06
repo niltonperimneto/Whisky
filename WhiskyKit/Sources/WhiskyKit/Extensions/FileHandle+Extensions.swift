@@ -28,11 +28,16 @@ private final class WineLogCapRegistry: @unchecked Sendable {
     private struct State {
         var bytesWritten: Int64
         var didWriteTruncationMarker: Bool
+        var tailBuffer: [Data]
+        var tailBytes: Int
     }
 
     private let lock = NSLock()
     private var states: [ObjectIdentifier: State] = [:]
     private nonisolated(unsafe) static var deinitObserverKey: UInt8 = 0
+
+    /// Size reserved for the rolling tail buffer when logs exceed the limit (4 MiB).
+    private static let tailCapBytes: Int = 4 * 1024 * 1024
 
     private final class DeinitObserver {
         let onDeinit: () -> Void
@@ -54,57 +59,96 @@ private final class WineLogCapRegistry: @unchecked Sendable {
 
         var state = states[key] ?? State(
             bytesWritten: currentSizeBytes(for: handle),
-            didWriteTruncationMarker: false
+            didWriteTruncationMarker: false,
+            tailBuffer: [],
+            tailBytes: 0
         )
-
-        // Once truncation starts, discard further output without buffering.
-        if state.didWriteTruncationMarker {
-            // `state` isn't mutated in this branch, so writing it back to `states` would be redundant.
-            return
-        }
 
         let maxBytes = Wine.maxLogFileBytes
         let markerData = Wine.logTruncationMarker.data(using: .utf8) ?? Data()
-        let dataCap = max(0, maxBytes - Int64(markerData.count))
+        let tailCap = min(Int(maxBytes / 4), Self.tailCapBytes)
+        let headCap = max(0, maxBytes - Int64(tailCap) - Int64(markerData.count))
 
-        if state.bytesWritten < dataCap {
-            let remainingForData = dataCap - state.bytesWritten
-            if Int64(data.count) <= remainingForData {
-                writeData(data, to: handle)
-                state.bytesWritten += Int64(data.count)
-            } else {
-                if remainingForData > 0 {
-                    let prefix = data.prefix(Int(remainingForData))
-                    writeData(prefix, to: handle)
-                    state.bytesWritten += Int64(prefix.count)
+        if !state.didWriteTruncationMarker {
+            if state.bytesWritten < headCap {
+                let remainingForData = headCap - state.bytesWritten
+                if Int64(data.count) <= remainingForData {
+                    writeData(data, to: handle)
+                    state.bytesWritten += Int64(data.count)
+                } else {
+                    if remainingForData > 0 {
+                        let prefix = data.prefix(Int(remainingForData))
+                        writeData(prefix, to: handle)
+                        state.bytesWritten += Int64(prefix.count)
+                    }
+                    let suffix = data.dropFirst(Int(remainingForData))
+                    state.didWriteTruncationMarker = true
+                    appendTail(Data(suffix), to: &state, tailCap: tailCap)
                 }
-                writeTruncationMarkerIfPossible(markerData, maxBytes: maxBytes, state: &state, handle: handle)
+            } else {
+                state.didWriteTruncationMarker = true
+                appendTail(data, to: &state, tailCap: tailCap)
             }
         } else {
-            // We've hit the data budget; begin truncation and append the marker once.
-            writeTruncationMarkerIfPossible(markerData, maxBytes: maxBytes, state: &state, handle: handle)
+            appendTail(data, to: &state, tailCap: tailCap)
         }
 
         states[key] = state
     }
 
-    func removeState(for handle: FileHandle) {
-        removeState(forKey: ObjectIdentifier(handle))
+    private func appendTail(_ data: Data, to state: inout State, tailCap: Int) {
+        guard !data.isEmpty, tailCap > 0 else { return }
+        state.tailBuffer.append(data)
+        state.tailBytes += data.count
+
+        while state.tailBytes > tailCap, !state.tailBuffer.isEmpty {
+            let excess = state.tailBytes - tailCap
+            if state.tailBuffer[0].count <= excess {
+                state.tailBytes -= state.tailBuffer[0].count
+                state.tailBuffer.removeFirst()
+            } else {
+                state.tailBuffer[0] = state.tailBuffer[0].dropFirst(excess)
+                state.tailBytes -= excess
+                break
+            }
+        }
     }
 
-    private func removeState(forKey key: ObjectIdentifier) {
+    func flushAndRemoveState(for handle: FileHandle) {
+        let key = ObjectIdentifier(handle)
         lock.lock()
-        defer { lock.unlock() }
-        states.removeValue(forKey: key)
+        guard let state = states.removeValue(forKey: key) else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        if state.didWriteTruncationMarker {
+            let markerData = Wine.logTruncationMarker.data(using: .utf8) ?? Data()
+            writeData(markerData, to: handle)
+            for chunk in state.tailBuffer {
+                writeData(chunk, to: handle)
+            }
+        }
+    }
+
+    func removeState(for handle: FileHandle) {
+        flushAndRemoveState(for: handle)
     }
 
     private func attachDeinitObserverIfNeeded(to handle: FileHandle, key: ObjectIdentifier) {
         // Ensure state is cleared even if `closeWineLog()` isn't called (e.g., early returns / errors).
         if objc_getAssociatedObject(handle, &Self.deinitObserverKey) != nil { return }
         let observer = DeinitObserver { [weak self] in
-            self?.removeState(forKey: key)
+            self?.cleanStateOnDeinit(forKey: key)
         }
         objc_setAssociatedObject(handle, &Self.deinitObserverKey, observer, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    private func cleanStateOnDeinit(forKey key: ObjectIdentifier) {
+        lock.lock()
+        defer { lock.unlock() }
+        states.removeValue(forKey: key)
     }
 
     private func currentSizeBytes(for handle: FileHandle) -> Int64 {
@@ -131,22 +175,6 @@ private final class WineLogCapRegistry: @unchecked Sendable {
         } catch {
             Logger.wineKit.info("Failed to write log data: \(error)")
         }
-    }
-
-    private func writeTruncationMarkerIfPossible(
-        _ markerData: Data,
-        maxBytes: Int64,
-        state: inout State,
-        handle: FileHandle
-    ) {
-        guard !state.didWriteTruncationMarker else { return }
-        let remainingTotal = maxBytes - state.bytesWritten
-        if remainingTotal > 0 {
-            let markerSlice = markerData.prefix(Int(remainingTotal))
-            writeData(markerSlice, to: handle)
-            state.bytesWritten += Int64(markerSlice.count)
-        }
-        state.didWriteTruncationMarker = true
     }
 }
 
@@ -184,18 +212,16 @@ extension FileHandle {
     /// Writes a line to a Whisky log file while enforcing the log size cap.
     ///
     /// This method is thread-safe across concurrent stdout/stderr writers for the same file handle.
-    /// Once the per-file cap is reached, additional output is discarded without buffering.
-    /// A single truncation marker is appended once when truncation begins.
+    /// Preserves the startup head of the log and maintains a rolling tail buffer of the latest output,
+    /// ensuring late-session crash data is never discarded while keeping total file size bounded.
     func writeWineLog(line: String) {
         guard let data = line.data(using: .utf8) else { return }
         WineLogCapRegistry.shared.write(data, to: self)
     }
 
-    /// Closes a Whisky log file handle and clears any associated in-memory cap state.
+    /// Closes a Whisky log file handle, flushing any rolling tail buffer and clearing cap state.
     func closeWineLog() throws {
-        defer {
-            WineLogCapRegistry.shared.removeState(for: self)
-        }
+        WineLogCapRegistry.shared.flushAndRemoveState(for: self)
         try close()
     }
 
@@ -248,6 +274,11 @@ extension FileHandle {
             let version = info.version
             let name = info.name.map { " (\($0))" } ?? ""
             header += "WhiskyWine Version: \(version.major).\(version.minor).\(version.patch)\(name)\n"
+            header += "Wine Version: \(info.wineVersion ?? "unreported")\n"
+            header += "Runtime Channel: \(info.releaseChannel?.rawValue ?? "legacy")\n"
+            header += "Wine Source: \(Self.shortRevision(info.wineSourceRevision))\n"
+            header += "Runtime Architecture: \(info.buildArchitecture ?? "unreported")\n"
+            header += "Runtime Network Verified: \(info.capabilities?.hasVerifiedReceiveMessagePath == true)\n"
         }
         header += "Windows Version: \(bottle.settings.windowsVersion)\n"
         header += "Enhanced Sync: \(bottle.settings.enhancedSync)\n\n"
@@ -262,5 +293,10 @@ extension FileHandle {
         }
 
         writeWineLog(line: header)
+    }
+
+    private static func shortRevision(_ revision: String?) -> String {
+        guard let revision, !revision.isEmpty else { return "unreported" }
+        return String(revision.prefix(12))
     }
 }

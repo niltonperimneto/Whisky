@@ -205,12 +205,35 @@ final class WineDXVKResidueTests: XCTestCase {
     func testDeployedPayloadWithoutStoredOriginalIsANoOp() throws {
         try builtinFake("wine-fake").write(to: dxgi("system32"))
 
-        Wine.reconcileDXGIForDXVK(
+        let succeeded = Wine.reconcileDXGIForDXVK(
             prefixRoot: prefixRoot,
             gptkOriginalsDXGI: originalsDXGI,
             gptkPayloadIsDeployed: true
         )
 
         XCTAssertEqual(try Data(contentsOf: dxgi("system32")), builtinFake("wine-fake"))
+        XCTAssertFalse(succeeded)
+    }
+
+    func testDXGIStrategyDetectsCorrectDeployedCompatibilityDLL() throws {
+        try writeOriginals(builtinFake("stored-original"))
+        XCTAssertTrue(Wine.reconcileDXGIForDXVK(
+            prefixRoot: prefixRoot,
+            gptkOriginalsDXGI: originalsDXGI,
+            gptkPayloadIsDeployed: true
+        ))
+
+        XCTAssertTrue(Wine.dxgiStrategyMatches(
+            prefixRoot: prefixRoot,
+            gptkOriginalsDXGI: originalsDXGI,
+            gptkPayloadIsDeployed: true
+        ))
+
+        try nativeFake("foreign-dxgi").write(to: dxgi("system32"))
+        XCTAssertFalse(Wine.dxgiStrategyMatches(
+            prefixRoot: prefixRoot,
+            gptkOriginalsDXGI: originalsDXGI,
+            gptkPayloadIsDeployed: true
+        ))
     }
 }

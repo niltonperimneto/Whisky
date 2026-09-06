@@ -126,7 +126,6 @@ public enum LauncherFixes {
             // DXVK improves Steam UI performance
             if force || !bottle.settings.dxvk {
                 bottle.settings.dxvk = true
-                bottle.settings.dxvkAsync = true
             }
 
             // GPU spoofing helps with game compatibility checks

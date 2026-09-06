@@ -21,10 +21,9 @@ import WhiskyKit
 
 struct PerformanceConfigSection: View {
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
 
     var body: some View {
-        Section("config.title.performance", isExpanded: $isExpanded) {
+        Section("config.title.performance") {
             Picker("config.performancePreset", selection: $bottle.settings.performancePreset) {
                 ForEach(PerformancePreset.allCases, id: \.self) { preset in
                     Text(preset.description()).tag(preset)

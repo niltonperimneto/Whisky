@@ -19,6 +19,61 @@
 import Foundation
 import SemanticVersion
 
+/// Release stability advertised by a runtime producer.
+public enum WhiskyWineReleaseChannel: String, Codable, CaseIterable, Sendable {
+    case stable
+    case canary
+    case bleedingEdge = "bleeding-edge"
+    /// Legacy producer value retained so older development runtimes still decode.
+    case development
+}
+
+/// Capabilities measured by the runtime producer. Every field is optional so
+/// older manifests remain valid and an absent value is never mistaken for a
+/// verified capability.
+public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
+    public var gptkMajorVersions: [Int]?
+    public var wsarecvmsg: Bool?
+    public var ipv4ReceiveTOS: Bool?
+    public var ipv6ReceiveTrafficClass: Bool?
+    public var overlappedReceiveMessage: Bool?
+    public var dxvk: Bool?
+    public var dxmt: Bool?
+    public var wined3d: Bool?
+    public var wow64: Bool?
+
+    public init(
+        gptkMajorVersions: [Int]? = nil,
+        wsarecvmsg: Bool? = nil,
+        ipv4ReceiveTOS: Bool? = nil,
+        ipv6ReceiveTrafficClass: Bool? = nil,
+        overlappedReceiveMessage: Bool? = nil,
+        dxvk: Bool? = nil,
+        dxmt: Bool? = nil,
+        wined3d: Bool? = nil,
+        wow64: Bool? = nil
+    ) {
+        self.gptkMajorVersions = gptkMajorVersions
+        self.wsarecvmsg = wsarecvmsg
+        self.ipv4ReceiveTOS = ipv4ReceiveTOS
+        self.ipv6ReceiveTrafficClass = ipv6ReceiveTrafficClass
+        self.overlappedReceiveMessage = overlappedReceiveMessage
+        self.dxvk = dxvk
+        self.dxmt = dxmt
+        self.wined3d = wined3d
+        self.wow64 = wow64
+    }
+
+    /// True only when the producer explicitly verified the complete ancillary
+    /// data path used by SteamNetworkingSockets/EOS.
+    public var hasVerifiedReceiveMessagePath: Bool {
+        wsarecvmsg == true &&
+            ipv4ReceiveTOS == true &&
+            ipv6ReceiveTrafficClass == true &&
+            overlappedReceiveMessage == true
+    }
+}
+
 /// Represents the version information structure from WhiskyWineVersion.plist
 /// The plist format uses a nested dictionary structure:
 /// ```
@@ -68,6 +123,18 @@ public struct WhiskyWineVersion: Codable {
     /// runtime, which is the default one and needs no name.
     public var name: String?
 
+    /// Version of the extended runtime metadata contract.
+    public var manifestVersion: Int?
+    public var releaseChannel: WhiskyWineReleaseChannel?
+    public var wineVersion: String?
+    public var wineSourceRevision: String?
+    public var patchset: String?
+    public var patchsetRevision: String?
+    public var buildArchitecture: String?
+    public var minimumMacOS: String?
+    public var sdkBuild: String?
+    public var capabilities: WhiskyWineCapabilities?
+
     enum CodingKeys: String, CodingKey {
         case version
         case dxvkVersion
@@ -75,6 +142,16 @@ public struct WhiskyWineVersion: Codable {
         case sha256
         case gptkCapable
         case name
+        case manifestVersion
+        case releaseChannel
+        case wineVersion
+        case wineSourceRevision
+        case patchset
+        case patchsetRevision
+        case buildArchitecture
+        case minimumMacOS
+        case sdkBuild
+        case capabilities
     }
 
     public init(
@@ -83,7 +160,17 @@ public struct WhiskyWineVersion: Codable {
         dxmtVersion: String? = nil,
         sha256: String? = nil,
         gptkCapable: Bool? = nil,
-        name: String? = nil
+        name: String? = nil,
+        manifestVersion: Int? = nil,
+        releaseChannel: WhiskyWineReleaseChannel? = nil,
+        wineVersion: String? = nil,
+        wineSourceRevision: String? = nil,
+        patchset: String? = nil,
+        patchsetRevision: String? = nil,
+        buildArchitecture: String? = nil,
+        minimumMacOS: String? = nil,
+        sdkBuild: String? = nil,
+        capabilities: WhiskyWineCapabilities? = nil
     ) {
         self.version = version
         self.dxvkVersion = Self.normalized(dxvkVersion)
@@ -91,6 +178,16 @@ public struct WhiskyWineVersion: Codable {
         self.sha256 = Self.normalizedDigest(sha256)
         self.gptkCapable = gptkCapable
         self.name = Self.normalized(name)
+        self.manifestVersion = manifestVersion
+        self.releaseChannel = releaseChannel
+        self.wineVersion = Self.normalized(wineVersion)
+        self.wineSourceRevision = Self.normalized(wineSourceRevision)
+        self.patchset = Self.normalized(patchset)
+        self.patchsetRevision = Self.normalized(patchsetRevision)
+        self.buildArchitecture = Self.normalized(buildArchitecture)
+        self.minimumMacOS = Self.normalized(minimumMacOS)
+        self.sdkBuild = Self.normalized(sdkBuild)
+        self.capabilities = capabilities
     }
 
     public init(from decoder: Decoder) throws {
@@ -105,6 +202,16 @@ public struct WhiskyWineVersion: Codable {
         sha256 = try Self.normalizedDigest(container.decodeIfPresent(String.self, forKey: .sha256))
         gptkCapable = try container.decodeIfPresent(Bool.self, forKey: .gptkCapable)
         name = try Self.normalized(container.decodeIfPresent(String.self, forKey: .name))
+        manifestVersion = try container.decodeIfPresent(Int.self, forKey: .manifestVersion)
+        releaseChannel = try container.decodeIfPresent(WhiskyWineReleaseChannel.self, forKey: .releaseChannel)
+        wineVersion = try Self.normalized(container.decodeIfPresent(String.self, forKey: .wineVersion))
+        wineSourceRevision = try Self.normalized(container.decodeIfPresent(String.self, forKey: .wineSourceRevision))
+        patchset = try Self.normalized(container.decodeIfPresent(String.self, forKey: .patchset))
+        patchsetRevision = try Self.normalized(container.decodeIfPresent(String.self, forKey: .patchsetRevision))
+        buildArchitecture = try Self.normalized(container.decodeIfPresent(String.self, forKey: .buildArchitecture))
+        minimumMacOS = try Self.normalized(container.decodeIfPresent(String.self, forKey: .minimumMacOS))
+        sdkBuild = try Self.normalized(container.decodeIfPresent(String.self, forKey: .sdkBuild))
+        capabilities = try container.decodeIfPresent(WhiskyWineCapabilities.self, forKey: .capabilities)
     }
 
     /// Collapses an empty string to `nil` so "absent" and "blank" map to the
@@ -144,6 +251,16 @@ public struct WhiskyWineVersion: Codable {
         try container.encodeIfPresent(sha256, forKey: .sha256)
         try container.encodeIfPresent(gptkCapable, forKey: .gptkCapable)
         try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(manifestVersion, forKey: .manifestVersion)
+        try container.encodeIfPresent(releaseChannel, forKey: .releaseChannel)
+        try container.encodeIfPresent(wineVersion, forKey: .wineVersion)
+        try container.encodeIfPresent(wineSourceRevision, forKey: .wineSourceRevision)
+        try container.encodeIfPresent(patchset, forKey: .patchset)
+        try container.encodeIfPresent(patchsetRevision, forKey: .patchsetRevision)
+        try container.encodeIfPresent(buildArchitecture, forKey: .buildArchitecture)
+        try container.encodeIfPresent(minimumMacOS, forKey: .minimumMacOS)
+        try container.encodeIfPresent(sdkBuild, forKey: .sdkBuild)
+        try container.encodeIfPresent(capabilities, forKey: .capabilities)
     }
 
     private enum VersionKeys: String, CodingKey {
