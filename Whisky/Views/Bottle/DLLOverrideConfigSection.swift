@@ -25,10 +25,9 @@ import WhiskyKit
 /// and provides the ``DLLOverrideEditor`` for editing custom bottle-level overrides.
 struct DLLOverrideConfigSection: View {
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
 
     var body: some View {
-        Section("config.title.dllOverrides", isExpanded: $isExpanded) {
+        Section("config.title.dllOverrides") {
             DLLOverrideEditor(
                 managedOverrides: computedManagedOverrides,
                 customOverrides: $bottle.settings.dllOverrides,

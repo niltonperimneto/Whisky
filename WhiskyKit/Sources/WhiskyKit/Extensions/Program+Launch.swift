@@ -168,11 +168,16 @@ public extension Program {
     /// would otherwise leave a poller behind for as long as Whisky runs.
     private func watchForLateCrash(logFileURL: URL) {
         let bottle = self.bottle
+        let launchDate = (try? logFileURL.resourceValues(forKeys: [.creationDateKey]).creationDate)
+            ?? .distantPast
         Task {
             let deadline = ContinuousClock.now + Self.watchDuration
             while ContinuousClock.now < deadline {
                 try? await Task.sleep(for: Self.watchInterval)
-                if logContainsCrashSignatures(logFileURL) {
+                let dumpEvidence = await Task.detached(priority: .utility) {
+                    SteamMinidumpScanner.newestEvidence(bottleURL: bottle.url, since: launchDate)
+                }.value
+                if logContainsCrashSignatures(logFileURL) || dumpEvidence != nil {
                     triggerCrashClassification(logFileURL: logFileURL, exitCode: 1)
                     return
                 }
@@ -230,9 +235,16 @@ public extension Program {
         let activePreset = self.settings.activeWineDebugPreset
 
         Task.detached(priority: .utility) {
+            let launchDate = (try? logFileURL.resourceValues(forKeys: [.creationDateKey]).creationDate)
+                ?? .distantPast
+            let dumpEvidence = SteamMinidumpScanner.newestEvidence(
+                bottleURL: bottleURL,
+                since: launchDate
+            )
             guard let diagnosis = await Wine.classifyLastRun(
                 logFileURL: logFileURL,
-                exitCode: exitCode
+                exitCode: exitCode,
+                additionalEvidence: dumpEvidence?.signature
             ), !diagnosis.isEmpty
             else {
                 return

@@ -22,12 +22,12 @@ import WhiskyKit
 // swiftlint:disable type_body_length
 struct InputConfigSection: View {
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
+
     @State private var controllerMonitor = ControllerMonitor()
     @State private var controllersExpanded = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        Section {
             VStack(alignment: .leading, spacing: 12) {
                 // Main toggle for controller compatibility mode
                 Toggle("Controller Compatibility Mode", isOn: $bottle.settings.controllerCompatibilityMode)
@@ -109,7 +109,7 @@ struct InputConfigSection: View {
                 }
             }
             .padding(.vertical, 8)
-        } label: {
+        } header: {
             HStack {
                 Label("Controller & Input", systemImage: "gamecontroller")
                     .font(.headline)

@@ -27,14 +27,15 @@ enum Focusable: Hashable {
     case row(id: UUID, section: KeySection)
 }
 
+@Observable
 class Key: Identifiable {
     static func == (lhs: Key, rhs: Key) -> Bool {
         lhs.id == rhs.id
     }
 
     var id: UUID = .init()
-    @Published var key: String
-    @Published var value: String
+    var key: String
+    var value: String
 
     init(key: String, value: String) {
         self.key = key
@@ -141,7 +142,7 @@ struct EnvironmentArgView: View {
 struct KeyItem: View {
     @FocusState var focus: Focusable?
     @Binding var environmentKeys: [Key]
-    @State var key: Key
+    @Bindable var key: Key
     @State var hovered: Bool = false
 
     var body: some View {

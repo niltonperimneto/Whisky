@@ -21,7 +21,7 @@ import SemanticVersion
 import Testing
 @testable import WhiskyKit
 
-@Suite("Runtime Install Tests")
+@Suite("Runtime Install Tests", .serialized)
 struct RuntimeInstallTests {
     private let tempDir: URL
 
@@ -117,6 +117,51 @@ struct RuntimeInstallTests {
             atPath: runtimes.path(percentEncoded: false)
         )
         #expect(installed == [one])
+    }
+
+    @Test("A rejected replacement preserves the installed runtime")
+    func rejectedReplacementPreservesInstalledRuntime() throws {
+        let runtimes = tempDir.appending(path: "Runtimes")
+        let version = SemanticVersion(1, 0, 0)
+        let valid = try makeRuntimeTarball(in: tempDir.appending(path: "valid"), name: "rt", version: version)
+        let identifier = try WhiskyWineInstaller.installRuntime(tarball: valid, intoRuntimesFolder: runtimes)
+        let marker = runtimes.appending(path: identifier).appending(path: "preserve.txt")
+        try Data("keep".utf8).write(to: marker)
+
+        let invalid = try makeLibrariesTarball(in: tempDir.appending(path: "invalid"))
+        #expect(throws: WhiskyWineInstallError.runtimeIncomplete) {
+            try WhiskyWineInstaller.installRuntime(tarball: invalid, intoRuntimesFolder: runtimes)
+        }
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "keep")
+    }
+
+    @Test("Runtime mutation is rejected while a tracked process is running")
+    func busyRuntimeIsRejected() throws {
+        let bottle = tempDir.appending(path: "BusyBottle")
+        ProcessRegistry.shared.registerLaunched(pid: 999_991, bottleURL: bottle, programName: "test.exe")
+        defer { ProcessRegistry.shared.unregister(pid: 999_991) }
+
+        let tarball = try makeRuntimeTarball(
+            in: tempDir.appending(path: "busy"), name: "rt", version: SemanticVersion(1, 0, 0)
+        )
+        #expect(throws: WhiskyWineInstallError.runtimeBusy) {
+            try WhiskyWineInstaller.installRuntime(
+                tarball: tarball,
+                intoRuntimesFolder: tempDir.appending(path: "Runtimes")
+            )
+        }
+    }
+
+    @Test("A launch lease closes the preflight-to-mutation race")
+    func launchLeaseBlocksMutation() throws {
+        let token = try RuntimeMaintenanceCoordinator.shared.beginUse()
+        defer { token.end() }
+
+        #expect(throws: WhiskyWineInstallError.runtimeBusy) {
+            try RuntimeMaintenanceCoordinator.shared.withExclusiveAccess {
+                Issue.record("Mutation must not run while a launch owns the runtime")
+            }
+        }
     }
 
     // MARK: - Fixtures

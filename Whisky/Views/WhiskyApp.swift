@@ -25,6 +25,20 @@ private let logger = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "com.dappermint.WhiskyPreview", category: "WhiskyApp"
 )
 
+private struct GraphicsRepairProgress: Equatable {
+    enum Phase: Equatable {
+        case checking
+        case repairing
+        case finished(repaired: Int)
+        case failed
+    }
+
+    let bottleName: String
+    let current: Int
+    let total: Int
+    let phase: Phase
+}
+
 @main
 // swiftlint:disable:next type_body_length
 struct WhiskyApp: App {
@@ -57,6 +71,8 @@ struct WhiskyApp: App {
     @State private var audioDeviceToast: ToastData?
     @State private var audioMonitor = AudioDeviceMonitor()
     @State private var audioAlertTracker = AudioAlertTracker()
+    @State private var graphicsRepairProgress: GraphicsRepairProgress?
+    @State private var didRunGraphicsRepair = false
     @AppStorage("audioDeviceAlerts") private var audioDeviceAlerts = true
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @Environment(\.openURL) var openURL
@@ -66,8 +82,8 @@ struct WhiskyApp: App {
         Telemetry.startIfConsented()
     }
 
-    /// Installs the D3D12 video processor and the MetalFX bridge into runtimes
-    /// that already hold the GPTK payload.
+    /// Verifies the stored GPTK payload in every capable runtime, then installs
+    /// its optional bridges.
     ///
     /// Deploying does both too, but an install that was set up before they
     /// existed never deploys again, so without this it would keep rendering
@@ -78,6 +94,7 @@ struct WhiskyApp: App {
         var data = BottleData()
         let bottles = data.loadBottles().map(\.url)
         Task.detached(priority: .background) {
+            _ = GPTKImporter.deployStoredPayloadEverywhereCapable()
             GPTKImporter.ensureVideoProcessorEverywhere(bottles: bottles)
             GPTKImporter.ensureMetalFXBridgeEverywhere()
             GPTKImporter.ensureNVAPIBridgeEverywhere()
@@ -98,6 +115,9 @@ struct WhiskyApp: App {
                     }
                     installGPTKExtrasIfNeeded()
                     startAudioDeviceListening()
+                }
+                .task(name: "Graphics prefix self-healing", priority: .utility) {
+                    await repairGraphicsPrefixesAtStartup()
                 }
                 .onReceive(
                     NotificationCenter.default.publisher(for: .crashDiagnosisAvailable)
@@ -152,15 +172,18 @@ struct WhiskyApp: App {
                         crashDiagnosisBannerView(banner)
                     }
                 }
+                .overlay {
+                    if let progress = graphicsRepairProgress {
+                        graphicsRepairProgressView(progress)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                }
                 .toast($audioDeviceToast)
         }
         .handlesExternalEvents(matching: ["*"])
         .commands {
             CommandGroup(before: .systemServices) {
                 Divider()
-                Button("open.setup") {
-                    showSetup = true
-                }
                 Button("install.cli") {
                     Task {
                         await WhiskyCmd.install()
@@ -270,6 +293,115 @@ struct WhiskyApp: App {
             WhiskyMenuBarView()
                 .environment(BottleVM.shared)
         }
+    }
+
+    // MARK: - Graphics Prefix Self-Healing
+
+    @MainActor
+    // swiftlint:disable:next function_body_length
+    private func repairGraphicsPrefixesAtStartup() async {
+        guard !didRunGraphicsRepair, !Self.isUITesting else { return }
+        didRunGraphicsRepair = true
+
+        let bottles = BottleVM.shared.bottles.filter { $0.isAvailable == true }
+        guard !bottles.isEmpty else { return }
+
+        var repaired = 0
+        var hadFailure = false
+        for (index, bottle) in bottles.enumerated() {
+            guard !Task.isCancelled else { return }
+            graphicsRepairProgress = GraphicsRepairProgress(
+                bottleName: bottle.settings.name,
+                current: index + 1,
+                total: bottles.count,
+                phase: .checking
+            )
+
+            let result = await Wine.repairGraphicsPrefixIfNeeded(bottle: bottle)
+            switch result {
+            case .repaired:
+                repaired += 1
+                graphicsRepairProgress = GraphicsRepairProgress(
+                    bottleName: bottle.settings.name,
+                    current: index + 1,
+                    total: bottles.count,
+                    phase: .repairing
+                )
+            case .failed:
+                hadFailure = true
+                graphicsRepairProgress = GraphicsRepairProgress(
+                    bottleName: bottle.settings.name,
+                    current: index + 1,
+                    total: bottles.count,
+                    phase: .failed
+                )
+            case .healthy, .skippedRunning, .unavailable:
+                break
+            }
+        }
+
+        if hadFailure {
+            graphicsRepairProgress = GraphicsRepairProgress(
+                bottleName: "",
+                current: bottles.count,
+                total: bottles.count,
+                phase: .failed
+            )
+        } else if repaired > 0 {
+            graphicsRepairProgress = GraphicsRepairProgress(
+                bottleName: "",
+                current: bottles.count,
+                total: bottles.count,
+                phase: .finished(repaired: repaired)
+            )
+        } else {
+            graphicsRepairProgress = nil
+        }
+
+        if repaired > 0 || hadFailure {
+            try? await Task.sleep(for: .seconds(hadFailure ? 4 : 1.2))
+            graphicsRepairProgress = nil
+        }
+    }
+
+    private func graphicsRepairProgressView(_ progress: GraphicsRepairProgress) -> some View {
+        HStack(spacing: 12) {
+            switch progress.phase {
+            case .checking, .repairing:
+                ProgressView()
+                    .controlSize(.small)
+            case .finished:
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            case .failed:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                switch progress.phase {
+                case .checking:
+                    Text("Checking bottle graphics…")
+                case .repairing:
+                    Text("Repaired bottle graphics")
+                case let .finished(repaired):
+                    Text("Repaired \(repaired) bottle(s)")
+                case .failed:
+                    Text("Bottle graphics repair failed")
+                }
+                if !progress.bottleName.isEmpty {
+                    Text("\(progress.bottleName) · \(progress.current) of \(progress.total)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .shadow(radius: 12, y: 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("graphicsPrefixRepairProgress")
     }
 
     // MARK: - Crash Diagnosis Notification

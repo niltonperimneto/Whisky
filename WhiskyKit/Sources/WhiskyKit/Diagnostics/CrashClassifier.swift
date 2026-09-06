@@ -121,15 +121,7 @@ public struct CrashClassifier: Sendable {
         let headline = primaryMatch.map { buildHeadline(for: $0) }
 
         // Step 5: Collect unique remediation action IDs preserving order of confidence
-        var seenIds = Set<String>()
-        var remediationIds: [String] = []
-        for diagMatch in sortedMatches {
-            guard let actionIds = diagMatch.pattern.remediationActionIds else { continue }
-            for actionId in actionIds where !seenIds.contains(actionId) {
-                seenIds.insert(actionId)
-                remediationIds.append(actionId)
-            }
-        }
+        let remediationIds = buildRemediationIds(from: sortedMatches)
 
         return CrashDiagnosis(
             matches: sortedMatches,
@@ -154,5 +146,25 @@ public struct CrashClassifier: Sendable {
         }
 
         return "\(category) (\(confidence) confidence)"
+    }
+
+    private func buildRemediationIds(from matches: [DiagnosisMatch]) -> [String] {
+        var seenIds = Set<String>()
+        var remediationIds: [String] = []
+        let hasSteamSocketAssertion = matches.contains {
+            $0.pattern.id == "steam-networking-socket-control-assert"
+        }
+        for match in matches {
+            // This assertion explains its accompanying access violation, so a
+            // generic secondary symptom must not suggest graphics mutations.
+            if hasSteamSocketAssertion, match.pattern.category != .networkingLaunchers {
+                continue
+            }
+            guard let actionIds = match.pattern.remediationActionIds else { continue }
+            for actionId in actionIds where seenIds.insert(actionId).inserted {
+                remediationIds.append(actionId)
+            }
+        }
+        return remediationIds
     }
 }

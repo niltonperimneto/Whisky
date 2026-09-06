@@ -20,6 +20,32 @@ import Foundation
 import os.log
 
 public extension Wine {
+    /// An executable-specific graphics route compiled before a launcher starts.
+    struct BackendRoute: Equatable, Sendable {
+        public let executableName: String
+        public let backend: GraphicsBackend
+
+        public init(executableName: String, backend: GraphicsBackend) {
+            self.executableName = executableName
+            self.backend = backend
+        }
+
+        var dllOverrides: String {
+            switch backend {
+            case .d3dMetal:
+                "d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
+            case .dxvk:
+                "d3d9=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
+            case .dxmt:
+                "d3d10core=n,b;d3d11=n,b;d3d12=n,b;dxgi=n,b"
+            case .wined3d:
+                "d3d9=b;d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
+            case .recommended:
+                ""
+            }
+        }
+    }
+
     /// Where a set of DLL overrides lives in the prefix registry.
     enum DLLOverrideScope: Equatable, Sendable {
         /// The prefix default, used by any process without an entry of its own.
@@ -89,7 +115,8 @@ public extension Wine {
         for url: URL,
         bottle: Bottle,
         wineEnvironment: inout [String: String],
-        applyToDescendants: Bool
+        applyToDescendants: Bool,
+        descendantRoutes: [BackendRoute] = []
     ) async throws {
         var scopes: [(scope: DLLOverrideScope, overrides: String)] = [
             (scope: .bottle, overrides: constructWineEnvironment(for: bottle)["WINEDLLOVERRIDES"] ?? "")
@@ -116,7 +143,14 @@ public extension Wine {
             ))
         }
 
-        if !applyToDescendants {
+        for route in descendantRoutes {
+            scopes.append((
+                scope: .program(route.executableName),
+                overrides: route.dllOverrides
+            ))
+        }
+
+        if !applyToDescendants || !descendantRoutes.isEmpty {
             let programOverrides = wineEnvironment.removeValue(forKey: "WINEDLLOVERRIDES") ?? ""
             // The launched executable needs its own entry too: AppDefaults is per
             // executable and children do not inherit it.

@@ -100,6 +100,20 @@
       "appliesNextLaunch": true
     },
     {
+      "id": "steam-networking-runtime-info",
+      "title": "Steam networking compatibility failure",
+      "description": "Steam Networking Sockets asserted while the game initialized online services. The graphics backend initialized successfully, so changing GPTK or installing Visual C++ runtimes is not recommended.",
+      "category": "networkingLaunchers",
+      "actionType": "informational",
+      "risk": "low",
+      "settingKeyPath": null,
+      "settingValue": null,
+      "winetricksVerb": null,
+      "whatWillChange": "No automatic changes; keep the current graphics route and inspect the Steam networking evidence",
+      "undoPath": "No changes to undo",
+      "appliesNextLaunch": false
+    },
+    {
       "id": "network-info",
       "title": "Check Network Configuration",
       "description": "Network or TLS errors may indicate connectivity issues or missing certificates.",

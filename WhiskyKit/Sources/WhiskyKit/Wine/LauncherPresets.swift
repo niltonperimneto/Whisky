@@ -178,9 +178,6 @@ public enum LauncherType: String, Codable, CaseIterable, Sendable, Identifiable 
             // Steam Runtime causes issues under Wine
             env["STEAM_RUNTIME"] = "0"
 
-            // Reduce UI stuttering in Steam client
-            env["DXVK_ASYNC"] = "1"
-
             // Note: Network timeouts for Steam are configured via bottle.settings.networkTimeout
             // which is set to 90000ms by LauncherFixes.apply()
             // This allows users to customize timeouts via the UI slider

@@ -28,13 +28,14 @@ private let launcherConfigLogger = Logger(
 
 struct LauncherConfigSection: View {
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
+
+    let bottleIsRunning: Bool
     /// Opens the latest diagnosis; supplied by ConfigView, which owns that sheet.
     var onViewDiagnostics: () -> Void = {}
     @State private var overridesExpanded: Bool = false
 
     var body: some View {
-        DisclosureGroup(isExpanded: $isExpanded) {
+        Section {
             VStack(alignment: .leading, spacing: 12) {
                 // Enable launcher compatibility mode
                 Toggle("Launcher Compatibility Mode", isOn: $bottle.settings.launcherCompatibilityMode)
@@ -48,7 +49,7 @@ struct LauncherConfigSection: View {
                 }
             }
             .padding(.vertical, 8)
-        } label: {
+        } header: {
             launcherSectionLabel
         }
     }
@@ -100,6 +101,10 @@ extension LauncherConfigSection {
 
         // Network configuration
         networkControls
+
+        Divider()
+
+        crossLayerCompatibilityControls
 
         // Auto-enable DXVK
         Toggle("Auto-Enable DXVK for Launchers", isOn: $bottle.settings.autoEnableDXVK)
@@ -272,6 +277,38 @@ extension LauncherConfigSection {
         }
     }
 
+    private var crossLayerCompatibilityControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Network Compatibility Layer", selection: $bottle.settings.networkCompatibilityMode) {
+                Text("Off").tag(NetworkCompatibilityMode.off)
+                Text("Automatic").tag(NetworkCompatibilityMode.automatic)
+                Text("Strict").tag(NetworkCompatibilityMode.strict)
+            }
+            .disabled(bottleIsRunning)
+            .help("Applies to Steam and EOS independently of the selected graphics backend.")
+
+            Toggle("Block Injected Overlays", isOn: $bottle.settings.blockInjectedOverlays)
+                .disabled(bottleIsRunning)
+                .help("Requests launchers to suppress supported overlays for newly started processes.")
+
+            if bottleIsRunning {
+                Label(
+                    "These settings can be changed after all bottle processes exit.",
+                    systemImage: "hourglass"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else if bottle.settings.networkCompatibilityMode != .off {
+                Label(
+                    "Runtime capability probing will be added in the next compatibility-runtime iteration.",
+                    systemImage: "network.badge.shield.half.filled"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     @ViewBuilder
     private var configurationWarnings: some View {
         if let launcher = bottle.settings.detectedLauncher {
@@ -312,7 +349,7 @@ private struct ActiveEnvironmentOverrides: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        DisclosureGroup("Active Environment Overrides", isExpanded: $isExpanded) {
+        DisclosureGroup("Active Environment Overrides") {
             VStack(alignment: .leading, spacing: 12) {
                 if let launcher {
                     launcherFixesSection(launcher)

@@ -70,6 +70,75 @@ struct GPTKDeploymentTests {
         #expect(backupData.suffix(13) == Data("wine original".utf8))
     }
 
+    @Test("A receipt verifies the complete payload and runtime version")
+    func verifiedDeploymentReceipt() throws {
+        let store = try makeImportedStore(in: tempDir)
+        let runtime = tempDir.appending(path: "Libraries")
+        try makeRuntime(at: runtime)
+        try writeRuntimeVersion(at: runtime, 4, 0, 0)
+        try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
+
+        let receipt = GPTKDeploymentReceipt(
+            formatVersion: 1,
+            gptkVersion: "4.0b2",
+            runtimeVersion: "4.0.0",
+            deployedAt: Date()
+        )
+        try PropertyListEncoder().encode(receipt).write(
+            to: runtime.appending(path: "GPTKDeployment.plist")
+        )
+
+        #expect(GPTKImporter.deploymentIsVerified(inLibraryFolder: runtime, store: store))
+    }
+
+    @Test("Verification detects a replaced GPTK forwarder")
+    func verificationDetectsMixedPayload() throws {
+        let store = try makeImportedStore(in: tempDir)
+        let runtime = tempDir.appending(path: "Libraries")
+        try makeRuntime(at: runtime)
+        try writeRuntimeVersion(at: runtime, 4, 0, 0)
+        try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
+
+        let receipt = GPTKDeploymentReceipt(
+            formatVersion: 1,
+            gptkVersion: "4.0b2",
+            runtimeVersion: "4.0.0",
+            deployedAt: Date()
+        )
+        try PropertyListEncoder().encode(receipt).write(
+            to: runtime.appending(path: "GPTKDeployment.plist")
+        )
+        let forwarder = runtime.appending(path: "Wine/lib/wine/x86_64-windows/dxgi.dll")
+        try Data("wrong backend".utf8).write(to: forwarder)
+
+        #expect(!GPTKImporter.deploymentIsVerified(inLibraryFolder: runtime, store: store))
+    }
+
+    @Test("Verification accepts the runtime interposer layout")
+    func verificationAcceptsInterposers() throws {
+        let store = try makeImportedStore(in: tempDir)
+        let runtime = tempDir.appending(path: "Libraries")
+        try makeRuntime(at: runtime)
+        try writeRuntimeVersion(at: runtime, 4, 0, 0)
+        for interposer in GPTKImporter.interposers {
+            try makeStoreSlotRenameable(inStore: store, slotName: interposer.slotName)
+            try makeInterposerShim(interposer, at: runtime)
+        }
+        try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
+
+        let receipt = GPTKDeploymentReceipt(
+            formatVersion: 1,
+            gptkVersion: "4.0b2",
+            runtimeVersion: "4.0.0",
+            deployedAt: Date()
+        )
+        try PropertyListEncoder().encode(receipt).write(
+            to: runtime.appending(path: "GPTKDeployment.plist")
+        )
+
+        #expect(GPTKImporter.deploymentIsVerified(inLibraryFolder: runtime, store: store))
+    }
+
     @Test("Deploying from an empty store fails")
     func deployEmptyStore() throws {
         let runtime = tempDir.appending(path: "Libraries")
@@ -116,7 +185,7 @@ struct GPTKDeploymentTests {
         try makeRuntime(at: runtime)
         try GPTKImporter.deploy(fromStore: store, intoLibraryFolder: runtime)
 
-        let tarball = try makeLibrariesTarball(in: tempDir.appending(path: "archive"))
+        let tarball = try makeLibrariesTarball(in: tempDir.appending(path: "archive"), installable: true)
         try WhiskyWineInstaller.install(tarball: tarball, into: appSupport)
 
         #expect(GPTKImporter.storedRecord(inStore: store)?.gptkVersion == "4.0b2")

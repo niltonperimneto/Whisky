@@ -27,6 +27,10 @@ env:
   # bare "11.0" tag was retired). It must match an existing upstream tag exactly,
   # or the equality check below reads "behind" forever and files a weekly issue.
   WINE_PINNED: "11.0_1"
+  # The source target used by the custom CrossOver/GPTK runtime. This is
+  # deliberately tracked separately from Gcenx's annual stable comparison.
+  WINE_SOURCE_REPO: wine-mirror/wine
+  WINE_DEVEL_PINNED: wine-11.17
   DXVK_REPO: Gcenx/DXVK-macOS
   DXVK_PINNED: v1.10.3-20230507-repack
   # v0.80 is the last MIT-licensed DXMT release (v1.0+ is LGPL); bundled since
@@ -73,6 +77,18 @@ jobs:
             fi
           }
 
+          latest_wine_devel_tag() {
+            # Wine's GitHub mirror exposes source tags rather than releases.
+            # Ignore rc tags and select the highest X.Y development/final tag.
+            local out
+            if out="$(gh api "repos/$1/tags?per_page=100" --jq '.[].name' 2>/dev/null \
+                      | grep -E '^wine-[0-9]+\.[0-9]+$' | sort -t- -k2,2V | tail -1)"; then
+              echo "${out:-ERROR}"
+            else
+              echo "ERROR"
+            fi
+          }
+
           drift_body=""
           summary="| Component | Pinned | Latest upstream | Status |\n|---|---|---|---|\n"
 
@@ -94,6 +110,8 @@ jobs:
 
           # Wine: compare against the latest STABLE tag (not the devel /releases/latest).
           check "Wine"  "$WINE_REPO" "$WINE_PINNED" "$(latest_stable_tag "$WINE_REPO")"
+          check "Wine source target" "$WINE_SOURCE_REPO" "$WINE_DEVEL_PINNED" \
+            "$(latest_wine_devel_tag "$WINE_SOURCE_REPO")"
           check "DXVK"  "$DXVK_REPO" "$DXVK_PINNED" "$(latest_tag "$DXVK_REPO")"
           check "DXMT"  "$DXMT_REPO" "$DXMT_PINNED" "$(latest_tag "$DXMT_REPO")"
 

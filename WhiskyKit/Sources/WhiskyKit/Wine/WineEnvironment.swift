@@ -46,14 +46,16 @@ extension Wine {
         environment: [String: String] = [:],
         programOverrides: ProgramOverrides? = nil,
         programSettings: ProgramSettings? = nil,
-        gameProfileEnvironment: [String: String] = [:]
+        gameProfileEnvironment: [String: String] = [:],
+        resolvedBackend: GraphicsBackend? = nil
     ) -> [String: String] {
         constructWineEnvironmentWithProvenance(
             for: bottle,
             environment: environment,
             programOverrides: programOverrides,
             programSettings: programSettings,
-            gameProfileEnvironment: gameProfileEnvironment
+            gameProfileEnvironment: gameProfileEnvironment,
+            resolvedBackend: resolvedBackend
         ).environment
     }
 
@@ -67,6 +69,7 @@ extension Wine {
         programOverrides: ProgramOverrides? = nil,
         programSettings: ProgramSettings? = nil,
         gameProfileEnvironment: [String: String] = [:],
+        resolvedBackend: GraphicsBackend? = nil,
         logSummary: Bool = true
     ) -> (environment: [String: String], provenance: EnvironmentProvenance) {
         var builder = EnvironmentBuilder()
@@ -74,7 +77,7 @@ extension Wine {
 
         // Layer 1: Base -- WINEPREFIX, default WINEDEBUG, GST_DEBUG
         builder.set("WINEPREFIX", bottle.url.path, layer: .base)
-        builder.set("WINEDEBUG", "fixme-all", layer: .base)
+        builder.set("WINEDEBUG", Wine.defaultWineDebug, layer: .base)
         builder.set("GST_DEBUG", "1", layer: .base)
 
         // Layer 2: Platform -- macOS compatibility fixes
@@ -102,7 +105,10 @@ extension Wine {
         }
 
         // Layer 3: Bottle managed -- settings-derived env vars (DXVK, sync, Metal, perf)
-        let managedOverrides = bottle.settings.populateBottleManagedLayer(builder: &builder)
+        let managedOverrides = bottle.settings.populateBottleManagedLayer(
+            builder: &builder,
+            resolvedBackend: resolvedBackend
+        )
         dllResolver.managed.append(contentsOf: managedOverrides)
 
         // DXVK reads its config from DXVK_CONFIG_FILE or the process working

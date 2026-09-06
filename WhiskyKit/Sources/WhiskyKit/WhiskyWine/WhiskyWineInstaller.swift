@@ -33,6 +33,8 @@ public enum WhiskyWineInstallError: LocalizedError, Equatable {
     /// The archive extracted, but what came out is not a usable runtime — no
     /// version plist, or no `wine64` beside it.
     case runtimeIncomplete
+    /// A shared runtime cannot be replaced while a tracked Wine process uses it.
+    case runtimeBusy
 
     public var errorDescription: String? {
         switch self {
@@ -40,6 +42,8 @@ public enum WhiskyWineInstallError: LocalizedError, Equatable {
             String(localized: "setup.whiskywine.error.tarballMissing")
         case .runtimeIncomplete:
             String(localized: "setup.whiskywine.error.runtimeIncomplete")
+        case .runtimeBusy:
+            "Runtime maintenance was postponed because a bottle is running."
         }
     }
 }
@@ -240,13 +244,51 @@ public class WhiskyWineInstaller {
             throw WhiskyWineInstallError.tarballNotFound
         }
 
-        let existingRuntime = destination.appending(path: "Libraries")
-        if FileManager.default.fileExists(atPath: existingRuntime.path) {
-            try FileManager.default.removeItem(at: existingRuntime)
-        }
-        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        try RuntimeMaintenanceCoordinator.shared.withExclusiveAccess(runtimeRoot: destination) {
+            let fileManager = FileManager.default
+            try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
 
-        try Tar.untar(tarBall: tarball, toURL: destination)
+            // Staging lives beside the live tree so activation is a filesystem
+            // rename rather than a cross-volume copy.
+            let stagingRoot = destination.appending(path: ".runtime-staging-\(UUID().uuidString)")
+            let backup = destination.appending(path: ".runtime-rollback-\(UUID().uuidString)")
+            let existingRuntime = destination.appending(path: "Libraries")
+            try fileManager.createDirectory(at: stagingRoot, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: stagingRoot) }
+
+            try Tar.untar(tarBall: tarball, toURL: stagingRoot)
+            let candidate = stagingRoot.appending(path: "Libraries")
+            try validateRuntimeCandidate(candidate)
+
+            var movedExisting = false
+            do {
+                if fileManager.fileExists(atPath: existingRuntime.path(percentEncoded: false)) {
+                    try fileManager.moveItem(at: existingRuntime, to: backup)
+                    movedExisting = true
+                }
+                try fileManager.moveItem(at: candidate, to: existingRuntime)
+                try validateRuntimeCandidate(existingRuntime)
+                if movedExisting {
+                    try? fileManager.removeItem(at: backup)
+                }
+            } catch {
+                try? fileManager.removeItem(at: existingRuntime)
+                if movedExisting {
+                    try? fileManager.moveItem(at: backup, to: existingRuntime)
+                }
+                throw error
+            }
+        }
+    }
+
+    /// Cheap structural checks followed by an optional producer file manifest.
+    static func validateRuntimeCandidate(_ folder: URL) throws {
+        guard isRuntimePresent(inLibraryFolder: folder), let info = whiskyWineInfo(
+            at: folder.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
+        ) else {
+            throw WhiskyWineInstallError.runtimeIncomplete
+        }
+        try verifyRuntimeManifest(in: folder, info: info)
     }
 
     /// Computes the SHA-256 of a file by streaming it in chunks.

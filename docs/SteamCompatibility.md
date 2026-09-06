@@ -1,7 +1,7 @@
 # Steam Compatibility Guide
 
 **Feature:** Launcher Compatibility System (frankea/Whisky#41)
-**Last Updated:** January 12, 2026
+**Last Updated:** September 6, 2026
 
 > **Note:** This documentation references issue numbers from both this fork (frankea/Whisky) and the original upstream project (whisky-app/whisky). Upstream references are kept for historical context. See [`SUPPORT.md`](SUPPORT.md) for where a new report belongs.
 
@@ -11,6 +11,14 @@
 > Follow it for a first-time Steam install, and read the troubleshooting sections as they stand, but
 > expect a per-game backend or a network-timeout knob it names to be missing from Preview's config.
 > Where this guide and the app disagree, trust the app.
+
+> **PEAK / SteamNetworkingSockets investigation:** The latest captured PEAK runs initialize GPTK
+> D3D12 and EOS, then abort in `steamnetworkingsockets_socketthread.cpp:2511` because requested TOS
+> control data is absent. Darwin returns IPv4 received TOS as `IP_RECVTOS`, while the pinned Wine
+> source converted only `IP_TOS`. The opt-in canary producer now carries a focused `ntdll` conversion
+> patch and a Windows `WSARecvMsg` gate covering IPv4 TOS, overlapped receive, and IPv6 traffic-class
+> reception. Treat the runtime as a candidate until its hosted build and repeated PEAK first-scene
+> qualification pass; do not infer the fix from reaching the intro alone.
 
 ---
 

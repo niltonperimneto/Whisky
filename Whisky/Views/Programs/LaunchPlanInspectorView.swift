@@ -30,6 +30,7 @@ struct LaunchPlanInspectorView: View {
     @State private var planNotes: [String] = []
     @State private var entries: [EnvironmentProvenance.Entry] = []
     @State private var dllOverrides: String?
+    @State private var backendRoute: Wine.BackendRoute?
 
     var body: some View {
         NavigationStack {
@@ -39,6 +40,21 @@ struct LaunchPlanInspectorView: View {
                         ForEach(planNotes, id: \.self) { note in
                             Text(note)
                                 .font(.callout)
+                        }
+                    }
+                }
+                if let backendRoute {
+                    Section("config.title.graphics") {
+                        LabeledContent(
+                            "config.graphics.backend",
+                            value: backendRoute.backend.displayName
+                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(verbatim: backendRoute.executableName)
+                                .font(.system(.callout, design: .monospaced))
+                            Text("program.provenance.dllComposed")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -102,6 +118,14 @@ struct LaunchPlanInspectorView: View {
         planNotes = plan.provenance
         entries = resolved.provenance.entries.values.sorted { $0.key < $1.key }
         dllOverrides = resolved.environment["WINEDLLOVERRIDES"]
+        let requestedBackend = plan.overrides.graphicsBackend ?? bottle.settings.graphicsBackend
+        let backend = requestedBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+            : requestedBackend
+        backendRoute = Wine.BackendRoute(
+            executableName: program.url.lastPathComponent,
+            backend: backend
+        )
     }
 }
 

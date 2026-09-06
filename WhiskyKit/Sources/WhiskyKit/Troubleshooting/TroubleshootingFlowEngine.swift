@@ -17,7 +17,6 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-import Combine
 import Foundation
 import Observation
 import os.log
@@ -49,7 +48,7 @@ public protocol TroubleshootingSessionStoring: Sendable {
 /// branches on normalized outcomes, and auto-saves session state.
 ///
 /// The engine is `@MainActor` for safe SwiftUI observation but has **no SwiftUI imports**.
-/// It publishes state via `@Published` properties that the view layer observes.
+/// It publishes state via `@Observable` that the view layer observes.
 ///
 /// ## Usage
 ///

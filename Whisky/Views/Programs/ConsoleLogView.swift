@@ -21,6 +21,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WhiskyKit
 
+// swiftlint:disable type_body_length
+
 /// Displays console log output for a specific run with channel filtering and export actions.
 ///
 /// Log lines are classified into channels: output (stdout), stderr, and WINEDEBUG.
@@ -33,11 +35,15 @@ struct ConsoleLogView: View {
     @State private var logLines: [ConsoleLogLine] = []
     @State private var showOutput = true
     @State private var showStderr = true
-    @State private var showWineDebug = false
+    @State private var showWineDebug = true
+    @State private var searchText = ""
     @State private var currentExitCode: Int32?
     @State private var isStillRunning: Bool = false
     @State private var lastFileOffset: UInt64 = 0
     @State private var refreshTimer: Timer?
+
+    @State private var activeLogFileName: String = ""
+    @State private var detectedSubprocesses: [TrackedWineSubprocess] = []
 
     /// Regex patterns that indicate WINEDEBUG output.
     private static let wineDebugPatterns: [String] = [
@@ -49,15 +55,22 @@ struct ConsoleLogView: View {
         "^warn:"
     ]
 
+    /// Maximum number of log lines kept in memory for SwiftUI rendering.
+    private static let maxDisplayLines = 5_000
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             logHeader
+            subprocessSelectorBar
             channelFilterBar
             logContentView
             logFooter
             actionBar
         }
-        .onAppear { loadLog() }
+        .onAppear {
+            activeLogFileName = runEntry.logFileName
+            loadLog()
+        }
         .onDisappear { stopRefreshTimer() }
         .task {
             isStillRunning = runEntry.isRunning
@@ -73,8 +86,15 @@ struct ConsoleLogView: View {
     private var logHeader: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(runEntry.programName)
-                    .font(.headline)
+                HStack(spacing: 6) {
+                    Text(displayTitle)
+                        .font(.headline)
+                    if activeLogFileName != runEntry.logFileName {
+                        Text("(Subprocess Log)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 HStack(spacing: 8) {
                     Text("\(runEntry.startTime, style: .date) \(runEntry.startTime, style: .time)")
                     if let duration = runEntry.duration {
@@ -99,6 +119,61 @@ struct ConsoleLogView: View {
         .padding(.vertical, 6)
     }
 
+    private var displayTitle: String {
+        if activeLogFileName != runEntry.logFileName,
+           let child = detectedSubprocesses.first(where: { $0.dedicatedLogFileName == activeLogFileName }) {
+            return child.imageName
+        }
+        return runEntry.programName
+    }
+
+    // MARK: - Subprocess Bar
+
+    @ViewBuilder
+    private var subprocessSelectorBar: some View {
+        let validChildren = detectedSubprocesses.filter { $0.dedicatedLogFileName != nil }
+        if !validChildren.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    Text("Processes:")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    Button {
+                        activeLogFileName = runEntry.logFileName
+                        loadLog()
+                    } label: {
+                        Text(runEntry.programName)
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                    .tint(activeLogFileName == runEntry.logFileName ? .accentColor : .secondary)
+
+                    ForEach(validChildren) { child in
+                        if let logName = child.dedicatedLogFileName {
+                            Button {
+                                activeLogFileName = logName
+                                loadLog()
+                            } label: {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "gamecontroller")
+                                    Text(child.imageName)
+                                }
+                                .font(.caption2)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.mini)
+                            .tint(activeLogFileName == logName ? .accentColor : .secondary)
+                        }
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
     // MARK: - Channel Filter Bar
 
     private var channelFilterBar: some View {
@@ -113,17 +188,44 @@ struct ConsoleLogView: View {
                 isOn: $showStderr,
                 color: .red
             )
-            if runEntry.hasWineDebugOutput {
-                filterToggle(
-                    label: String(localized: "console.log.filter.winedebug"),
-                    isOn: $showWineDebug,
-                    color: .gray
-                )
-            }
+            filterToggle(
+                label: String(localized: "console.log.filter.winedebug"),
+                isOn: $showWineDebug,
+                color: .gray
+            )
             Spacer()
+            searchField
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search logs...", text: $searchText)
+                .textFieldStyle(.plain)
+                .font(.caption)
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+        )
+        .frame(maxWidth: 180)
     }
 
     private func filterToggle(label: String, isOn: Binding<Bool>, color: Color) -> some View {
@@ -196,13 +298,15 @@ struct ConsoleLogView: View {
     }
 
     var filteredLines: [ConsoleLogLine] {
-        logLines.filter { line in
+        let channelFiltered = logLines.filter { line in
             switch line.channel {
             case .output: showOutput
             case .stderr: showStderr
             case .wineDebug: showWineDebug
             }
         }
+        guard !searchText.isEmpty else { return channelFiltered }
+        return channelFiltered.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
     }
 
     // MARK: - Footer
@@ -248,7 +352,7 @@ struct ConsoleLogView: View {
             Button {
                 NSWorkspace.shared.open(Wine.logsFolder)
             } label: {
-                Label("console.openLogsFolder", systemImage: "folder")
+                Label("console.log.openFolder", systemImage: "folder")
             }
             .buttonStyle(.plain)
             .font(.caption)
@@ -259,13 +363,13 @@ struct ConsoleLogView: View {
         .padding(.vertical, 6)
     }
 
-    // MARK: - Shared Components
+    // MARK: - Indicators
 
     private var liveIndicator: some View {
         HStack(spacing: 4) {
             Circle()
                 .fill(.green)
-                .frame(width: 6, height: 6)
+                .frame(width: 8, height: 8)
                 .modifier(ConsoleLogPulseModifier())
             Text("console.log.liveIndicator")
                 .font(.caption)
@@ -286,6 +390,8 @@ struct ConsoleLogView: View {
     }
 }
 
+// swiftlint:enable type_body_length
+
 // MARK: - ConsoleLogView Data Operations
 
 extension ConsoleLogView {
@@ -304,8 +410,15 @@ extension ConsoleLogView {
         }
     }
 
+    func currentLogURL() -> URL {
+        let fileName = activeLogFileName.isEmpty ? runEntry.logFileName : activeLogFileName
+        return Wine.logsFolder.appending(path: fileName)
+    }
+
     func loadLog() {
-        let logURL = Wine.logsFolder.appending(path: runEntry.logFileName)
+        let logURL = currentLogURL()
+        detectedSubprocesses = WineSubprocessTracker.shared.recentSubprocesses(for: bottle.url)
+
         guard FileManager.default.fileExists(atPath: logURL.path(percentEncoded: false)) else {
             logLines = [ConsoleLogLine(
                 text: String(localized: "console.log.fileNotFound"),
@@ -331,7 +444,7 @@ extension ConsoleLogView {
     }
 
     func loadNewContent() {
-        let logURL = Wine.logsFolder.appending(path: runEntry.logFileName)
+        let logURL = currentLogURL()
         guard FileManager.default.fileExists(atPath: logURL.path(percentEncoded: false)) else { return }
 
         do {
@@ -344,8 +457,11 @@ extension ConsoleLogView {
             lastFileOffset += UInt64(newData.count)
 
             if let newContent = String(data: newData, encoding: .utf8) {
-                let newLines = classifyLines(newContent)
+                let newLines = parseLines(newContent)
                 logLines.append(contentsOf: newLines)
+                if logLines.count > Self.maxDisplayLines + 500 {
+                    logLines = Array(logLines.suffix(Self.maxDisplayLines))
+                }
             }
         } catch {
             // Best-effort: ignore read errors during live tailing
@@ -360,7 +476,7 @@ extension ConsoleLogView {
         }
     }
 
-    func classifyLines(_ content: String) -> [ConsoleLogLine] {
+    private func parseLines(_ content: String) -> [ConsoleLogLine] {
         content
             .components(separatedBy: .newlines)
             .filter { !$0.isEmpty }
@@ -373,6 +489,23 @@ extension ConsoleLogView {
                     ConsoleLogLine(text: line, channel: .output)
                 }
             }
+    }
+
+    func classifyLines(_ content: String) -> [ConsoleLogLine] {
+        let lines = parseLines(content)
+        guard lines.count > Self.maxDisplayLines else { return lines }
+
+        // Windowed rendering: head 200 lines + omission marker + tail remaining lines
+        let headCount = 200
+        let tailCount = Self.maxDisplayLines - headCount
+        let omitted = lines.count - Self.maxDisplayLines
+        let head = lines.prefix(headCount)
+        let tail = lines.suffix(tailCount)
+        let marker = ConsoleLogLine(
+            text: "--- [Whisky] \(omitted) lines omitted for UI performance (export log to view full content) ---",
+            channel: .wineDebug
+        )
+        return Array(head) + [marker] + Array(tail)
     }
 
     func isWineDebugLine(_ line: String) -> Bool {
@@ -397,21 +530,22 @@ extension ConsoleLogView {
         savePanel.allowedContentTypes = [.plainText]
         let dateFormatter = ISO8601DateFormatter()
         let dateString = dateFormatter.string(from: runEntry.startTime)
-        savePanel.nameFieldStringValue = "\(runEntry.programName)-\(dateString).log"
+        let baseName = activeLogFileName.isEmpty ? runEntry.programName :
+            (activeLogFileName as NSString).deletingPathExtension
+        savePanel.nameFieldStringValue = "\(baseName)-\(dateString).log"
 
         if savePanel.runModal() == .OK, let url = savePanel.url {
             do {
-                var exportContent = filteredLines.map(\.text).joined(separator: "\n")
-                if runEntry.hasWineDebugOutput, !showWineDebug {
-                    let debugLines = logLines
-                        .filter { $0.channel == .wineDebug }
-                        .map(\.text)
-                    if !debugLines.isEmpty {
-                        exportContent += "\n\n--- WINEDEBUG Output ---\n"
-                        exportContent += debugLines.joined(separator: "\n")
+                let sourceURL = currentLogURL()
+                if FileManager.default.fileExists(atPath: sourceURL.path(percentEncoded: false)) {
+                    if FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
+                        try FileManager.default.removeItem(at: url)
                     }
+                    try FileManager.default.copyItem(at: sourceURL, to: url)
+                } else {
+                    let exportContent = filteredLines.map(\.text).joined(separator: "\n")
+                    try exportContent.write(to: url, atomically: true, encoding: .utf8)
                 }
-                try exportContent.write(to: url, atomically: true, encoding: .utf8)
             } catch {
                 // Best-effort export
             }

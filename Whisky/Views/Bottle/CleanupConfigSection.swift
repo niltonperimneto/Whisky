@@ -21,10 +21,9 @@ import WhiskyKit
 
 struct CleanupConfigSection: View {
     @Bindable var bottle: Bottle
-    @Binding var isExpanded: Bool
 
     var body: some View {
-        Section("config.cleanup", isExpanded: $isExpanded) {
+        Section("config.cleanup") {
             Picker("config.cleanup.clipboardPolicy", selection: $bottle.settings.clipboardPolicy) {
                 Text("config.cleanup.clipboardPolicy.auto").tag(ClipboardPolicy.auto)
                 Text("config.cleanup.clipboardPolicy.warn").tag(ClipboardPolicy.alwaysWarn)

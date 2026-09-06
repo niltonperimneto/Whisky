@@ -63,13 +63,14 @@ public enum GraphicsBackendResolver {
         if architecture == .x32 {
             return .dxvk
         }
+        // Launcher clients render through Chromium. Neither D3DMetal nor DXMT
+        // reliably presents Chromium's cross-process surfaces, so keep the
+        // client itself on DXVK regardless of the runtime's game recommendation.
+        // Games launched by it are resolved separately with `launcher == nil`.
+        if launcher != nil {
+            return .dxvk
+        }
         if d3dMetalInstalled {
-            // Launcher clients are Chromium and cannot render on D3DMetal:
-            // the window comes up and never paints. Games they start still get
-            // D3DMetal.
-            if launcher != nil {
-                return .dxvk
-            }
             return .d3dMetal
         }
         // The same gate the backend picker applies, not the version record

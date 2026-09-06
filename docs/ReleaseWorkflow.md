@@ -5,10 +5,12 @@ How to cut a Whisky Preview release and how to publish a new Wine Libraries arch
 Everything here happens on `preview`. `main` tracks [frankea/Whisky](https://github.com/frankea/Whisky)
 and is where upstream contributions are prepared; it is never released from.
 
-Two parallel artifact streams live on GitHub Releases:
+Three artifact streams live on GitHub Releases:
 
 - **App releases** (`app-vYYYY.M.N`) — `Whisky-Preview-YYYY.M.N.dmg`, self-signed (see below).
-- **Wine Libraries releases** (`vX.Y.Z`) — `Libraries.tar.gz`, the Wine runtime the app downloads on first launch.
+- **Stable Wine runtime releases** (`vX.Y.Z`) — the default `Libraries.tar.gz`.
+- **Canary Wine runtime releases** (`canary-vX.Y.Z` in Whisky, produced as
+  `runtime-canary-vX.Y.Z`) — optional side-by-side runtimes that never update the stable endpoint.
 
 Static metadata (`WhiskyWineVersion.plist`) is served from GitHub Pages, deployed by
 `.github/workflows/Documentation.yml` from `dist/pages/`. There is no `gh-pages` branch.
@@ -98,26 +100,58 @@ scripts/bump-cask.sh 2026.8.2
 It downloads the released DMG, computes the sha256, rewrites both lines, asserts they actually
 changed, and pushes. Pass the sha as a second argument to skip the download.
 
-## Publishing a Wine Libraries release
+## Publishing Wine runtimes
 
-The runtime is built by [dappermint/winecx-gptk](https://github.com/dappermint/winecx-gptk),
-which produces a `whiskywine-gptk-libraries` artifact containing `Libraries.tar.gz`.
+Stable and canary are deliberately separate producer lanes:
 
-1. Download the artifact from a green run:
+| Channel | Producer | Consumer behavior |
+|---|---|---|
+| Stable | [`dappermint/winecx-gptk`](https://github.com/dappermint/winecx-gptk) | May update the production Pages plist after explicit publication |
+| Canary | [`niltonperimneto/winecx-gptk`](https://github.com/niltonperimneto/winecx-gptk) | Published as a prerelease and discovered only after the user opts in |
+| Bleeding Edge | Planned latest Wine Staging/CrossOver rebase lane | Highly experimental, separately opted in, never automatically promoted |
+
+The producer artifact contains `Libraries.tar.gz`, `Libraries.tar.gz.sha256`,
+`WhiskyWineVersion.plist`, `RuntimeManifest.json`, and the network-verification receipt. The PE half
+must continue to use MinGW-w64 GCC; Apple Clang builds the Darwin/Mach-O half.
+
+For stable, `.github/workflows/PublishRuntime.yml` selects `runtime-vX.Y.Z` from dappermint. For a
+manual canary publication it selects `runtime-canary-vX.Y.Z` from the niltonperimneto fork. In both
+cases it verifies the producer checksum, stamped version, and advertised channel before mirroring.
+
+1. To inspect or manually download a green producer artifact:
+
    ```sh
    gh run download <run-id> -R dappermint/winecx-gptk -n whiskywine-gptk-libraries
    ```
-2. Publish it under a bare `vX.Y.Z` tag matching the `version` inside the tarball's own
-   `WhiskyWineVersion.plist`. Keep the file byte-identical to the artifact so its sha256 is
-   traceable back to the build that produced it.
+
+2. Publish stable under a bare `vX.Y.Z` tag matching the `version` inside the tarball's own
+   `WhiskyWineVersion.plist`. Keep the file byte-identical to the artifact so its SHA-256 remains
+   traceable to the producer build.
+
    ```sh
    gh release create v4.1.0 -R dappermint/Whisky --title "Wine Libraries v4.1.0" Libraries.tar.gz
    ```
-3. Update `dist/pages/WhiskyWineVersion.plist` to advertise the new version and the tarball's
-   sha256, then push to `preview`. Pages redeploys and the app offers the update.
+
+3. For stable only, update `dist/pages/WhiskyWineVersion.plist` with the new version and tarball
+   SHA-256, then push to `preview`. Pages redeploys and the app offers the update.
 
 Apple's GPTK/D3DMetal payload is **never** redistributed in these archives. The runtime is
 built to execute it; users supply their own disk image, which the app imports.
+
+### Canary promotion rules
+
+1. All producer gates must pass, including relocatability, window creation, media, WoW64 completeness,
+   PE stripping, and synchronous/overlapped `WSARecvMsg` control-data verification.
+2. Install the exact release asset through Whisky's opt-in catalog and verify its extracted manifest.
+3. Complete repeated PEAK and representative-title qualification.
+4. Promote by reusing the exact archive bytes and digest. Do not rebuild a release candidate during
+   promotion.
+5. Canary publication must not modify `dist/pages/WhiskyWineVersion.plist`.
+
+Current canary work is tracked in
+[`WhiskyWine-11.17-Implementation-Plan.md`](../WhiskyWine-11.17-Implementation-Plan.md). The initial
+socket-fixed candidate intentionally remains on pinned Wine 11.16 until its networking change is
+isolated and qualified; Wine 11.17 and latest Wine Staging remain subsequent lanes.
 
 ## Checklist
 
@@ -126,3 +160,6 @@ built to execute it; users supply their own disk image, which the app imports.
 - [ ] DMG attached to the release with its sha256 in the notes
 - [ ] Cask bumped and `brew install --cask dappermint/tap/whisky-preview` works from clean
 - [ ] If the runtime changed: `dist/pages/WhiskyWineVersion.plist` advertises the new version and hash
+- [ ] If publishing canary: production Pages metadata is unchanged
+- [ ] Runtime archive digest and extracted `RuntimeManifest.json` both verify
+- [ ] Runtime channel and producer repository match the intended lane

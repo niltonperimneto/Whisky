@@ -116,6 +116,11 @@ final class ProcessRegistryTests: XCTestCase {
 
         let processesAfter = ProcessRegistry.shared.getProcesses(for: testBottle)
         XCTAssertEqual(processesAfter.count, 0, "Process should be unregistered")
+        XCTAssertTrue(
+            ProcessRegistry.shared.getAllProcesses().isEmpty,
+            "Registry should be empty after last process unregisters"
+        )
+        XCTAssertFalse(ProcessRegistry.shared.hasActiveProcesses, "Should report no active processes")
     }
 
     // MARK: - Querying Tests

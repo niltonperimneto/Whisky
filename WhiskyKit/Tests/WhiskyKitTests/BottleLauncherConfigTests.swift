@@ -30,6 +30,8 @@ final class BottleLauncherConfigTests: XCTestCase {
         XCTAssertTrue(config.gpuSpoofing)
         XCTAssertEqual(config.gpuVendor, .nvidia)
         XCTAssertEqual(config.networkTimeout, 60_000)
+        XCTAssertEqual(config.networkCompatibilityMode, .off)
+        XCTAssertFalse(config.blockInjectedOverlays)
         XCTAssertTrue(config.autoEnableDXVK)
     }
 
@@ -41,6 +43,8 @@ final class BottleLauncherConfigTests: XCTestCase {
         config.launcherLocale = .english
         config.gpuVendor = .amd
         config.networkTimeout = 90_000
+        config.networkCompatibilityMode = .strict
+        config.blockInjectedOverlays = true
 
         // Encode
         let encoder = PropertyListEncoder()
@@ -56,6 +60,8 @@ final class BottleLauncherConfigTests: XCTestCase {
         XCTAssertEqual(decoded.launcherLocale, .english)
         XCTAssertEqual(decoded.gpuVendor, .amd)
         XCTAssertEqual(decoded.networkTimeout, 90_000)
+        XCTAssertEqual(decoded.networkCompatibilityMode, .strict)
+        XCTAssertTrue(decoded.blockInjectedOverlays)
     }
 
     func testLauncherModeEnum() {
@@ -147,19 +153,19 @@ final class BottleLauncherConfigTests: XCTestCase {
         XCTAssertEqual(env["WINHTTP_RECEIVE_TIMEOUT"], "90000") // 2x connect timeout
     }
 
-    func testAutoEnableDXVKForRockstar() {
+    func testLauncherCompatibilityDoesNotLayerDXVKOverBackend() {
         var settings = BottleSettings()
         settings.launcherCompatibilityMode = true
         settings.detectedLauncher = .rockstar
         settings.autoEnableDXVK = true
         settings.dxvk = false // Explicitly disabled
+        settings.graphicsBackend = .d3dMetal
 
         var env: [String: String] = [:]
         settings.environmentVariables(wineEnv: &env)
 
-        // Should still enable DXVK overrides because Rockstar requires it
-        // DLL overrides are now composed per-DLL via DLLOverrideResolver (sorted alphabetically)
-        XCTAssertEqual(env["WINEDLLOVERRIDES"], "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=n,b;dxgi=n,b")
+        // Launcher steering happens per executable in GraphicsLaunchPlan.
+        XCTAssertNil(env["WINEDLLOVERRIDES"])
     }
 
     func testNoInventedNetworkVariables() {
@@ -175,5 +181,29 @@ final class BottleLauncherConfigTests: XCTestCase {
         XCTAssertNil(env["WINE_SSL_VERSION_MIN"])
         XCTAssertNil(env["WINE_MAX_CONNECTIONS_PER_SERVER"])
         XCTAssertNil(env["WINE_FORCE_HTTP11"])
+    }
+
+    func testNewPoliciesDecodeSafelyFromLegacyConfiguration() throws {
+        let data = try PropertyListSerialization.data(
+            fromPropertyList: ["compatibilityMode": true],
+            format: .xml,
+            options: 0
+        )
+        let decoded = try PropertyListDecoder().decode(BottleLauncherConfig.self, from: data)
+
+        XCTAssertEqual(decoded.networkCompatibilityMode, .off)
+        XCTAssertFalse(decoded.blockInjectedOverlays)
+    }
+
+    func testOverlayBlockingIsIndependentFromLauncherCompatibility() {
+        var settings = BottleSettings()
+        settings.launcherCompatibilityMode = false
+        settings.blockInjectedOverlays = true
+
+        var environment: [String: String] = [:]
+        settings.environmentVariables(wineEnv: &environment)
+
+        XCTAssertEqual(environment["STEAM_DISABLE_OVERLAY"], "1")
+        XCTAssertEqual(environment["SteamNoOverlayUIDrawing"], "1")
     }
 }

@@ -28,6 +28,17 @@ public struct InstalledRuntime: Identifiable, Equatable {
     public var id: String { runtime ?? "" }
     public var isDefault: Bool { runtime == nil }
     public var gptkCapable: Bool { info?.gptkCapable == true }
+    public var releaseChannel: WhiskyWineReleaseChannel { info?.releaseChannel ?? .stable }
+    public var isCanary: Bool { releaseChannel == .canary }
+    public var isBleedingEdge: Bool {
+        releaseChannel == .bleedingEdge || releaseChannel == .development
+    }
+    public var wineVersion: String? { info?.wineVersion }
+    public var hasVerifiedNetworkPath: Bool {
+        info?.capabilities?.hasVerifiedReceiveMessagePath == true
+    }
+    public var compatibility: RuntimeCompatibility { WhiskyWineInstaller.compatibility(for: info) }
+    public var isCompatible: Bool { compatibility.isCompatible }
 
     /// What the picker shows.
     public var displayName: String {
@@ -39,6 +50,18 @@ public struct InstalledRuntime: Identifiable, Equatable {
     public var versionDescription: String {
         guard let version = info?.version else { return "" }
         return "\(version.major).\(version.minor).\(version.patch)"
+    }
+
+    /// Compact provenance shown in runtime pickers without running Wine.
+    public var detailDescription: String {
+        var parts: [String] = []
+        if let wineVersion {
+            parts.append("Wine \(wineVersion)")
+        }
+        if !versionDescription.isEmpty {
+            parts.append("Runtime \(versionDescription)")
+        }
+        return parts.joined(separator: " · ")
     }
 
     public static func == (lhs: InstalledRuntime, rhs: InstalledRuntime) -> Bool {
@@ -127,29 +150,53 @@ public extension WhiskyWineInstaller {
             throw WhiskyWineInstallError.tarballNotFound
         }
 
-        let staging = FileManager.default.temporaryDirectory
-            .appending(path: "WhiskyRuntime-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: staging) }
+        return try RuntimeMaintenanceCoordinator.shared.withExclusiveAccess(runtimeRoot: folder) {
+            let fileManager = FileManager.default
+            let createdRuntimeFolder = !fileManager.fileExists(atPath: folder.path(percentEncoded: false))
+            var activated = false
+            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            defer {
+                if createdRuntimeFolder, !activated,
+                   (try? fileManager.contentsOfDirectory(atPath: folder.path(percentEncoded: false)).isEmpty) == true {
+                    try? fileManager.removeItem(at: folder)
+                }
+            }
 
-        try Tar.untar(tarBall: tarball, toURL: staging)
+            // Same-volume staging makes the final activation atomic.
+            let staging = folder.appending(path: ".runtime-staging-\(UUID().uuidString)")
+            try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: staging) }
 
-        let extracted = staging.appending(path: "Libraries")
-        guard isRuntimePresent(inLibraryFolder: extracted) else {
-            throw WhiskyWineInstallError.runtimeIncomplete
+            try Tar.untar(tarBall: tarball, toURL: staging)
+            let extracted = staging.appending(path: "Libraries")
+            try validateRuntimeCandidate(extracted)
+
+            let identifier = runtimeIdentifier(for: whiskyWineInfo(
+                at: extracted.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
+            ))
+            let destination = folder.appending(path: identifier)
+            let backup = folder.appending(path: ".runtime-rollback-\(UUID().uuidString)")
+            var movedExisting = false
+            do {
+                if fileManager.fileExists(atPath: destination.path(percentEncoded: false)) {
+                    try fileManager.moveItem(at: destination, to: backup)
+                    movedExisting = true
+                }
+                try fileManager.moveItem(at: extracted, to: destination)
+                try validateRuntimeCandidate(destination)
+                if movedExisting {
+                    try? fileManager.removeItem(at: backup)
+                }
+                activated = true
+                return identifier
+            } catch {
+                try? fileManager.removeItem(at: destination)
+                if movedExisting {
+                    try? fileManager.moveItem(at: backup, to: destination)
+                }
+                throw error
+            }
         }
-
-        let identifier = runtimeIdentifier(for: whiskyWineInfo(
-            at: extracted.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
-        ))
-
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let destination = folder.appending(path: identifier)
-        if FileManager.default.fileExists(atPath: destination.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: extracted, to: destination)
-        return identifier
     }
 
     /// Removes an installed runtime. Bottles still pointing at it fall back to
@@ -157,9 +204,11 @@ public extension WhiskyWineInstaller {
     /// identifier rather than failing.
     static func removeRuntime(_ runtime: String) throws {
         guard isValidRuntimeIdentifier(runtime) else { return }
-        let folder = runtimesFolder.appending(path: runtime)
-        guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return }
-        try FileManager.default.removeItem(at: folder)
+        try RuntimeMaintenanceCoordinator.shared.withExclusiveAccess(runtimeRoot: runtimesFolder) {
+            let folder = runtimesFolder.appending(path: runtime)
+            guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return }
+            try FileManager.default.removeItem(at: folder)
+        }
     }
 
     /// The folder name a runtime installs under, from the name and version it

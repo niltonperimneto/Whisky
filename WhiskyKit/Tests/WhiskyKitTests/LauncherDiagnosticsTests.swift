@@ -376,7 +376,7 @@ final class LauncherDiagnosticsTests: XCTestCase {
 
     // MARK: - Auto-Enable DXVK Tests
 
-    func testAutoEnableDXVKForRockstar() throws {
+    func testLauncherLayerDoesNotMixDXVKIntoBottleBackend() throws {
         let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempURL, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempURL) }
@@ -386,13 +386,14 @@ final class LauncherDiagnosticsTests: XCTestCase {
         bottle.settings.detectedLauncher = .rockstar
         bottle.settings.autoEnableDXVK = true
         bottle.settings.dxvk = false // Explicitly disabled
+        bottle.settings.graphicsBackend = .d3dMetal
 
         var env: [String: String] = [:]
         bottle.settings.environmentVariables(wineEnv: &env)
 
-        // DXVK should be auto-enabled because Rockstar requires it
-        // DLL overrides are now composed per-DLL via DLLOverrideResolver (sorted alphabetically)
-        XCTAssertEqual(env["WINEDLLOVERRIDES"], "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=n,b;dxgi=n,b")
+        // The executable launch plan steers Rockstar itself to DXVK. The
+        // bottle-wide launcher layer must not leak that choice into games.
+        XCTAssertNil(env["WINEDLLOVERRIDES"])
     }
 
     func testAutoEnableDXVKNotTriggeredForSteam() throws {

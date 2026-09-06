@@ -56,9 +56,10 @@ final class LauncherPresetTests: XCTestCase {
         XCTAssertNil(env["WINHTTP_CONNECT_TIMEOUT"])
         XCTAssertNil(env["WINHTTP_RECEIVE_TIMEOUT"])
 
-        // Steam should still set other important fixes
+        // Steam should still set the sandbox fix, but async compilation is a
+        // game option and causes transient CEF rendering glitches.
         XCTAssertEqual(env["STEAM_DISABLE_CEF_SANDBOX"], "1")
-        XCTAssertEqual(env["DXVK_ASYNC"], "1")
+        XCTAssertNil(env["DXVK_ASYNC"])
     }
 
     func testRockstarRequiresDXVK() {

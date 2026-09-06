@@ -17,7 +17,6 @@
 //
 
 import AppKit
-import Combine
 import Foundation
 import Observation
 import WhiskyKit
@@ -100,7 +99,6 @@ final class LibraryModel {
     }
 
     private var orchestrators: [URL: SteamClientOrchestrator] = [:]
-    private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - State
 
