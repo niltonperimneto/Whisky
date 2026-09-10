@@ -94,7 +94,8 @@ struct ConfigView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .padding()
+                .padding(.horizontal)
+                .padding(.top, 10)
             }
             Form {
                 if !searchText.isEmpty || selectedTab == .general {
@@ -198,7 +199,8 @@ struct ConfigView: View {
                             HStack {
                                 Text("config.repairPrefix")
                                 if isRepairingPrefix {
-                                    ProgressView().controlSize(.small).padding(.leading, 4)
+                                    ProgressView().controlSize(.small)
+            .environment(\.defaultMinListRowHeight, 10).padding(.leading, 4)
                                 }
                             }
                         }
@@ -209,6 +211,8 @@ struct ConfigView: View {
                 }
             }
             .formStyle(.grouped)
+            .controlSize(.small)
+            .environment(\.defaultMinListRowHeight, 10)
         }
         .searchable(text: $searchText)
                 .sheet(isPresented: $showTroubleshootingWizard) {
@@ -295,7 +299,8 @@ struct ConfigView: View {
                     }
                 }
             }
-            .padding()
+            .padding(.horizontal)
+                .padding(.top, 10)
         }
         .navigationTitle("tab.config")
         .onAppear {

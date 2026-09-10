@@ -72,7 +72,7 @@ struct GraphicsConfigSection: View {
             // other backend rather than merely inactive.
             if resolvedBackend == .d3dMetal {
                 Toggle(isOn: $bottle.settings.metalFX) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("config.metalFX")
                         Text("config.metalFX.info")
                             .font(.caption)
@@ -80,7 +80,7 @@ struct GraphicsConfigSection: View {
                     }
                 }
                 Toggle(isOn: $bottle.settings.metal4Enabled) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("config.metal4")
                         Text("config.metal4.info")
                             .font(.caption)
@@ -90,7 +90,7 @@ struct GraphicsConfigSection: View {
                 // Frame generation reaches MetalFX through the same DLSS bridge
                 // as upscaling, so it has nothing to switch on without it.
                 Toggle(isOn: $bottle.settings.frameGeneration) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("config.frameGeneration")
                         Text("config.frameGeneration.info")
                             .font(.caption)

@@ -24,6 +24,7 @@ on:
         options:
           - stable
           - canary
+          - bleedingEdge
         default: stable
       force:
         description: "publish even if it is not newer than what Pages serves"
@@ -152,7 +153,7 @@ jobs:
             echo "::error::asset channel is $advertised_channel but dispatch selected $CHANNEL"
             exit 1
           }
-          if [ "$CHANNEL" = "canary" ]; then
+          if [ "$CHANNEL" = "canary" ] || [ "$CHANNEL" = "bleedingEdge" ]; then
             wine_version=$(python3 - <<'PY'
           import plistlib
           with open("WhiskyWineVersion.plist", "rb") as f:
@@ -183,6 +184,8 @@ jobs:
           set -euo pipefail
           if [ "$CHANNEL" = "canary" ]; then
             tag="canary-v$VERSION"
+          elif [ "$CHANNEL" = "bleedingEdge" ]; then
+            tag="bleeding-edge-v$VERSION"
           else
             tag="v$VERSION"
           fi
@@ -194,7 +197,7 @@ jobs:
             gh release upload "$tag" Libraries.tar.gz Libraries.tar.gz.sha256 --clobber
           else
             prerelease_args=()
-            [ "$CHANNEL" = "canary" ] && prerelease_args+=(--prerelease)
+            ([ "$CHANNEL" = "canary" ] || [ "$CHANNEL" = "bleedingEdge" ]) && prerelease_args+=(--prerelease)
             gh release create "$tag" Libraries.tar.gz Libraries.tar.gz.sha256 \
               "${prerelease_args[@]}" \
               --title "Wine runtime $VERSION" --notes "$notes"

@@ -165,7 +165,7 @@ struct WineConfigSection: View {
                 }
             }
             Toggle(isOn: $bottle.settings.avxEnabled) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("config.avx")
                     if bottle.settings.avxEnabled {
                         HStack(alignment: .firstTextBaseline) {
