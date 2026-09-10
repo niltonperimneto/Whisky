@@ -40,7 +40,7 @@ struct PerformanceConfigSection: View {
                 }
             }
             Toggle(isOn: $bottle.settings.shaderCacheEnabled) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("config.shaderCache")
                     Text("config.shaderCache.info")
                         .font(.caption)
@@ -50,7 +50,7 @@ struct PerformanceConfigSection: View {
             // Force DX11 lives in the Graphics section, next to the backend it
             // affects. It was in both, bound to the same setting.
             Toggle(isOn: $bottle.settings.disableAppNap) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("config.disableAppNap")
                     Text("config.disableAppNap.info")
                         .font(.caption)
@@ -67,7 +67,7 @@ struct PerformanceConfigSection: View {
                 } label: {
                     HStack {
                         Image(systemName: "wrench.and.screwdriver")
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text("config.installVcRedist")
                             Text("config.installVcRedist.info")
                                 .font(.caption)

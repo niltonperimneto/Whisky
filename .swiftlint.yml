@@ -3,6 +3,7 @@ opt_in_rules:
   - file_header
 
 excluded:
+  - winecx-gptk
   - .build
   - WhiskyKit/.build
   - build

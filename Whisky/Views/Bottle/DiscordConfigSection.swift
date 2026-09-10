@@ -25,7 +25,7 @@ struct DiscordConfigSection: View {
     var body: some View {
         Section("config.discord") {
             Toggle(isOn: $bottle.settings.discordPresence) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("config.discord.presence")
                     // The unconfigured case is a build without a Discord
                     // application behind it, which no setting here can fix.
@@ -41,7 +41,7 @@ struct DiscordConfigSection: View {
             .disabled(!DiscordPresence.isAvailable)
 
             Toggle(isOn: $bottle.settings.discordBridge) {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("config.discord.bridge")
                     Text("config.discord.bridge.info")
                         .font(.caption)

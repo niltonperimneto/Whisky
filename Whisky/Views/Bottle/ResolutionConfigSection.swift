@@ -45,7 +45,7 @@ struct ResolutionConfigSection: View {
             // Advanced mode: full controls
             if advancedMode {
                 Toggle(isOn: $bottle.settings.virtualDesktopEnabled) {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("config.virtualDesktop")
                         Text("config.virtualDesktop.info")
                             .font(.caption)

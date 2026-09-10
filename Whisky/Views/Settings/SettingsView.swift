@@ -20,42 +20,54 @@ import SwiftUI
 import WhiskyKit
 
 struct SettingsView: View {
-    @State private var selection: SettingsDestination? = .general
+    @State private var selectedTab: SettingsTab = .general
     @State private var showRuntimeSetup = false
     @State private var runtimeRefreshID = UUID()
 
     var body: some View {
-        NavigationSplitView {
-            List(SettingsDestination.allCases, selection: $selection) { destination in
-                Label(destination.title, systemImage: destination.systemImage)
-                    .tag(destination)
-            }
-            .navigationTitle("Settings")
-            .navigationSplitViewColumnWidth(min: 180, ideal: 190, max: 220)
-        } detail: {
-            Group {
-                switch selection ?? .general {
-                case .general:
-                    GeneralSettingsPage()
-                case .runtimes:
-                    RuntimeSettingsPage {
-                        showRuntimeSetup = true
-                    }
-                    .id(runtimeRefreshID)
-                case .graphics:
-                    GraphicsSettingsPage()
-                case .compatibility:
-                    CompatibilitySettingsPage()
-                case .privacy:
-                    PrivacySettingsPage()
-                case .advanced:
-                    AdvancedSettingsPage()
+        TabView(selection: $selectedTab) {
+            GeneralSettingsTab()
+                .tabItem {
+                    Label(SettingsTab.general.title, systemImage: SettingsTab.general.systemImage)
                 }
+                .tag(SettingsTab.general)
+
+            RuntimesSettingsTab(onInstallRuntimes: {
+                showRuntimeSetup = true
+            })
+            .id(runtimeRefreshID)
+            .tabItem {
+                Label(SettingsTab.runtimes.title, systemImage: SettingsTab.runtimes.systemImage)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .tag(SettingsTab.runtimes)
+
+            GraphicsSettingsTab()
+                .tabItem {
+                    Label(SettingsTab.graphics.title, systemImage: SettingsTab.graphics.systemImage)
+                }
+                .tag(SettingsTab.graphics)
+
+            CompatibilitySettingsTab()
+                .tabItem {
+                    Label(SettingsTab.compatibility.title, systemImage: SettingsTab.compatibility.systemImage)
+                }
+                .tag(SettingsTab.compatibility)
+
+            PrivacySettingsTab()
+                .tabItem {
+                    Label(SettingsTab.privacy.title, systemImage: SettingsTab.privacy.systemImage)
+                }
+                .tag(SettingsTab.privacy)
+
+            AdvancedSettingsTab()
+                .tabItem {
+                    Label(SettingsTab.advanced.title, systemImage: SettingsTab.advanced.systemImage)
+                }
+                .tag(SettingsTab.advanced)
         }
-        .navigationSplitViewStyle(.balanced)
-        .frame(minWidth: 760, idealWidth: 820, minHeight: 520, idealHeight: 580)
+        .controlSize(.small)
+        .environment(\.defaultMinListRowHeight, 10)
+        .frame(width: 580, height: 460)
         .sheet(
             isPresented: $showRuntimeSetup,
             onDismiss: { runtimeRefreshID = UUID() },
@@ -64,7 +76,7 @@ struct SettingsView: View {
     }
 }
 
-private enum SettingsDestination: String, CaseIterable, Identifiable {
+private enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case runtimes
     case graphics
@@ -78,7 +90,7 @@ private enum SettingsDestination: String, CaseIterable, Identifiable {
         switch self {
         case .general: "General"
         case .runtimes: "Runtimes"
-        case .graphics: "Graphics Toolkit"
+        case .graphics: "Graphics"
         case .compatibility: "Compatibility"
         case .privacy: "Privacy"
         case .advanced: "Advanced"
@@ -97,71 +109,67 @@ private enum SettingsDestination: String, CaseIterable, Identifiable {
     }
 }
 
-private struct GeneralSettingsPage: View {
+private struct GeneralSettingsTab: View {
     @AppStorage("killOnTerminate") private var killOnTerminate = true
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     @AppStorage("audioDeviceAlerts") private var audioDeviceAlerts = true
 
     var body: some View {
-        SettingsPage(title: "General", subtitle: "Choose how Whisky behaves while you work and play.") {
+        Form {
             Section("Application") {
                 Toggle("Quit Wine processes when Whisky quits", isOn: $killOnTerminate)
                 Toggle("Show Whisky in the menu bar", isOn: $showMenuBarExtra)
                     .help("Keep quick controls available after closing the main window.")
-                Toggle("Notify me about audio-device changes", isOn: $audioDeviceAlerts)
-                    .help("Useful when Bluetooth headsets change profile or disconnect during a game.")
+                Toggle("Show audio device alerts", isOn: $audioDeviceAlerts)
+                    .help("Surface guidance when audio hardware issues are detected.")
             }
         }
+        .formStyle(.grouped)
+        .padding(12)
     }
 }
 
-private struct RuntimeSettingsPage: View {
-    @AppStorage("checkWhiskyWineUpdates") private var checkWhiskyWineUpdates = true
-    let beginStableSetup: () -> Void
+private struct RuntimesSettingsTab: View {
+    var onInstallRuntimes: () -> Void
 
     var body: some View {
-        SettingsPage(
-            title: "Runtimes",
-            subtitle: "Install Wine engines here, then select one independently for each bottle."
-        ) {
-            Section("Stable runtime") {
-                LabeledContent("Status") {
-                    RuntimeStatusLabel(installed: WhiskyWineInstaller.isWhiskyWineInstalled())
+        Form {
+            Section {
+                Button("Install or manage Whisky Wine runtimes…") {
+                    onInstallRuntimes()
                 }
-                Toggle("Automatically check for stable runtime updates", isOn: $checkWhiskyWineUpdates)
-                Button(WhiskyWineInstaller.isWhiskyWineInstalled()
-                    ? "Repair or reinstall stable runtime…"
-                    : "Install stable runtime…") {
-                    beginStableSetup()
-                }
+            } header: {
+                Text("Wine Runtimes")
+            } footer: {
+                Text("Download new runtime engines or manage installed versions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             RuntimesSettingsSection()
         }
+        .formStyle(.grouped)
+        .padding(12)
     }
 }
 
-private struct GraphicsSettingsPage: View {
+private struct GraphicsSettingsTab: View {
     var body: some View {
-        SettingsPage(
-            title: "Graphics Toolkit",
-            subtitle: "Manage Apple’s optional D3DMetal payload independently from Wine runtimes."
-        ) {
+        Form {
             GPTKSettingsSection()
         }
+        .formStyle(.grouped)
+        .padding(12)
     }
 }
 
-private struct CompatibilitySettingsPage: View {
+private struct CompatibilitySettingsTab: View {
     @State private var rosettaInstalled = Rosetta2.isRosettaInstalled
     @State private var installingRosetta = false
     @State private var rosettaError: String?
 
     var body: some View {
-        SettingsPage(
-            title: "Compatibility",
-            subtitle: "Confirm that the host and installed runtimes satisfy Whisky’s execution requirements."
-        ) {
+        Form {
             Section("Mac") {
                 CompatibilityRow(
                     title: "Apple Silicon",
@@ -194,7 +202,7 @@ private struct CompatibilitySettingsPage: View {
 
             Section("Runtime capabilities") {
                 ForEach(WhiskyWineInstaller.installedRuntimes()) { runtime in
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(runtime.isDefault ? "Stable runtime" : runtime.displayName)
                             .fontWeight(.medium)
                         HStack(spacing: 12) {
@@ -216,6 +224,8 @@ private struct CompatibilitySettingsPage: View {
                 }
             }
         }
+        .formStyle(.grouped)
+        .padding(12)
         .alert(
             "Rosetta installation failed",
             isPresented: .init(
@@ -245,7 +255,7 @@ private struct CompatibilitySettingsPage: View {
     }
 }
 
-private struct PrivacySettingsPage: View {
+private struct PrivacySettingsTab: View {
     @AppStorage(Telemetry.consentDefaultsKey) private var telemetryConsentRaw = Telemetry.ConsentState
         .undecided.rawValue
 
@@ -257,27 +267,23 @@ private struct PrivacySettingsPage: View {
     }
 
     var body: some View {
-        SettingsPage(
-            title: "Privacy",
-            subtitle: "Control the information Whisky may use to improve reliability."
-        ) {
+        Form {
             Section("Diagnostics data") {
                 Toggle("Share anonymous usage and reliability data", isOn: telemetryOptIn)
                     .help("No bottle contents, account credentials, or personal files are included.")
             }
         }
+        .formStyle(.grouped)
+        .padding(12)
     }
 }
 
-private struct AdvancedSettingsPage: View {
+private struct AdvancedSettingsTab: View {
     @AppStorage("defaultBottleLocation") private var defaultBottleLocation = BottleData.defaultBottleDir
     @AppStorage("preferredTerminal") private var preferredTerminal = "terminal"
 
     var body: some View {
-        SettingsPage(
-            title: "Advanced",
-            subtitle: "Defaults and developer-facing tools that usually do not need adjustment."
-        ) {
+        Form {
             Section("Tools") {
                 Picker("Preferred terminal", selection: $preferredTerminal) {
                     let terminals = TerminalApp.installedTerminals
@@ -304,6 +310,8 @@ private struct AdvancedSettingsPage: View {
                     .foregroundStyle(.secondary)
             }
         }
+        .formStyle(.grouped)
+        .padding(12)
     }
 
     private func chooseBottleLocation() {
@@ -318,40 +326,6 @@ private struct AdvancedSettingsPage: View {
                 defaultBottleLocation = url
             }
         }
-    }
-}
-
-private struct SettingsPage<Content: View>: View {
-    let title: LocalizedStringKey
-    let subtitle: LocalizedStringKey
-    @ViewBuilder let content: Content
-
-    init(
-        title: LocalizedStringKey,
-        subtitle: LocalizedStringKey,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.content = content()
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.title2.weight(.semibold))
-                    Text(subtitle)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.vertical, 4)
-            }
-
-            content
-        }
-        .formStyle(.grouped)
-        .navigationTitle(title)
     }
 }
 

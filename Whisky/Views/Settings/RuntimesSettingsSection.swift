@@ -28,7 +28,6 @@ struct RuntimesSettingsSection: View {
     )!
 
     @AppStorage("showCanaryRuntimes") private var showCanaryRuntimes = false
-    @AppStorage("showBleedingEdgeRuntimes") private var showBleedingEdgeRuntimes = false
     @State private var runtimes: [InstalledRuntime] = []
     @State private var availableRuntimes: [AvailableRuntime] = []
     @State private var installing = false
@@ -48,9 +47,7 @@ struct RuntimesSettingsSection: View {
 
             Toggle("Show canary runtimes", isOn: $showCanaryRuntimes)
 
-            Toggle("Show bleeding-edge runtimes", isOn: $showBleedingEdgeRuntimes)
-
-            if showCanaryRuntimes || showBleedingEdgeRuntimes {
+            if showCanaryRuntimes {
                 ForEach(installablePreviewRuntimes) { runtime in
                     LabeledContent {
                         Button("Install") {
@@ -107,15 +104,11 @@ struct RuntimesSettingsSection: View {
         }
         .task {
             refresh()
-            if showCanaryRuntimes || showBleedingEdgeRuntimes {
+            if showCanaryRuntimes {
                 await refreshCatalog()
             }
         }
         .onChange(of: showCanaryRuntimes) { _, enabled in
-            guard enabled else { return }
-            Task { await refreshCatalog() }
-        }
-        .onChange(of: showBleedingEdgeRuntimes) { _, enabled in
             guard enabled else { return }
             Task { await refreshCatalog() }
         }
@@ -150,7 +143,7 @@ struct RuntimesSettingsSection: View {
                 case .canary:
                     showCanaryRuntimes
                 case .bleedingEdge, .development:
-                    showBleedingEdgeRuntimes
+                    false
                 }
                 return channelEnabled && !installedIdentifiers.contains(runtime.identifier)
             }
@@ -163,12 +156,16 @@ struct RuntimesSettingsSection: View {
         defer { loadingCatalog = false }
 
         do {
-            let (data, response) = try await URLSession.shared.data(from: Self.canaryCatalogURL)
-            guard let response = response as? HTTPURLResponse,
-                  (200..<300).contains(response.statusCode) else {
-                throw RuntimeCatalogDownloadError.invalidResponse
+            var fetchedRuntimes: [AvailableRuntime] = []
+
+            if showCanaryRuntimes {
+                let (data, response) = try await URLSession.shared.data(from: Self.canaryCatalogURL)
+                if let response = response as? HTTPURLResponse, (200..<300).contains(response.statusCode) {
+                    fetchedRuntimes.append(contentsOf: try RuntimeCatalog.decode(data).runtimes)
+                }
             }
-            availableRuntimes = try RuntimeCatalog.decode(data).runtimes
+
+            availableRuntimes = fetchedRuntimes
         } catch {
             installError = error.localizedDescription
         }
@@ -300,14 +297,6 @@ private struct RuntimeSettingsRow: View {
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
                             .background(.orange.opacity(0.12), in: Capsule())
-                    }
-                    if runtime.isBleedingEdge {
-                        Text("Highly Experimental")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.red)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(.red.opacity(0.12), in: Capsule())
                     }
                 }
                 Text(detail)
