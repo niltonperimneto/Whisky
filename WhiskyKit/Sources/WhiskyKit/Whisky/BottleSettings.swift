@@ -1210,7 +1210,9 @@ public struct BottleSettings: Codable, Equatable {
             // Use more aggressive shader compilation
             builder.set("DXVK_SHADER_OPT_LEVEL", "0", layer: .bottleManaged)
             // Reduce Metal resource tracking overhead
-            builder.set("MTL_ENABLE_METAL_EVENTS", "0", layer: .bottleManaged)
+            if !metalHud {
+    builder.set("MTL_ENABLE_METAL_EVENTS", "0", layer: .bottleManaged)
+}
 
         case .quality:
             // Quality mode - prioritize visuals over performance

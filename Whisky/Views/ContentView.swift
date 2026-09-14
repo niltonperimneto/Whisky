@@ -24,6 +24,9 @@ import UniformTypeIdentifiers
 import WhiskyKit
 
 struct ContentView: View {
+    @State private var shelfModel = BottleShelfModel()
+
+    @AppStorage(ModernUI.defaultsKey) private var modernUI: Bool = false
     @Environment(BottleVM.self) var bottleVM: BottleVM
     @Binding var showSetup: Bool
 
@@ -52,10 +55,22 @@ struct ContentView: View {
     }
 
     private var splitView: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
-            detail
+        Group {
+            if modernUI {
+                if let bottleURL = selected, let bottle = bottleVM.bottles.first(where: { $0.url == bottleURL }) {
+                    ModernBottleDetailView(bottle: bottle, selected: $selected)
+                        .environment(shelfModel)
+                } else {
+                    ModernBottleShelfView(selected: $selected, showBottleCreation: $showBottleCreation)
+                        .environment(shelfModel)
+                }
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    detail
+                }
+            }
         }
         .toast($toast)
         .onReceive(NotificationCenter.default.publisher(for: .zombieProcessesCleaned)) { notification in

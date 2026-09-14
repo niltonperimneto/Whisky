@@ -19,12 +19,6 @@
 import SwiftUI
 import WhiskyKit
 
-extension Color {
-    init(_ palette: IconPalette) {
-        self.init(.sRGB, red: palette.red, green: palette.green, blue: palette.blue)
-    }
-}
-
 /// Where an entry is in a launch.
 enum LibraryEntryState: Equatable {
     /// Not started, or started and already exited.

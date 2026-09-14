@@ -22,11 +22,13 @@ import XCTest
 /// rather than as XCUITest plumbing.
 class WhiskyUITestCase: XCTestCase {
     var app: XCUIApplication!
+    var extraLaunchArguments: [String] { [] }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["-WhiskyUITestMode", "1"]
+        app.launchArguments += extraLaunchArguments
         app.launch()
         // Frontmost before interacting: a non-key window makes toolbar elements
         // unhittable — the usual source of "element missing" flakiness.
