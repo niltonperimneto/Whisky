@@ -116,7 +116,6 @@ public enum SteamCompatTool {
             ])
         ])])])
     }
-
     /// The file that tells the client how to invoke the tool.
     ///
     /// `waitforexitandrun` is the verb that makes Steam wait for the game
@@ -252,7 +251,7 @@ public enum SteamCompatTool {
     /// administrator and so is the user's to run.
     public static func prepareCommand(for root: URL = sharedToolsDirectory) -> String {
         let path = root.path(percentEncoded: false)
-        return "sudo mkdir -p \(path) && sudo chown -R \"$(whoami)\" \(path)"
+        return "sudo mkdir -p '\(path)' && sudo chown -R \"$(whoami)\" '\(path)'"
     }
 
     /// Whether the tool is installed and its runner is executable.
@@ -359,7 +358,11 @@ public enum SteamCompatTool {
         from environment: [String: String] = ProcessInfo.processInfo.environment,
         clientLibrary directory: URL? = clientLibraryDirectory()
     ) -> [String: String] {
-        var passed = environment.filter { $0.key.lowercased().hasPrefix("steam") }
+let pfx = ["steam", "wine", "dxvk", "mtl", "d3dm", "dxmt", "gameoverlay"]
+var passed = environment.filter { env in
+    let lower = env.key.lowercased()
+    return pfx.contains(where: lower.hasPrefix) || lower == "cg_context_show_backtrace"
+}
         if let directory { passed[clientInstallPathKey] = directory.path(percentEncoded: false) }
         return passed
     }
