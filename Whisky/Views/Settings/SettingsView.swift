@@ -20,9 +20,7 @@ import SwiftUI
 import WhiskyKit
 
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .general
-    @State private var showRuntimeSetup = false
-    @State private var runtimeRefreshID = UUID()
+    @AppStorage("selectedSettingsTab") private var selectedTab: SettingsTab = .general
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -32,10 +30,7 @@ struct SettingsView: View {
                 }
                 .tag(SettingsTab.general)
 
-            RuntimesSettingsTab(onInstallRuntimes: {
-                showRuntimeSetup = true
-            })
-            .id(runtimeRefreshID)
+            RuntimesHubView()
             .tabItem {
                 Label(SettingsTab.runtimes.title, systemImage: SettingsTab.runtimes.systemImage)
             }
@@ -68,15 +63,10 @@ struct SettingsView: View {
         .controlSize(.small)
         .environment(\.defaultMinListRowHeight, 10)
         .frame(width: 580, height: 460)
-        .sheet(
-            isPresented: $showRuntimeSetup,
-            onDismiss: { runtimeRefreshID = UUID() },
-            content: { SetupView(showSetup: $showRuntimeSetup, firstTime: false) }
-        )
     }
 }
 
-private enum SettingsTab: String, CaseIterable, Identifiable {
+enum SettingsTab: String, CaseIterable, Identifiable {
     case general
     case runtimes
     case graphics
@@ -113,6 +103,7 @@ private struct GeneralSettingsTab: View {
     @AppStorage("killOnTerminate") private var killOnTerminate = true
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     @AppStorage("audioDeviceAlerts") private var audioDeviceAlerts = true
+    @AppStorage(ModernUI.defaultsKey) private var modernUI = false
 
     var body: some View {
         Form {
@@ -123,30 +114,11 @@ private struct GeneralSettingsTab: View {
                 Toggle("Show audio device alerts", isOn: $audioDeviceAlerts)
                     .help("Surface guidance when audio hardware issues are detected.")
             }
-        }
-        .formStyle(.grouped)
-        .padding(12)
-    }
-}
 
-private struct RuntimesSettingsTab: View {
-    var onInstallRuntimes: () -> Void
-
-    var body: some View {
-        Form {
-            Section {
-                Button("Install or manage Whisky Wine runtimes…") {
-                    onInstallRuntimes()
-                }
-            } header: {
-                Text("Wine Runtimes")
-            } footer: {
-                Text("Download new runtime engines or manage installed versions.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            Section("Interface") {
+                Toggle("Enable Modern Liquid Glass UI", isOn: $modernUI)
+                    .help("Switches to the modernized Bottle Shelf, unified Bottle Workspace, and App Grid.")
             }
-
-            RuntimesSettingsSection()
         }
         .formStyle(.grouped)
         .padding(12)
@@ -280,18 +252,10 @@ private struct PrivacySettingsTab: View {
 
 private struct AdvancedSettingsTab: View {
     @AppStorage("defaultBottleLocation") private var defaultBottleLocation = BottleData.defaultBottleDir
-    @AppStorage("preferredTerminal") private var preferredTerminal = "terminal"
 
     var body: some View {
         Form {
             Section("Tools") {
-                Picker("Preferred terminal", selection: $preferredTerminal) {
-                    let terminals = TerminalApp.installedTerminals
-                    ForEach(terminals.isEmpty ? [.terminal] : terminals) { terminal in
-                        Text(terminal.displayName).tag(terminal.rawValue)
-                    }
-                }
-
                 ActionView(
                     text: "Default bottle location",
                     subtitle: defaultBottleLocation.prettyPath(),

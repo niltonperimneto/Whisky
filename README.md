@@ -64,6 +64,7 @@ Whisky provides a clean and easy-to-use graphical wrapper for Wine built in nati
 
 ## Key Features
 
+- **Liquid Glass Modern UI** - Polished first-page Bottle Shelf, unified bottle workspace, rich App Grid, real-time status beacons, and single lifecycle control. See [Modern UI & Liquid Glass](#modern-ui--liquid-glass-design-system)
 - **Wine 11.15** - GPTK-capable build that executes Apple's D3DMetal payload, with GStreamer and FFmpeg
 - **DXMT & DXVK Graphics** - DirectX 11 through native Metal translation (DXMT) out of the box, with DXVK over MoltenVK as the universal fallback
 - **Steam Compatibility Tool** - Windows-only games install and launch from the macOS Steam client itself, with session tracking, cloud saves and a bridge to the client you are already signed in to. See [Steam](#steam)
@@ -71,6 +72,22 @@ Whisky provides a clean and easy-to-use graphical wrapper for Wine built in nati
 - **Controller Support** - SDL environment variable controls for gamepad detection and mapping issues
 - **Stability Diagnostics** - One-click diagnostic reports for troubleshooting crashes and freezes
 - **Native SwiftUI** - Beautiful, familiar macOS interface
+
+## Modern UI & Liquid Glass Design System
+
+Whisky features an opt-in modernized interface built on the **Liquid Glass Design System**, engineered for visual clarity, unified controls, and fluid interaction:
+
+- **Clean First Page (Modern Bottle Shelf)**: An interactive landing surface presenting bottles as polished glass cards. Each card displays Windows version badges, live status beacons (Active / Idle / Stopped), running process counts, and immediate quick-actions (Run Executable, Open C: Drive, Terminal, Bottle Settings).
+- **Unified Bottle Workspace**: Retires fragmented sub-navigation and duplicated stop buttons in favor of a cohesive workspace:
+  - **Single Lifecycle Control**: A prominent toolbar beacon and control providing a single, clear source of truth for stopping or force-stopping bottle sessions.
+  - **Applications Grid**: High-resolution icon grid showcasing installed Windows executables and Steam games with extracted artwork, pin toggles, and search filters.
+  - **Unified Configuration Cards**: Consistent, modular settings cards with clean inheritance controls.
+  - **Live Process Monitor**: Real-time process hierarchy with CPU/memory tracking and targeted termination.
+  - **Integrated Tools Hub**: Quick access to Winetricks, Registry Editor, Wine Configuration (`winecfg`), and Diagnostics.
+- **Design System Components**: Built with reusable tokens and components including frosted `GlassCard`, animated `StatusBeacon`, `SegmentedPillPicker`, and `UnifiedToggleRow`.
+- **Enabling Modern UI**: You can switch between the classic view and the modern experience anytime in **Settings → General → Interface → Enable Modern Liquid Glass UI**, or launch Whisky from the terminal with `-modernUI 1`.
+
+For full architecture details, design tokens, and ergonomics, see the [Whisky Modernization Master Plan](docs/WHISKY_MODERNIZATION_MASTER_PLAN.md).
 
 ## Steam
 
@@ -196,6 +213,7 @@ of this is tied to your identity.
 - **[Support](docs/SUPPORT.md)** - Where to file bugs and what to expect from a single-maintainer fork
 - **[Governance & continuity](docs/GOVERNANCE.md)** - Who maintains this and the honest bus-factor situation
 - **[Runtime dependencies](docs/DEPENDENCIES.md)** - The bundled Wine/DXVK/D3DMetal/DXMT versions and their upstream sources
+- **[Whisky Modernization Master Plan](docs/WHISKY_MODERNIZATION_MASTER_PLAN.md)** - Architecture, Liquid Glass design system specs, and modernization roadmap
 - **[Runtime and PEAK implementation plan](WhiskyWine-11.17-Implementation-Plan.md)** - Current canary status, Wine socket work, Bleeding Edge plans, qualification, and promotion gates
 - **[Logging and process-detection plan](LoggingPlan.md)** - Completed log-tail/process tracking work and remaining diagnostics milestones
 - **[Release workflow](docs/ReleaseWorkflow.md)** - Stable, Canary, and planned Bleeding Edge artifact ownership and promotion rules
