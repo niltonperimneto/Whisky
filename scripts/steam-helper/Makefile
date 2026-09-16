@@ -1,4 +1,4 @@
-CC = x86_64-w64-mingw32-gcc
+CC = x86_64-w64-mingw32-clang
 CFLAGS = -O2 -Wall -Wextra
 TARGET := WhiskySteamHelper.exe
 RESOURCES := ../../WhiskyKit/Sources/WhiskyKit/Steam/Resources

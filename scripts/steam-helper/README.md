@@ -9,7 +9,7 @@ resource. The built binary is committed: Xcode builds do not run `make`, and CI
 has no MinGW. Rebuild and commit both together whenever `helper.c` changes.
 
 ```
-brew install mingw-w64   # provides x86_64-w64-mingw32-gcc
+brew install mingw-w64   # provides x86_64-w64-mingw32-clang
 make install
 ```
 
