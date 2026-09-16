@@ -200,10 +200,11 @@ final class SteamClientOrchestrator {
         applySteamLauncherFixes()
 
         let bottle = self.bottle
-        // steam.exe -silent runs for the whole session -- never await it.
+        // Steam runs for the whole session, so launch it without awaiting its exit.
+        // Do not pass -silent: that deliberately suppresses the client window.
         Task {
             _ = try? await Wine.runProgram(
-                at: steamExe, args: ["-silent"], bottle: bottle,
+                at: steamExe, args: [], bottle: bottle,
                 // The client starts other people's games; they are not it.
                 identityScope: .program
             )
