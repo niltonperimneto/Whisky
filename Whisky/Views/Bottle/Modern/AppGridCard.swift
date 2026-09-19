@@ -189,9 +189,9 @@ struct AppGridCard: View {
 
     private var originLabel: String {
         switch tile.origin {
-        case .pinned: return String(localized: "appgrid.filter.pinned")
-        case .steam: return String(localized: "appgrid.filter.steam")
-        case .installed: return String(localized: "appgrid.filter.installed")
+        case .pinned: return "Pinned"
+        case .steam: return "Steam Library"
+        case .installed: return "Installed"
         }
     }
 
