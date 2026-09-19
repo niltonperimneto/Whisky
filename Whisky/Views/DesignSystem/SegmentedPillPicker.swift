@@ -18,31 +18,23 @@
 
 import SwiftUI
 
-/// The category switch at the top of a modern pane.
-///
-/// A `Picker` with `.segmented` cannot carry a per-segment count badge or an
-/// icon beside its title, which is what both call sites need — the workspace
-/// tabs are glyph-and-title and the app grid's filters say how many tiles are
-/// in each bucket. So the segments are buttons, and the selection is one pill
-/// that slides between them rather than one background per segment: a shared
-/// `matchedGeometryEffect` is what makes the move read as the same object
-/// travelling instead of two fades crossing.
 struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
     var items: [Item]
     @Binding var selection: Item
+    var accessibilityTitle: LocalizedStringKey?
     @ViewBuilder var label: (Item) -> Label
 
-    /// Scoped per instance, so two pickers on the same screen do not try to
-    /// share one indicator and fly it across the window between them.
     @Namespace private var indicator
 
     init(
         items: [Item],
         selection: Binding<Item>,
+        accessibilityTitle: LocalizedStringKey? = nil,
         @ViewBuilder label: @escaping (Item) -> Label
     ) {
         self.items = items
         self._selection = selection
+        self.accessibilityTitle = accessibilityTitle
         self.label = label
     }
 
@@ -53,8 +45,11 @@ struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
             }
         }
         .padding(WhiskyDesignSystem.Spacing.extraExtraSmall)
-        .glassEffect(.regular, in: Capsule())
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous))
         .accessibilityElement(children: .contain)
+        .ifLet(accessibilityTitle) { view, title in
+            view.accessibilityLabel(title)
+        }
     }
 
     private func segment(_ item: Item) -> some View {
@@ -66,43 +61,33 @@ struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
         } label: {
             label(item)
                 .font(.subheadline)
-                // Semibold on the selection and secondary on the rest, so the
-                // current category is legible even where the pill's tint is
-                // washed out by whatever the glass is sitting over.
                 .fontWeight(isSelected ? .semibold : .regular)
                 .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, WhiskyDesignSystem.Spacing.medium)
                 .padding(.vertical, WhiskyDesignSystem.Spacing.extraSmall)
                 .background {
                     if isSelected {
-                        Capsule()
+                        RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous)
                             .fill(.tint.opacity(0.22))
                             .matchedGeometryEffect(id: "selection", in: indicator)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
-#if DEBUG
-private struct SegmentedPillPickerPreview: View {
-    @State private var selection = "Apps"
-
-    var body: some View {
-        SegmentedPillPicker(
-            items: ["Apps", "Configuration", "Processes", "Tools"],
-            selection: $selection
-        ) { item in
-            Text(verbatim: item)
+extension View {
+    @ViewBuilder func ifLet<V, Transform: View>(
+        _ value: V?,
+        transform: (Self, V) -> Transform
+    ) -> some View {
+        if let value = value {
+            transform(self, value)
+        } else {
+            self
         }
-        .padding(WhiskyDesignSystem.Spacing.extraLarge)
     }
 }
-
-#Preview("Segmented Pill Picker") {
-    SegmentedPillPickerPreview()
-}
-#endif

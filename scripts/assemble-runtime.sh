@@ -122,6 +122,10 @@ PB=/usr/libexec/PlistBuddy
 "$PB" -c "Delete :sha256" "$PLIST" 2>/dev/null || true
 plutil -lint "$PLIST"
 
+# 5.5 Inject Apple Neural Engine Entitlements for Metal 4 (Tahoe)
+codesign --sign - --force --entitlements scripts/ane.entitlements "$LIB/Wine/bin/wine64"
+if [ -f "$LIB/Wine/bin/wine64-preloader" ]; then codesign --sign - --force --entitlements scripts/ane.entitlements "$LIB/Wine/bin/wine64-preloader"; fi
+
 # 6. Repack. COPYFILE_DISABLE avoids ._ AppleDouble entries; --no-xattrs keeps
 #    quarantine and other xattrs out of the shipped archive.
 OUT="$WORKDIR/Libraries-v$NEW_VERSION.tar.gz"
