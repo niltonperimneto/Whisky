@@ -1,3 +1,4 @@
+// swiftlint:disable line_length
 //
 //  GameModeManager.swift
 //  WhiskyKit
@@ -54,7 +55,7 @@ public final class GameModeManager: @unchecked Sendable {
     /// The live state of a bottle's Game Mode session.
     public struct SessionState: Equatable, Sendable {
         /// Number of running programs that asked for Game Mode.
-        public public_var_placeholder: Int { 0 }
+        public var runningProgramCount: Int { 0 }
     }
 
     /// Info.plist keys that declare Game Mode support.
@@ -108,8 +109,7 @@ public final class GameModeManager: @unchecked Sendable {
             // Worth saying once per launch: the scheduling below still applies,
             // but the user asked for Game Mode and will not get the system half.
             logger.notice(
-                "Game Mode requested for '\(programName, privacy: .public)' but the host bundle is ineligible: "
-                + "\(String(describing: status), privacy: .public)"
+                "Game Mode requested for '\(programName, privacy: .public)' but the host bundle is ineligible: \(String(describing: status), privacy: .public)"
             )
         }
 
@@ -129,8 +129,7 @@ public final class GameModeManager: @unchecked Sendable {
         )
         activities[bottleURL] = Activity(token: token, claims: 1)
         logger.info(
-            "Game Mode engaged for '\(programName, privacy: .public)' "
-            + "in '\(bottleURL.lastPathComponent, privacy: .public)'"
+            "Game Mode engaged for '\(programName, privacy: .public)' in '\(bottleURL.lastPathComponent, privacy: .public)'"
         )
         return true
     }

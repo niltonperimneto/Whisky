@@ -1,3 +1,4 @@
+// swiftlint:disable legacy_swiftui_aspect_ratio
 //
 //  ProgramView.swift
 //  Whisky

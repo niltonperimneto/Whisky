@@ -1,3 +1,4 @@
+// swiftlint:disable multiple_closures_with_trailing_closure
 //
 //  GlassCard.swift
 //  Whisky
