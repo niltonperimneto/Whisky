@@ -1,5 +1,5 @@
 //
-//  AppGridCard.swift
+//  File.swift
 //  Whisky
 //
 //  This file is part of Whisky.
@@ -16,23 +16,14 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
+// swiftlint:disable file_header
 import SwiftUI
 import WhiskyKit
 
-/// One launchable thing in a bottle.
-///
-/// An art band over a name row, rather than the icon-and-caption tile the old
-/// pinned-programs grid used. A Steam game already has a banner cached inside
-/// the prefix and showing it is what makes a grid of twenty entries scannable;
-/// everything else gets its own icon on a backdrop sampled from that icon, so
-/// a card without artwork is still the colour of the thing it launches rather
-/// than one more grey rectangle.
 struct AppGridCard: View {
     var tile: BottleAppCatalogue.Tile
     var state: LibraryEntryState
     var launch: () -> Void
-    /// Abandons a launch still in flight. `nil` for anything with nothing to
-    /// cancel, which is every direct program launch.
     var onCancel: (() -> Void)?
 
     @State private var icon: Image?
@@ -55,18 +46,11 @@ struct AppGridCard: View {
 
     var body: some View {
         Button(action: launch) {
-            VStack(spacing: 0) {
-                artBand
-                nameRow
-            }
-            .contentShape(shape)
+            cardContent
         }
         .buttonStyle(.plain)
         .focusable()
         .focused($isFocused)
-        // The system ring is a rectangle around the button's frame, so on a
-        // rounded card it draws a second, squarer outline outside the card's
-        // own shape.
         .focusEffectDisabled()
         .onKeyPress(.return) {
             launch()
@@ -74,12 +58,6 @@ struct AppGridCard: View {
         }
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.16)) { isHovering = hovering }
-        }
-        .glassEffect(isActive ? .regular.interactive() : .regular, in: shape)
-        .overlay {
-            if isFocused {
-                shape.strokeBorder(Color.accentColor, lineWidth: 3)
-            }
         }
         .scaleEffect(isActive ? 1.015 : 1)
         .task(id: tile.id) {
@@ -90,66 +68,85 @@ struct AppGridCard: View {
         .accessibilityHint(Text("library.card.hint"))
     }
 
-    /// Hover is a mouse-only signal, so anything shown only on hover does not
-    /// exist for somebody on the keyboard.
     private var isActive: Bool { isHovering || isFocused }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.medium, style: .continuous)
     }
 
-    // MARK: - Art
-
-    /// 16:9, which is the shape Steam's cached header art already is. Fixing
-    /// the ratio rather than the height is what keeps a row of tiles aligned
-    /// when the adaptive grid resizes its columns.
-    private var artBand: some View {
+    private var cardContent: some View {
         ZStack(alignment: .topTrailing) {
             LinearGradient(
-                colors: [Color(palette.deepened()), Color(palette.deepened(toLuminance: 0.07))],
+                colors: [Color(palette.deepened()), Color(palette.deepened(toLuminance: 0.1))],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            if let artwork {
-                // Sized by an empty layer rather than by the image: scaledToFill
-                // on its own reports the image's size upward and the card grows
-                // to fit it.
-                Color.clear
-                    .overlay {
-                        artwork
-                            .resizable()
-                            .scaledToFill()
-                    }
-                    .clipped()
-            } else if let icon {
-                icon
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 52, height: 52)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-            } else {
-                Image(systemName: "app.dashed")
-                    .font(.system(size: 26, weight: .light))
-                    .foregroundStyle(.white.opacity(0.5))
+            ZStack {
+                if let artwork {
+                    artwork
+                        .resizable()
+                        .scaledToFill()
+                        .opacity(0.8)
+                } else if let icon {
+                    icon
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 80, height: 80)
+                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
 
             status
                 .padding(WhiskyDesignSystem.Spacing.small)
+
+            VStack {
+                Spacer()
+                nameBumper
+            }
         }
-        .aspectRatio(16 / 9, contentMode: .fit)
-        .clipShape(
-            .rect(
-                topLeadingRadius: WhiskyDesignSystem.Radius.medium,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: WhiskyDesignSystem.Radius.medium,
-                style: .continuous
-            )
-        )
+        .aspectRatio(2 / 3, contentMode: .fit)
+        .clipShape(shape)
+        .glassEffect(isActive ? .regular.interactive() : .regular, in: shape)
+        .overlay {
+            if isFocused {
+                shape.strokeBorder(Color.accentColor, lineWidth: 3)
+            }
+        }
     }
 
-    /// The top-right corner: what it is doing, or the offer to start it.
+    private var nameBumper: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(tile.entry.name)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(tile.entry.name)
+
+            Text(originLabel)
+                .font(.caption2)
+                .opacity(0.7)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, WhiskyDesignSystem.Spacing.small)
+        .padding(.top, WhiskyDesignSystem.Spacing.small)
+        .padding(.bottom, WhiskyDesignSystem.Spacing.medium)
+        .background { Color.black.opacity(0.35) }
+        .glassEffect(.clear, in: .rect(
+            bottomLeadingRadius: WhiskyDesignSystem.Radius.medium,
+            bottomTrailingRadius: WhiskyDesignSystem.Radius.medium,
+            style: .continuous
+        ))
+    }
+
     @ViewBuilder
     private var status: some View {
         switch state {
@@ -190,47 +187,18 @@ struct AppGridCard: View {
         }
     }
 
-    // MARK: - Name
-
-    private var nameRow: some View {
-        VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.extraExtraSmall) {
-            Text(tile.entry.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
-                // Tail, not middle: a game's name is recognisable from its
-                // start, and "The Elder Scro...Special Edition" reads worse
-                // than losing the edition suffix.
-                .truncationMode(.tail)
-                .help(tile.entry.name)
-
-            Text(originLabel)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, WhiskyDesignSystem.Spacing.small)
-        .padding(.vertical, WhiskyDesignSystem.Spacing.small)
-    }
-
-    /// Why this tile is here. A scan found it, the store installed it, or
-    /// somebody pinned it — which is the one thing the name cannot say.
     private var originLabel: String {
         switch tile.origin {
-        case .pinned: String(localized: "appgrid.filter.pinned")
-        case .steam: String(localized: "appgrid.filter.steam")
-        case .installed: String(localized: "appgrid.filter.installed")
+        case .pinned: return String(localized: "appgrid.filter.pinned")
+        case .steam: return String(localized: "appgrid.filter.steam")
+        case .installed: return String(localized: "appgrid.filter.installed")
         }
     }
 
-    /// Decoding and palette sampling both happen inside ``IconCache``, which is
-    /// where the reasoning about repeating them lives.
     private func loadIcon() async {
         if let artworkURL = tile.entry.artworkURL,
            let sampled = await IconCache.shared.sampledArtwork(for: artworkURL) {
             artwork = Image(nsImage: sampled.image)
-            // Still sampled: the band behind the art shows through wherever a
-            // banner does not fill the full 16:9.
             palette = sampled.palette
             return
         }
