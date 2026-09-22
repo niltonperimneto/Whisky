@@ -28,37 +28,7 @@ struct DesignSystemGalleryView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.extraLarge) {
-                // 1. Hero Header Showcase
-                HeroHeader(
-                    title: "Gaming Bottle (Windows 11)",
-                    subtitle: "~/Library/Containers/com.isaacmarovitz.Whisky/Bottles/Gaming",
-                    systemIcon: "gamecontroller.fill",
-                    isRunning: true,
-                    badges: [
-                        MetricBadge(title: "Game Mode", icon: "bolt.fill", style: .gameMode),
-                        MetricBadge(title: "D3DMetal", style: .accent),
-                        MetricBadge(title: "3 Running", style: .running, showBeacon: true)
-                    ]
-                ) {
-                    HStack(spacing: WhiskyDesignSystem.Spacing.small) {
-                        Button {
-                            // Action
-                        } label: {
-                            Label("Run...", systemImage: "play.fill")
-                        }
-                        .buttonStyle(.borderedProminent)
-
-                        Button {
-                            // Action
-                        } label: {
-                            Label("Stop Bottle", systemImage: "stop.circle")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.red)
-                    }
-                }
-
-                // 2. Segmented Pill Picker Showcase
+                // 1. Segmented Pill Picker Showcase
                 HStack {
                     Text("Pill Picker:")
                         .font(.headline)
@@ -71,7 +41,7 @@ struct DesignSystemGalleryView: View {
                     }
                 }
 
-                // 3. Status Beacons & Metric Badges Showcase
+                // 2. Status Beacons & Metric Badges Showcase
                 VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.small) {
                     Text("Beacons & Metric Badges:")
                         .font(.headline)
@@ -93,7 +63,7 @@ struct DesignSystemGalleryView: View {
                     }
                 }
 
-                // 4. Glass Cards with Unified Toggle Rows (Bottle & Per-App Parity)
+                // 3. Glass Cards with Unified Toggle Rows (Bottle & Per-App Parity)
                 GlassCard(isInteractive: false) {
                     VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.medium) {
                         Text("Graphics & Optimization (Liquid Glass Card)")
