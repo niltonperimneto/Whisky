@@ -116,3 +116,10 @@ WhiskyKit/Sources/WhiskyKit/Discord/Local/client-id.txt
 # Built by scripts/build_audio_test.sh, which also drops a copy beside itself.
 # The one under Whisky/Resources is committed; this one is not.
 scripts/WhiskyAudioTest.exe
+
+# Standalone repositories / external projects (must not be committed to Whisky)
+winecx/
+winecx-*/
+tmp_winecx*/
+relay12/
+relay12-*/
