@@ -17,7 +17,7 @@ BASE_TAG="v3.0.0"
 BASE_SHA256="9c3d2a7d9bb682ae8398d8bae458e3cb52bb9f5a3345fb0830a64d9b6a1025f8"
 DXMT_VERSION="0.80"
 DXMT_ARCHIVE_DIR="${DXMT_ARCHIVE_DIR:-$HOME/Projects/Whisky-runtime-archive/dxmt-v$DXMT_VERSION}"
-DXVK_VERSION="1.10.3"   # carried over unchanged from the base runtime
+DXVK_VERSION="2.4.0"   # upstream doitsujin (needs KosmicKrisp ICD)
 REPO="frankea/Whisky"
 # -----------------------------------------------------------------------------
 
@@ -121,6 +121,10 @@ PB=/usr/libexec/PlistBuddy
 "$PB" -c "Add :dxmtVersion string $DXMT_VERSION" "$PLIST"
 "$PB" -c "Delete :sha256" "$PLIST" 2>/dev/null || true
 plutil -lint "$PLIST"
+
+# 5.5 Inject Apple Neural Engine Entitlements for Metal 4 (Tahoe)
+codesign --sign - --force --entitlements scripts/ane.entitlements "$LIB/Wine/bin/wine64"
+if [ -f "$LIB/Wine/bin/wine64-preloader" ]; then codesign --sign - --force --entitlements scripts/ane.entitlements "$LIB/Wine/bin/wine64-preloader"; fi
 
 # 6. Repack. COPYFILE_DISABLE avoids ._ AppleDouble entries; --no-xattrs keeps
 #    quarantine and other xattrs out of the shipped archive.

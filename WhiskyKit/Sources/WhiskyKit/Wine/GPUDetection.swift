@@ -155,7 +155,7 @@ public enum GPUDetection {
         var env = spoofGPU(vendor: .nvidia, model: "Apple M-series (as NVIDIA RTX 4090)")
 
         // Additional Apple Silicon optimizations
-        env["MTL_HUD_ENABLED"] = "0" // Disable by default for spoofing
+        // env["MTL_HUD_ENABLED"] = "0" // Disable by default for spoofing
         env["METAL_DEVICE_WRAPPER_TYPE"] = "1"
 
         // Ensure Metal is properly initialized
