@@ -24,21 +24,6 @@ struct PerformanceConfigSection: View {
 
     var body: some View {
         Section("config.title.performance") {
-            Picker("config.performancePreset", selection: $bottle.settings.performancePreset) {
-                ForEach(PerformancePreset.allCases, id: \.self) { preset in
-                    Text(preset.description()).tag(preset)
-                }
-            }
-            // Show description of current preset
-            if bottle.settings.performancePreset != .balanced {
-                HStack {
-                    Image(systemName: presetIcon(for: bottle.settings.performancePreset))
-                        .foregroundColor(.secondary)
-                    Text(presetDescription(for: bottle.settings.performancePreset))
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
             Toggle(isOn: $bottle.settings.shaderCacheEnabled) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("config.shaderCache")
@@ -57,7 +42,7 @@ struct PerformanceConfigSection: View {
                         .foregroundColor(.secondary)
                 }
             }
-            // Install VC++ Runtime button for Unity games
+            // Install VC++ Runtime button (needed for Unity IL2CPP and other C++ games)
             if !bottle.settings.vcRedistInstalled {
                 Button {
                     Task {
@@ -97,33 +82,5 @@ struct PerformanceConfigSection: View {
         guard let verbs = await Winetricks.listInstalledVerbs(for: bottle) else { return }
         guard bottle.url == bottleURL else { return }
         bottle.settings.vcRedistInstalled = verbs.contains { $0.hasPrefix("vcrun") }
-    }
-
-    // MARK: - Performance Preset Helpers
-
-    func presetIcon(for preset: PerformancePreset) -> String {
-        switch preset {
-        case .balanced:
-            "scale.3d"
-        case .performance:
-            "bolt.fill"
-        case .quality:
-            "sparkles"
-        case .unity:
-            "cube.fill"
-        }
-    }
-
-    func presetDescription(for preset: PerformancePreset) -> String {
-        switch preset {
-        case .balanced:
-            String(localized: "config.preset.balanced.desc")
-        case .performance:
-            String(localized: "config.preset.performance.desc")
-        case .quality:
-            String(localized: "config.preset.quality.desc")
-        case .unity:
-            String(localized: "config.preset.unity.desc")
-        }
     }
 }
