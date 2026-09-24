@@ -959,14 +959,17 @@ public struct BottleSettings: Codable, Equatable {
         case .relay12:
             builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .bottleManaged)
             builder.set("RELAY12_TRACE_CREATION", "1", layer: .bottleManaged)
-            // relay12 handles its own ddi overrides for WDDM host and routing D3D11 to D3DMetal
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .nativeThenBuiltin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .nativeThenBuiltin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeThenBuiltin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxilconv", mode: .nativeThenBuiltin), source: .userBottle))
+            builder.remove("WINEMSYNC", layer: .bottleManaged)
+            builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxilconv", mode: .native), source: .userBottle))
             managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin), source: .userBottle))
             managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d12", mode: .builtin), source: .userBottle))
             managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxgi", mode: .builtin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mscoree", mode: .disabled), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mshtml", mode: .disabled), source: .userBottle))
         }
 
         // Enhanced sync mode
