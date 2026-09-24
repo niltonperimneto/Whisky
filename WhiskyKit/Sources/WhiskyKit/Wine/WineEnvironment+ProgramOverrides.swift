@@ -78,7 +78,6 @@ extension Wine {
                     (overrides.metal4Enabled ?? metal4Enabled) ? "1" : "0",
                     layer: .programUser
                 )
-                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
 
             case .dxvk:
                 // Enable DXVK DLLs at program level
@@ -92,7 +91,6 @@ extension Wine {
                 // games on D3DMetal (DXVK has no d3d12) while they inherit
                 // Steam's environment. D3DM_ENABLE_METALFX and D3DM_MTL4 already
                 // survive this branch for the same reason.
-                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
 
             case .dxmt:
                 // Reset the full translation-DLL union to builtin first so a DXVK
@@ -105,7 +103,8 @@ extension Wine {
                 builder.remove("DXVK_HUD", layer: .programUser)
                 builder.remove("DXVK_ASYNC", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
-                builder.set("WINE_METAL_SHADER_CACHE_DIR", "dxmt", layer: .programUser)
+                // Survives for the reason given under .dxvk: DXMT translates d3d11
+                // only, so d3d12 is still D3DMetal here.
 
             case .wined3d:
                 // Force wined3d: disable D3DMetal + undo DXVK/DXMT DLLs
@@ -113,7 +112,6 @@ extension Wine {
                 // The one branch that really has no D3DMetal behind it, so the
                 // capability claim would be a lie.
                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
-                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
 
             case .relay12:

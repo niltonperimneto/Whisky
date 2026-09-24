@@ -347,22 +347,9 @@ public class Wine {
         // shell. Once GPTK makes D3DMetal available, returning the bottle choice
         // here would bypass the launcher steer and turn Steam black again.
         // An explicit per-program choice remains authoritative.
-        if programOverrides?.graphicsBackend == nil,
-           let launcher = LauncherType.detect(from: url) {
-            let resolved = GraphicsBackendResolver.resolve(
-                for: bottle.settings.runtime,
-                launcher: launcher,
-                architecture: GraphicsBackendResolver.architecture(of: url)
-            )
-            var pinned = programOverrides ?? ProgramOverrides()
-            pinned.graphicsBackend = resolved
-            return GraphicsLaunchPlan(
-                requestedBackend: choice,
-                effectiveBackend: resolved,
-                decisionSource: .launcher,
-                programOverrides: pinned
-            )
-        }
+        // [FIX]: Steam now natively supports all backends due to the CEF disable GPU changes,
+        // so we DO NOT bypass the user's bottle-level graphics choice for launchers.
+        // This ensures the launcher does not physically overwrite the Native DLLs for the Bottle's games!
         if choice != .recommended, servable {
             return GraphicsLaunchPlan(
                 requestedBackend: choice,
@@ -1236,7 +1223,7 @@ public class Wine {
                 payload: dxmtFolder(for: runtime),
                 windows: windows
             )
-        case .d3dMetal, .wined3d, .recommended:
+        case .d3dMetal, .wined3d, .recommended, .relay12:
             // These backends use runtime builtins. Their existing launch-time
             // cleanup remains authoritative because a native user DLL cannot be
             // distinguished safely from a deliberately stripped builtin here.
@@ -1520,7 +1507,7 @@ public class Wine {
             return Set(contents.filter { $0.hasSuffix(".dll") })
         case .dxmt:
             return Set(dxmtPrefixDLLs)
-        case .d3dMetal, .wined3d, .recommended:
+        case .d3dMetal, .wined3d, .recommended, .relay12:
             return []
         }
     }

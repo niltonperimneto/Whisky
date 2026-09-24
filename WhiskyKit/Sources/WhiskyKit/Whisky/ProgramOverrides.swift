@@ -53,6 +53,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
 
     /// Whether to force DirectX 11 mode. `nil` inherits from bottle.
     public var forceD3D11: Bool?
+    public var metalHud: Bool?
     /// Whether D3DMetal uses the Metal 4 command encoding backend. `nil` inherits from bottle.
     ///
     /// D3DMetal only takes that path for D3D12 devices, so this is the one
@@ -121,6 +122,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             && dxvkHud == nil
             && enhancedSync == nil
             && forceD3D11 == nil
+            && metalHud == nil
             && metal4Enabled == nil
             && frameGeneration == nil
             && shaderCacheEnabled == nil
@@ -150,6 +152,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
         self.dxvkHud = try container.decodeIfPresent(DXVKHUD.self, forKey: .dxvkHud)
         self.enhancedSync = try container.decodeIfPresent(EnhancedSync.self, forKey: .enhancedSync)
         self.forceD3D11 = try container.decodeIfPresent(Bool.self, forKey: .forceD3D11)
+        self.metalHud = try container.decodeIfPresent(Bool.self, forKey: .metalHud)
         self.metal4Enabled = try container.decodeIfPresent(Bool.self, forKey: .metal4Enabled)
         self.frameGeneration = try container.decodeIfPresent(Bool.self, forKey: .frameGeneration)
         self.shaderCacheEnabled = try container.decodeIfPresent(Bool.self, forKey: .shaderCacheEnabled)

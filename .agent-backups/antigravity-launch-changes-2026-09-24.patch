@@ -1,0 +1,164 @@
+diff --git a/WhiskyKit/Sources/WhiskyKit/Steam/SteamClientRenderingPolicy.swift b/WhiskyKit/Sources/WhiskyKit/Steam/SteamClientRenderingPolicy.swift
+index cb67ca1e..5082fd03 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Steam/SteamClientRenderingPolicy.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Steam/SteamClientRenderingPolicy.swift
+@@ -19,7 +19,9 @@
+ import Foundation
+ 
+ enum SteamClientRenderingPolicy {
+-    static let cefRenderingArguments = ["-cef-force-gpu"]
++    // Avoid -cef-force-gpu on DXMT/D3DMetal because it causes black screens,
++    // though DXMT 3.x might support it better. We need DXMT to rule system32.
++    static let cefRenderingArguments = ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
+ 
+     static func arguments(
+         for executable: URL,
+diff --git a/WhiskyKit/Sources/WhiskyKit/Wine/GraphicsBackendResolver.swift b/WhiskyKit/Sources/WhiskyKit/Wine/GraphicsBackendResolver.swift
+index 9ee919d4..8c7ad2f3 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Wine/GraphicsBackendResolver.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Wine/GraphicsBackendResolver.swift
+@@ -67,9 +67,8 @@ public enum GraphicsBackendResolver {
+         // reliably presents Chromium's cross-process surfaces, so keep the
+         // client itself on DXVK regardless of the runtime's game recommendation.
+         // Games launched by it are resolved separately with `launcher == nil`.
+-        if launcher != nil {
+-            return .dxvk
+-        }
++        // We no longer force DXVK for launchers because it overwrites system32
++        // and breaks DXMT and D3DMetal Unity 6 games!
+         if d3dMetalInstalled {
+             return .d3dMetal
+         }
+diff --git a/WhiskyKit/Sources/WhiskyKit/Wine/MacOSCompatibility.swift b/WhiskyKit/Sources/WhiskyKit/Wine/MacOSCompatibility.swift
+index 463a4fe6..d7aab5e3 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Wine/MacOSCompatibility.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Wine/MacOSCompatibility.swift
+@@ -113,6 +113,11 @@ public enum MacOSCompatibilityFixes {
+             reason: "CEF sandbox cannot function under Wine; required for launcher startup",
+             appliesFrom: allVersions, category: .sandbox
+         ),
++        MacOSFix(
++            key: "D3DM_WINE_UNIX_CALL", value: "1",
++            reason: "Enables D3DMetal unix calls and Win32 dispatch callbacks required for WineMonitor and display initialization",
++            appliesFrom: allVersions, category: .graphics
++        ),
+ 
+         // macOS 15.3+ fixes
+         MacOSFix(
+diff --git a/WhiskyKit/Sources/WhiskyKit/Wine/Wine.swift b/WhiskyKit/Sources/WhiskyKit/Wine/Wine.swift
+index 66e59815..4fc54738 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Wine/Wine.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Wine/Wine.swift
+@@ -347,22 +347,9 @@ public class Wine {
+         // shell. Once GPTK makes D3DMetal available, returning the bottle choice
+         // here would bypass the launcher steer and turn Steam black again.
+         // An explicit per-program choice remains authoritative.
+-        if programOverrides?.graphicsBackend == nil,
+-           let launcher = LauncherType.detect(from: url) {
+-            let resolved = GraphicsBackendResolver.resolve(
+-                for: bottle.settings.runtime,
+-                launcher: launcher,
+-                architecture: GraphicsBackendResolver.architecture(of: url)
+-            )
+-            var pinned = programOverrides ?? ProgramOverrides()
+-            pinned.graphicsBackend = resolved
+-            return GraphicsLaunchPlan(
+-                requestedBackend: choice,
+-                effectiveBackend: resolved,
+-                decisionSource: .launcher,
+-                programOverrides: pinned
+-            )
+-        }
++        // [FIX]: Steam now natively supports all backends due to the CEF disable GPU changes,
++        // so we DO NOT bypass the user's bottle-level graphics choice for launchers.
++        // This ensures the launcher does not physically overwrite the Native DLLs for the Bottle's games!
+         if choice != .recommended, servable {
+             return GraphicsLaunchPlan(
+                 requestedBackend: choice,
+diff --git a/WhiskyKit/Sources/WhiskyKit/Wine/WineDLLOverrideRegistry.swift b/WhiskyKit/Sources/WhiskyKit/Wine/WineDLLOverrideRegistry.swift
+index 868a4ab1..16093654 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Wine/WineDLLOverrideRegistry.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Wine/WineDLLOverrideRegistry.swift
+@@ -35,9 +35,9 @@ public extension Wine {
+             case .d3dMetal:
+                 "d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
+             case .dxvk:
+-                "d3d9=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
++                "d3d9=n,b;d3d10core=n,b;d3d11=n,b;d3d12=;dxgi=n,b"
+             case .dxmt:
+-                "d3d10core=n,b;d3d11=n,b;d3d12=n,b;dxgi=n,b"
++                "d3d10core=n,b;d3d11=n,b;d3d12=;dxgi=n,b;winemetal=b"
+             case .wined3d:
+                 "d3d9=b;d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
+             case .recommended:
+diff --git a/WhiskyKit/Sources/WhiskyKit/Wine/WineEnvironment+ProgramOverrides.swift b/WhiskyKit/Sources/WhiskyKit/Wine/WineEnvironment+ProgramOverrides.swift
+index 1df62722..84d3891f 100644
+--- a/WhiskyKit/Sources/WhiskyKit/Wine/WineEnvironment+ProgramOverrides.swift
++++ b/WhiskyKit/Sources/WhiskyKit/Wine/WineEnvironment+ProgramOverrides.swift
+@@ -78,6 +78,7 @@ extension Wine {
+                     (overrides.metal4Enabled ?? metal4Enabled) ? "1" : "0",
+                     layer: .programUser
+                 )
++                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
+ 
+             case .dxvk:
+                 // Enable DXVK DLLs at program level
+@@ -91,6 +92,7 @@ extension Wine {
+                 // games on D3DMetal (DXVK has no d3d12) while they inherit
+                 // Steam's environment. D3DM_ENABLE_METALFX and D3DM_MTL4 already
+                 // survive this branch for the same reason.
++                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
+ 
+             case .dxmt:
+                 // Reset the full translation-DLL union to builtin first so a DXVK
+@@ -103,8 +105,7 @@ extension Wine {
+                 builder.remove("DXVK_HUD", layer: .programUser)
+                 builder.remove("DXVK_ASYNC", layer: .programUser)
+                 builder.remove("WINED3DMETAL", layer: .programUser)
+-                // Survives for the reason given under .dxvk: DXMT translates d3d11
+-                // only, so d3d12 is still D3DMetal here.
++                builder.set("WINE_METAL_SHADER_CACHE_DIR", "dxmt", layer: .programUser)
+ 
+             case .wined3d:
+                 // Force wined3d: disable D3DMetal + undo DXVK/DXMT DLLs
+@@ -112,6 +113,7 @@ extension Wine {
+                 // The one branch that really has no D3DMetal behind it, so the
+                 // capability claim would be a lie.
+                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
++                builder.remove("WINE_METAL_SHADER_CACHE_DIR", layer: .programUser)
+                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
+             }
+         }
+diff --git a/WhiskyKit/Tests/WhiskyKitTests/SteamClientRenderingPolicyTests.swift b/WhiskyKit/Tests/WhiskyKitTests/SteamClientRenderingPolicyTests.swift
+index 127c537c..409fe26d 100644
+--- a/WhiskyKit/Tests/WhiskyKitTests/SteamClientRenderingPolicyTests.swift
++++ b/WhiskyKit/Tests/WhiskyKitTests/SteamClientRenderingPolicyTests.swift
+@@ -25,7 +25,7 @@ struct SteamClientRenderingPolicyTests {
+     func steamUsesGPURendering() {
+         let steam = URL(filePath: "/Steam/steam.exe")
+         #expect(SteamClientRenderingPolicy.arguments(for: steam, arguments: []) == [
+-            "-cef-force-gpu"
++            "-cef-disable-gpu", "-cef-disable-gpu-compositing"
+         ])
+     }
+ 
+@@ -37,7 +37,7 @@ struct SteamClientRenderingPolicyTests {
+             for: steam,
+             arguments: ["-nooverlayui"],
+             blockInjectedOverlays: true
+-        ) == ["-nooverlayui", "-cef-force-gpu"])
++        ) == ["-nooverlayui", "-cef-disable-gpu", "-cef-disable-gpu-compositing"])
+         #expect(SteamClientRenderingPolicy.arguments(
+             for: game,
+             arguments: [],
+@@ -51,8 +51,8 @@ struct SteamClientRenderingPolicyTests {
+         let game = URL(filePath: "/Steam/steamapps/common/game.exe")
+         #expect(SteamClientRenderingPolicy.arguments(
+             for: steam,
+-            arguments: ["-cef-force-gpu"]
+-        ) == ["-cef-force-gpu"])
++            arguments: ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
++        ) == ["-cef-disable-gpu", "-cef-disable-gpu-compositing"])
+         #expect(SteamClientRenderingPolicy.arguments(for: game, arguments: []) == [])
+     }
+ }
