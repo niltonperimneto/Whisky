@@ -121,7 +121,13 @@ extension Wine {
                 builder.remove("DXVK_ASYNC", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
-                dllResolver.programCustom.append(contentsOf: [DLLOverrideEntry(dllName: "d3d11", mode: .nativeBuiltin), DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeBuiltin)])
+                dllResolver.programCustom.append(contentsOf: [
+                    DLLOverrideEntry(dllName: "d3d11", mode: .nativeThenBuiltin),
+                    DLLOverrideEntry(dllName: "d3d11on12", mode: .nativeThenBuiltin),
+                    DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeThenBuiltin),
+                    DLLOverrideEntry(dllName: "dxilconv", mode: .nativeThenBuiltin),
+                    DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin)
+                ])
             }
         }
 
@@ -203,6 +209,13 @@ extension Wine {
         // an explicit value overrides that.
         if let metal4Enabled = overrides.metal4Enabled {
             builder.set("D3DM_MTL4", metal4Enabled ? "1" : "0", layer: .programUser)
+        }
+
+        // Metal HUD override. Controls the Metal Performance HUD overlay.
+        // Explicit false is retained as MTL_HUD_ENABLED=0 so a game can
+        // opt out of a bottle-level HUD.
+        if let metalHud = overrides.metalHud {
+            builder.set("MTL_HUD_ENABLED", metalHud ? "1" : "0", layer: .programUser)
         }
 
         // Frame generation override. `CX_ACTIVE_GRAPHICS_BACKEND` is the whole

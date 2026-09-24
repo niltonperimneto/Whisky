@@ -955,6 +955,14 @@ public struct BottleSettings: Codable, Equatable {
         case .wined3d:
             // Disable D3DMetal, forcing Wine's OpenGL-based wined3d path
             builder.set("WINED3DMETAL", "0", layer: .bottleManaged)
+
+        case .relay12:
+            // relay12 handles its own ddi overrides for WDDM host and routing D3D11 to D3DMetal
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .nativeThenBuiltin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .nativeThenBuiltin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeThenBuiltin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxilconv", mode: .nativeThenBuiltin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin), source: .userBottle))
         }
 
         // Enhanced sync mode
@@ -1093,11 +1101,6 @@ public struct BottleSettings: Codable, Equatable {
                     builder.set(key, value, layer: .launcherManaged)
                 }
             }
-
-        case .relay12:
-            // relay12 handles its own ddi overrides for WDDM host and routing D3D11 to D3DMetal
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .nativeBuiltin), source: .custom))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeBuiltin), source: .custom))
         }
 
         // Network timeout configuration
