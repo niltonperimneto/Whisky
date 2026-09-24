@@ -1,0 +1,21 @@
+[
+  {
+    "label": "Build macOS App",
+    "command": "xcodebuild",
+    "args": [
+      "-project", "YourMacApp.xcodeproj", 
+      "-scheme", "YourMacAppScheme", 
+      "-configuration", "Debug", 
+      "-derivedDataPath", ".build/derived_data"
+    ],
+    "use_new_terminal": "shell"
+  },
+  {
+    "label": "Run macOS App",
+    "command": "open",
+    "args": [
+      ".build/derived_data/Build/Products/Debug/YourMacApp.app"
+    ],
+    "use_new_terminal": "shell"
+  }
+]

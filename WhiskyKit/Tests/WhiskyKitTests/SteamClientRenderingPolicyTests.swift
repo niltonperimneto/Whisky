@@ -25,7 +25,7 @@ struct SteamClientRenderingPolicyTests {
     func steamUsesGPURendering() {
         let steam = URL(filePath: "/Steam/steam.exe")
         #expect(SteamClientRenderingPolicy.arguments(for: steam, arguments: []) == [
-            "-cef-force-gpu"
+            "-cef-disable-gpu", "-cef-disable-gpu-compositing"
         ])
     }
 
@@ -37,7 +37,7 @@ struct SteamClientRenderingPolicyTests {
             for: steam,
             arguments: ["-nooverlayui"],
             blockInjectedOverlays: true
-        ) == ["-nooverlayui", "-cef-force-gpu"])
+        ) == ["-nooverlayui", "-cef-disable-gpu", "-cef-disable-gpu-compositing"])
         #expect(SteamClientRenderingPolicy.arguments(
             for: game,
             arguments: [],
@@ -51,8 +51,8 @@ struct SteamClientRenderingPolicyTests {
         let game = URL(filePath: "/Steam/steamapps/common/game.exe")
         #expect(SteamClientRenderingPolicy.arguments(
             for: steam,
-            arguments: ["-cef-force-gpu"]
-        ) == ["-cef-force-gpu"])
+            arguments: ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
+        ) == ["-cef-disable-gpu", "-cef-disable-gpu-compositing"])
         #expect(SteamClientRenderingPolicy.arguments(for: game, arguments: []) == [])
     }
 }

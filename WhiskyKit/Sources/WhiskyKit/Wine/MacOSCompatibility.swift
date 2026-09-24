@@ -113,6 +113,11 @@ public enum MacOSCompatibilityFixes {
             reason: "CEF sandbox cannot function under Wine; required for launcher startup",
             appliesFrom: allVersions, category: .sandbox
         ),
+        MacOSFix(
+            key: "D3DM_WINE_UNIX_CALL", value: "1",
+            reason: "Enables D3DMetal unix calls and Win32 dispatch callbacks required for WineMonitor and display initialization",
+            appliesFrom: allVersions, category: .graphics
+        ),
 
         // macOS 15.3+ fixes
         MacOSFix(

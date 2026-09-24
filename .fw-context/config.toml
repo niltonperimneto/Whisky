@@ -1,0 +1,9 @@
+[project]
+id = "98e4bd8437ca44be91b16e3e6582e5eb"
+
+[build]
+
+[index]
+compile_commands = ".fw-context/build/compile_commands.json"
+
+[call_graph]

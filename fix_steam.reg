@@ -1,0 +1,19 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Wine\AppDefaults\steam.exe\DllOverrides]
+"d3d10core"="b"
+"d3d11"="b"
+"d3d12"=""
+"d3d9"="b"
+"dxgi"="b"
+"wined3d"="b"
+"winemetal"=""
+
+[HKEY_CURRENT_USER\Software\Wine\AppDefaults\steamwebhelper.exe\DllOverrides]
+"d3d10core"="b"
+"d3d11"="b"
+"d3d12"=""
+"d3d9"="b"
+"dxgi"="b"
+"wined3d"="b"
+"winemetal"=""

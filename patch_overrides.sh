@@ -1,0 +1,1 @@
+sed -i '' 's/"d3d11=n,b;d3d11on12=n,b;d3d11on12core=n,b;dxilconv=n,b;d3d11on12host=b;d3d12=b;dxgi=b"/"d3d11=n;d3d11on12=n;d3d11on12core=n;dxilconv=n;d3d11on12host=b;d3d12=b;dxgi=b;mscoree=;mshtml="/' WhiskyKit/Sources/WhiskyKit/Wine/WineDLLOverrideRegistry.swift
