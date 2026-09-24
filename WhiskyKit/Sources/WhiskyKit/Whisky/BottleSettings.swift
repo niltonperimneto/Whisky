@@ -957,6 +957,8 @@ public struct BottleSettings: Codable, Equatable {
             builder.set("WINED3DMETAL", "0", layer: .bottleManaged)
 
         case .relay12:
+            builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .bottleManaged)
+            builder.set("RELAY12_TRACE_CREATION", "1", layer: .bottleManaged)
             // relay12 handles its own ddi overrides for WDDM host and routing D3D11 to D3DMetal
             managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .nativeThenBuiltin), source: .userBottle))
             managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .nativeThenBuiltin), source: .userBottle))

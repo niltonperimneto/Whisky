@@ -117,6 +117,8 @@ extension Wine {
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
 
             case .relay12:
+                builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .programUser)
+                builder.set("RELAY12_TRACE_CREATION", "1", layer: .programUser)
                 builder.remove("DXVK_HUD", layer: .programUser)
                 builder.remove("DXVK_ASYNC", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
