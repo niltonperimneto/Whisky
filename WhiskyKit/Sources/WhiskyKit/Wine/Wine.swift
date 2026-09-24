@@ -1613,7 +1613,7 @@ public class Wine {
             // Applied in both directions, so clearing the setting takes effect
             // on the next launch by itself.
             applyMetalFX(bottle: bottle)
-        case .dxvk, .wined3d, .recommended:
+        case .dxvk, .wined3d, .recommended, .relay12:
             break
         }
     }
