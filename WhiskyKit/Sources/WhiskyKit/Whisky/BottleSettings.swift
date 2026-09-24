@@ -988,11 +988,13 @@ public struct BottleSettings: Codable, Equatable {
         case .esync:
             builder.set("WINEESYNC", "1", layer: .bottleManaged)
         case .msync:
-            builder.set("WINEMSYNC", "1", layer: .bottleManaged)
-            // D3DM detects ESYNC and changes behaviour accordingly
-            // so we have to lie to it so that it doesn't break
-            // under MSYNC. Values hardcoded in lid3dshared.dylib
-            builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            if effectiveBackend == .relay12 {
+                builder.remove("WINEMSYNC", layer: .bottleManaged)
+                builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            } else {
+                builder.set("WINEMSYNC", "1", layer: .bottleManaged)
+                builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            }
         }
 
         if metalHud {
