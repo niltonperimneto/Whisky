@@ -191,8 +191,13 @@ extension Wine {
                 builder.set("WINEESYNC", "1", layer: .programUser)
                 builder.remove("WINEMSYNC", layer: .programUser)
             case .msync:
-                builder.set("WINEMSYNC", "1", layer: .programUser)
-                builder.set("WINEESYNC", "1", layer: .programUser)
+                if overrides.graphicsBackend == .relay12 {
+                    builder.remove("WINEMSYNC", layer: .programUser)
+                    builder.set("WINEESYNC", "1", layer: .programUser)
+                } else {
+                    builder.set("WINEMSYNC", "1", layer: .programUser)
+                    builder.set("WINEESYNC", "1", layer: .programUser)
+                }
             }
         }
 
