@@ -36,6 +36,8 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
     case dxmt
     /// Wine's built-in OpenGL-based Direct3D translation.
     case wined3d
+    /// Relay12 experimental standalone direct D3DMetal bridge.
+    case relay12
 
     /// A human-readable display name for this backend.
     public var displayName: String {
@@ -50,6 +52,8 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
             "DXMT"
         case .wined3d:
             "WineD3D"
+        case .relay12:
+            "Relay12"
         }
     }
 
@@ -63,7 +67,7 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
         switch self {
         case .dxmt:
             runtimeInfo?.dxmtVersion != nil
-        case .recommended, .d3dMetal, .dxvk, .wined3d:
+        case .recommended, .d3dMetal, .dxvk, .wined3d, .relay12:
             true
         }
     }
@@ -81,6 +85,8 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
             String(localized: "config.graphics.backend.dxmt.summary")
         case .wined3d:
             String(localized: "config.graphics.backend.wined3d.summary")
+        case .relay12:
+            "Experimental D3D11 to D3D12 direct bridge layer."
         }
     }
 }

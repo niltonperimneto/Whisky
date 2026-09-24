@@ -1093,6 +1093,11 @@ public struct BottleSettings: Codable, Equatable {
                     builder.set(key, value, layer: .launcherManaged)
                 }
             }
+
+        case .relay12:
+            // relay12 handles its own ddi overrides for WDDM host and routing D3D11 to D3DMetal
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .nativeBuiltin), source: .custom))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .nativeBuiltin), source: .custom))
         }
 
         // Network timeout configuration
