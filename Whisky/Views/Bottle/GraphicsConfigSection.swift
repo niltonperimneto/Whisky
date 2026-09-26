@@ -36,6 +36,31 @@ struct GraphicsConfigSection: View {
         return bottle.settings.graphicsBackend
     }
 
+    private var relay12Available: Bool {
+        WhiskyWineInstaller.isRelay12Available(for: bottle.settings.runtime)
+    }
+
+    private var relay12Toggle: some View {
+        Toggle(isOn: $bottle.settings.relay12) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("config.relay12")
+                    Text("config.graphics.tag.experimental")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(.purple.opacity(0.18), in: Capsule())
+                        .foregroundStyle(.purple)
+                }
+                Text(relay12Available ? "config.relay12.info" : "config.relay12.unavailable")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .disabled(!relay12Available)
+        .accessibilityIdentifier("relay12Toggle")
+    }
+
     var body: some View {
         Section("config.title.graphics") {
             // Simple/Advanced segmented control
@@ -98,6 +123,15 @@ struct GraphicsConfigSection: View {
                     }
                 }
                 .disabled(!bottle.settings.metalFX)
+            }
+
+            // Relay12 is not a backend: it answers D3D11On12 for D3D12 games,
+            // which run on D3DMetal under every backend except WineD3D, a DXVK
+            // bottle's Steam launches included. So it is offered everywhere
+            // but there, and greyed out, with the reason, on a runtime that
+            // does not ship it.
+            if resolvedBackend != .wined3d {
+                relay12Toggle
             }
 
             // Force DX11 toggle -- always visible (Simple + Advanced)

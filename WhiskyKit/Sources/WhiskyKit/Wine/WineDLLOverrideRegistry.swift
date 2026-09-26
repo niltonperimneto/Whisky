@@ -40,8 +40,6 @@ public extension Wine {
                 "d3d10core=n,b;d3d11=n,b;d3d12=n,b;dxgi=n,b"
             case .wined3d:
                 "d3d9=b;d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
-            case .relay12:
-                "d3d11=n;d3d11on12=n;d3d11on12core=n;dxilconv=n;d3d11on12host=b;d3d12=b;dxgi=b;mscoree=;mshtml="
             case .recommended:
                 ""
             }

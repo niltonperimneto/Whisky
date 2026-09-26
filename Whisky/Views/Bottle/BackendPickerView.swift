@@ -177,8 +177,6 @@ private struct BackendCard: View {
             "cube.transparent"
         case .wined3d:
             "cup.and.saucer"
-        case .relay12:
-            "testtube.2"
         }
     }
 
@@ -196,8 +194,6 @@ private struct BackendCard: View {
             (String(localized: "config.graphics.tag.experimental"), .purple)
         case .wined3d:
             (String(localized: "config.graphics.tag.fallback"), .orange)
-        case .relay12:
-            (String(localized: "config.graphics.tag.experimental"), .red)
         }
     }
 }

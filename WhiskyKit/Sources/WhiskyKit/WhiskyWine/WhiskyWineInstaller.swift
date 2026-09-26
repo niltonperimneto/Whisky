@@ -522,8 +522,6 @@ public class WhiskyWineInstaller {
         switch backend {
         case .dxmt:
             return versionAvailable && dxmtRuntimeNative
-        case .relay12:
-            return versionAvailable
         case .d3dMetal:
             return versionAvailable && d3dMetalInstalled
         case .recommended, .dxvk, .wined3d:

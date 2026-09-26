@@ -161,6 +161,7 @@ extension Wine {
                 runtime: bottle.settings.runtime,
                 frameGeneration: bottle.settings.frameGeneration,
                 metal4Enabled: bottle.settings.metal4Enabled,
+                relay12: bottle.settings.relay12,
                 builder: &builder,
                 dllResolver: &dllResolver
             )

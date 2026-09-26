@@ -32278,6 +32278,36 @@
         }
       }
     },
+    "config.relay12": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relay12 D3D11On12"
+          }
+        }
+      }
+    },
+    "config.relay12.info": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off by default. Gives D3D12 games that ask for a D3D11On12 device, such as Unity 6's D3D12 renderer, the device D3DMetal lacks, instead of letting them fall back to D3D11. Every other Direct3D call stays on D3DMetal."
+          }
+        }
+      }
+    },
+    "config.relay12.unavailable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This runtime does not include Relay12. Update the runtime to use it."
+          }
+        }
+      }
+    },
     "config.graphics.advanced": {
       "extractionState": "manual",
       "localizations": {

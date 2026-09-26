@@ -305,6 +305,21 @@ struct ProgramOverrideSettingsView: View {
                     Toggle("config.frameGeneration", isOn: frameGenerationBinding)
                 }
 
+                // Relay12 answers D3D11On12 for this program's D3D12, which is
+                // D3DMetal under every backend but WineD3D.
+                if resolvedOverriddenBackend != .wined3d {
+                    Toggle(isOn: relay12Binding) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("config.relay12")
+                            Text(relay12Available ? "config.relay12.info" : "config.relay12.unavailable")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(!relay12Available)
+                    .accessibilityIdentifier("programRelay12Toggle")
+                }
+
                 // "Takes effect next launch" note
                 Text("config.graphics.nextLaunch")
                     .font(.caption)
@@ -648,6 +663,7 @@ struct ProgramOverrideSettingsView: View {
                     program.settings.overrides?.dxvkHud = bottle.settings.dxvkHud
                     program.settings.overrides?.metal4Enabled = bottle.settings.metal4Enabled
                     program.settings.overrides?.frameGeneration = bottle.settings.frameGeneration
+                    program.settings.overrides?.relay12 = bottle.settings.relay12
                 } else {
                     program.settings.overrides?.graphicsBackend = nil
                     program.settings.overrides?.dxvk = nil
@@ -655,6 +671,7 @@ struct ProgramOverrideSettingsView: View {
                     program.settings.overrides?.dxvkHud = nil
                     program.settings.overrides?.metal4Enabled = nil
                     program.settings.overrides?.frameGeneration = nil
+                    program.settings.overrides?.relay12 = nil
                 }
             }
         )
@@ -775,6 +792,17 @@ struct ProgramOverrideSettingsView: View {
             get: { program.settings.overrides?.frameGeneration ?? bottle.settings.frameGeneration },
             set: { program.settings.overrides?.frameGeneration = $0 }
         )
+    }
+
+    private var relay12Binding: Binding<Bool> {
+        Binding(
+            get: { program.settings.overrides?.relay12 ?? bottle.settings.relay12 },
+            set: { program.settings.overrides?.relay12 = $0 }
+        )
+    }
+
+    private var relay12Available: Bool {
+        WhiskyWineInstaller.isRelay12Available(for: bottle.settings.runtime)
     }
 
     private var dxvkHudBinding: Binding<DXVKHUD> {

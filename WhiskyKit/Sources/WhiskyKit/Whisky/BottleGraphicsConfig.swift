@@ -36,8 +36,6 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
     case dxmt
     /// Wine's built-in OpenGL-based Direct3D translation.
     case wined3d
-    /// Relay12 experimental standalone direct D3DMetal bridge.
-    case relay12
 
     /// A human-readable display name for this backend.
     public var displayName: String {
@@ -52,8 +50,6 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
             "DXMT"
         case .wined3d:
             "WineD3D"
-        case .relay12:
-            "Relay12"
         }
     }
 
@@ -67,7 +63,7 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
         switch self {
         case .dxmt:
             runtimeInfo?.dxmtVersion != nil
-        case .recommended, .d3dMetal, .dxvk, .wined3d, .relay12:
+        case .recommended, .d3dMetal, .dxvk, .wined3d:
             true
         }
     }
@@ -85,8 +81,6 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
             String(localized: "config.graphics.backend.dxmt.summary")
         case .wined3d:
             String(localized: "config.graphics.backend.wined3d.summary")
-        case .relay12:
-            "Experimental D3D11 to D3D12 direct bridge layer."
         }
     }
 }
@@ -185,17 +179,42 @@ public struct BottleGraphicsConfig: Codable, Equatable {
     /// instant, so this is not something a bottle can be trusted to contain.
     var frameGeneration: Bool = false
 
+    /// Whether D3D12 games in this bottle get a D3D11On12 device from Relay12.
+    ///
+    /// Relay12 is not a backend. Apple's D3DMetal answers
+    /// `D3D11On12CreateDevice` with `DXGI_ERROR_UNSUPPORTED`, so a renderer that
+    /// needs a D3D11 device on top of its D3D12 one (Unity 6's D3D12 renderer,
+    /// for PEAK) gives up on D3D12 and falls back to D3D11. With this on, the
+    /// runtime's d3d12 interposer routes that one call to Relay12 and leaves
+    /// every other Direct3D call on D3DMetal.
+    ///
+    /// Experimental, so off by default. D3D12 always runs on D3DMetal, so this
+    /// applies under every backend except WineD3D, including a DXVK bottle
+    /// whose Steam launches D3D12 games.
+    var relay12: Bool = false
+
+    /// The raw value an earlier build wrote to `backend` when Relay12 was
+    /// offered as a backend. It meant "D3DMetal, with Relay12".
+    static let legacyRelay12Backend = "relay12"
+
     /// Creates a new graphics config with the default `.recommended` backend.
     public init() {}
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.backend = container.decodeLenientIfPresent(GraphicsBackend.self, forKey: .backend) ?? .recommended
+        let legacyRelay12 = (try? container.decodeIfPresent(String.self, forKey: .backend))
+            == Self.legacyRelay12Backend
+        self.backend = legacyRelay12
+            ? .d3dMetal
+            : container.decodeLenientIfPresent(GraphicsBackend.self, forKey: .backend) ?? .recommended
         // Matches the property default, so a bottle written before this key
         // existed adopts the new default instead of decoding as off.
         self.metalFX = (try? container.decodeIfPresent(Bool.self, forKey: .metalFX)) ?? true
         // Off for a bottle written before the key existed, which is the same
         // answer the property default gives a new one.
         self.frameGeneration = (try? container.decodeIfPresent(Bool.self, forKey: .frameGeneration)) ?? false
+        // Off for a bottle written before the key existed, unless it chose the
+        // old Relay12 backend, which asked for exactly this.
+        self.relay12 = (try? container.decodeIfPresent(Bool.self, forKey: .relay12)) ?? legacyRelay12
     }
 }

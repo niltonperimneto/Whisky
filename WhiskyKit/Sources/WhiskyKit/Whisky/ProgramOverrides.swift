@@ -67,6 +67,12 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
     /// likely to be right for one game and wrong for the next, so it belongs
     /// per program as much as per bottle.
     public var frameGeneration: Bool?
+    /// Whether D3D12 games get a D3D11On12 device from Relay12. `nil` inherits
+    /// from bottle.
+    ///
+    /// Experimental and needed only by titles that ask for a D3D11On12 device,
+    /// so it is as much a per-title decision as a per-bottle one.
+    public var relay12: Bool?
 
     // MARK: - Performance
 
@@ -125,6 +131,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             && metalHud == nil
             && metal4Enabled == nil
             && frameGeneration == nil
+            && relay12 == nil
             && shaderCacheEnabled == nil
             && controllerCompatibilityMode == nil
             && disableHIDAPI == nil
@@ -143,7 +150,13 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.graphicsBackend = container.decodeLenientIfPresent(GraphicsBackend.self, forKey: .graphicsBackend)
+        // An earlier build offered Relay12 as a backend; it meant D3DMetal with
+        // Relay12 on, and is read back as exactly that.
+        let legacyRelay12 = (try? container.decodeIfPresent(String.self, forKey: .graphicsBackend))
+            == BottleGraphicsConfig.legacyRelay12Backend
+        self.graphicsBackend = legacyRelay12
+            ? .d3dMetal
+            : container.decodeLenientIfPresent(GraphicsBackend.self, forKey: .graphicsBackend)
         self.dxvk = try container.decodeIfPresent(Bool.self, forKey: .dxvk)
         if self.graphicsBackend != nil {
             self.dxvk = nil
@@ -155,6 +168,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
         self.metalHud = try container.decodeIfPresent(Bool.self, forKey: .metalHud)
         self.metal4Enabled = try container.decodeIfPresent(Bool.self, forKey: .metal4Enabled)
         self.frameGeneration = try container.decodeIfPresent(Bool.self, forKey: .frameGeneration)
+        self.relay12 = try container.decodeIfPresent(Bool.self, forKey: .relay12) ?? (legacyRelay12 ? true : nil)
         self.shaderCacheEnabled = try container.decodeIfPresent(Bool.self, forKey: .shaderCacheEnabled)
         self.controllerCompatibilityMode = try container.decodeIfPresent(
             Bool.self, forKey: .controllerCompatibilityMode

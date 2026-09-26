@@ -397,6 +397,10 @@ public class Wine {
             fileHandle.write(line: "MetalFX bridge: \(bottle.settings.metalFX)")
             fileHandle.write(line: "Frame generation: \(frameGeneration)")
         }
+        if backend != .wined3d {
+            let relay12 = programOverrides?.relay12 ?? bottle.settings.relay12
+            fileHandle.write(line: "Relay12 D3D11On12: \(relay12)")
+        }
 
         if isPEAK {
             fileHandle.write(line: "PEAK diagnostics: delay-load/module tracing enabled")
@@ -445,6 +449,7 @@ public class Wine {
         let keep = prefixDLLNames(for: effectiveBackend, runtime: bottle.settings.runtime)
         clearForeignBackendDLLs(keeping: keep, bottle: bottle)
         try prepareBackendPrefix(effectiveBackend, bottle: bottle)
+        applyRelay12(bottle: bottle, programOverrides: programOverrides, backend: effectiveBackend)
 
         if effectiveBackend == .dxvk {
             try enableDXVK(bottle: bottle)
@@ -1223,7 +1228,7 @@ public class Wine {
                 payload: dxmtFolder(for: runtime),
                 windows: windows
             )
-        case .d3dMetal, .wined3d, .recommended, .relay12:
+        case .d3dMetal, .wined3d, .recommended:
             // These backends use runtime builtins. Their existing launch-time
             // cleanup remains authoritative because a native user DLL cannot be
             // distinguished safely from a deliberately stripped builtin here.
@@ -1507,7 +1512,7 @@ public class Wine {
             return Set(contents.filter { $0.hasSuffix(".dll") })
         case .dxmt:
             return Set(dxmtPrefixDLLs)
-        case .d3dMetal, .wined3d, .recommended, .relay12:
+        case .d3dMetal, .wined3d, .recommended:
             return []
         }
     }
@@ -1613,9 +1618,26 @@ public class Wine {
             // Applied in both directions, so clearing the setting takes effect
             // on the next launch by itself.
             applyMetalFX(bottle: bottle)
-        case .dxvk, .wined3d, .recommended, .relay12:
+        case .dxvk, .wined3d, .recommended:
             break
         }
+    }
+
+    /// Readies a bottle's prefix for the runtime's D3D interposers and Relay12.
+    ///
+    /// Every launch refreshes a stale prefix copy of an interposer, whatever
+    /// the setting, because a bottle whose copy predates a runtime update would
+    /// otherwise keep running the old one. Relay12's placeholders are seeded only
+    /// when the program's effective setting asks for it and D3DMetal is behind
+    /// D3D12, which is every backend but WineD3D. They are inert otherwise, so
+    /// nothing is taken out when the setting is cleared.
+    @MainActor
+    static func applyRelay12(bottle: Bottle, programOverrides: ProgramOverrides?, backend: GraphicsBackend) {
+        let libraryFolder = WhiskyWineInstaller.libraryFolder(for: bottle.settings.runtime)
+        GPTKImporter.refreshInterposerCopies(inBottle: bottle.url, fromLibraryFolder: libraryFolder)
+        let enabled = programOverrides?.relay12 ?? bottle.settings.relay12
+        guard enabled, backend != .wined3d else { return }
+        GPTKImporter.seedRelay12Placeholders(inBottle: bottle.url, fromLibraryFolder: libraryFolder)
     }
 
     /// Opts a bottle in or out of D3DMetal's DLSS-to-MetalFX path, per

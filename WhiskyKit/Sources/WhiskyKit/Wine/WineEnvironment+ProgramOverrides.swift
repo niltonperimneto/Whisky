@@ -41,6 +41,7 @@ extension Wine {
         runtime: String? = nil,
         frameGeneration: Bool = false,
         metal4Enabled: Bool = true,
+        relay12: Bool = false,
         builder: inout EnvironmentBuilder,
         dllResolver: inout DLLOverrideResolver
     ) {
@@ -114,26 +115,6 @@ extension Wine {
                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
 
-            case .relay12:
-                builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .programUser)
-                builder.set("RELAY12_TRACE_CREATION", "1", layer: .programUser)
-                builder.remove("WINEMSYNC", layer: .programUser)
-                builder.set("WINEESYNC", "1", layer: .programUser)
-                builder.remove("DXVK_HUD", layer: .programUser)
-                builder.remove("DXVK_ASYNC", layer: .programUser)
-                builder.remove("WINED3DMETAL", layer: .programUser)
-                dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
-                dllResolver.programCustom.append(contentsOf: [
-                    DLLOverrideEntry(dllName: "d3d11", mode: .native),
-                    DLLOverrideEntry(dllName: "d3d11on12", mode: .native),
-                    DLLOverrideEntry(dllName: "d3d11on12core", mode: .native),
-                    DLLOverrideEntry(dllName: "dxilconv", mode: .native),
-                    DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin),
-                    DLLOverrideEntry(dllName: "d3d12", mode: .builtin),
-                    DLLOverrideEntry(dllName: "dxgi", mode: .builtin),
-                    DLLOverrideEntry(dllName: "mscoree", mode: .disabled),
-                    DLLOverrideEntry(dllName: "mshtml", mode: .disabled)
-                ])
             }
         }
 
@@ -191,13 +172,8 @@ extension Wine {
                 builder.set("WINEESYNC", "1", layer: .programUser)
                 builder.remove("WINEMSYNC", layer: .programUser)
             case .msync:
-                if overrides.graphicsBackend == .relay12 {
-                    builder.remove("WINEMSYNC", layer: .programUser)
-                    builder.set("WINEESYNC", "1", layer: .programUser)
-                } else {
-                    builder.set("WINEMSYNC", "1", layer: .programUser)
-                    builder.set("WINEESYNC", "1", layer: .programUser)
-                }
+                builder.set("WINEMSYNC", "1", layer: .programUser)
+                builder.set("WINEESYNC", "1", layer: .programUser)
             }
         }
 
@@ -238,6 +214,24 @@ extension Wine {
                 builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .programUser)
             } else {
                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
+            }
+        }
+
+        // Relay12 override. The bottle layer withholds the variable from a
+        // WineD3D bottle, so a program moved off WineD3D restates the bottle's
+        // choice, and a program moved onto WineD3D drops it: with D3DMetal off
+        // there is no D3D12 for the interposer to route from.
+        let relay12Key = BottleSettings.relay12EnvironmentKey
+        let resolvedOverrideBackend = overrides.graphicsBackend.map { backend in
+            backend == .recommended ? GraphicsBackendResolver.resolve(for: runtime) : backend
+        }
+        if resolvedOverrideBackend == .wined3d {
+            builder.remove(relay12Key, layer: .programUser)
+        } else if let enabled = overrides.relay12 ?? (resolvedOverrideBackend != nil ? relay12 : nil) {
+            if enabled {
+                builder.set(relay12Key, "1", layer: .programUser)
+            } else {
+                builder.remove(relay12Key, layer: .programUser)
             }
         }
 
@@ -307,7 +301,8 @@ extension Wine {
         // Non-sensitive keys allowed in the launch summary
         let allowedKeys = [
             "DXVK_ASYNC", "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
-            "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL"
+            "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL",
+            BottleSettings.relay12EnvironmentKey
         ]
         let safeEntries = allowedKeys.compactMap { key -> String? in
             guard let value = environment[key] else { return nil }

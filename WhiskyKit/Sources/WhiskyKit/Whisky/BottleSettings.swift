@@ -399,6 +399,16 @@ public struct BottleSettings: Codable, Equatable {
         set { graphicsConfig.frameGeneration = newValue }
     }
 
+    /// Whether D3D12 games in this bottle get a D3D11On12 device from Relay12.
+    /// Experimental and off by default. See ``BottleGraphicsConfig/relay12``.
+    public var relay12: Bool {
+        get { graphicsConfig.relay12 }
+        set { graphicsConfig.relay12 = newValue }
+    }
+
+    /// The variable the runtime's d3d12 interposer and Relay12's core both read.
+    public static let relay12EnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME"
+
     /// Whether Whisky publishes the program this bottle launched to Discord.
     ///
     /// Announces every program, including the ones with no Discord support of
@@ -956,20 +966,14 @@ public struct BottleSettings: Codable, Equatable {
             // Disable D3DMetal, forcing Wine's OpenGL-based wined3d path
             builder.set("WINED3DMETAL", "0", layer: .bottleManaged)
 
-        case .relay12:
-            builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .bottleManaged)
-            builder.set("RELAY12_TRACE_CREATION", "1", layer: .bottleManaged)
-            builder.remove("WINEMSYNC", layer: .bottleManaged)
-            builder.set("WINEESYNC", "1", layer: .bottleManaged)
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .native), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .native), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .native), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxilconv", mode: .native), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d12", mode: .builtin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxgi", mode: .builtin), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mscoree", mode: .disabled), source: .userBottle))
-            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mshtml", mode: .disabled), source: .userBottle))
+        }
+
+        // Relay12's D3D11On12 opt-in. The d3d12 interposer reads this and routes
+        // D3D11On12CreateDevice to Relay12. D3D12 runs on D3DMetal under every
+        // backend but WineD3D, DXVK and DXMT included, and Steam in a DXVK bottle
+        // passes it to the D3D12 games it launches, so only WineD3D withholds it.
+        if relay12, resolvedBackend != .wined3d {
+            builder.set(Self.relay12EnvironmentKey, "1", layer: .bottleManaged)
         }
 
         // Enhanced sync mode
@@ -988,13 +992,11 @@ public struct BottleSettings: Codable, Equatable {
         case .esync:
             builder.set("WINEESYNC", "1", layer: .bottleManaged)
         case .msync:
-            if effectiveBackend == .relay12 {
-                builder.remove("WINEMSYNC", layer: .bottleManaged)
-                builder.set("WINEESYNC", "1", layer: .bottleManaged)
-            } else {
-                builder.set("WINEMSYNC", "1", layer: .bottleManaged)
-                builder.set("WINEESYNC", "1", layer: .bottleManaged)
-            }
+            builder.set("WINEMSYNC", "1", layer: .bottleManaged)
+            // D3DM detects ESYNC and changes behaviour accordingly
+            // so we have to lie to it so that it doesn't break
+            // under MSYNC. Values hardcoded in lid3dshared.dylib
+            builder.set("WINEESYNC", "1", layer: .bottleManaged)
         }
 
         if metalHud {
