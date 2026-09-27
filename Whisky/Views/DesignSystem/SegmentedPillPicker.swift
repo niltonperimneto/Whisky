@@ -18,35 +18,18 @@
 
 import SwiftUI
 
-/// The category switch at the top of a modern pane.
-///
-/// A `Picker` with `.segmented` cannot carry a per-segment count badge or an
-/// icon beside its title, which is what both call sites need — the workspace
-/// tabs are glyph-and-title and the app grid's filters say how many tiles are
-/// in each bucket. So the segments are buttons, and the selection is one pill
-/// that slides between them rather than one background per segment: a shared
-/// `matchedGeometryEffect` is what makes the move read as the same object
-/// travelling instead of two fades crossing.
 struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
     var items: [Item]
     @Binding var selection: Item
-    /// What the control as a whole is for. A tab bar whose segments are named
-    /// is still an unnamed control to VoiceOver, which reads the group before
-    /// it reads the segment inside it.
-    var accessibilityTitle: LocalizedStringResource?
+    var accessibilityTitle: LocalizedStringKey?
     @ViewBuilder var label: (Item) -> Label
 
-    /// Scoped per instance, so two pickers on the same screen do not try to
-    /// share one indicator and fly it across the window between them.
     @Namespace private var indicator
-    /// The segment under the pointer, so an unselected segment answers the
-    /// pointer the way every other macOS segmented control does.
-    @State private var hovered: Item?
 
     init(
         items: [Item],
         selection: Binding<Item>,
-        accessibilityTitle: LocalizedStringResource? = nil,
+        accessibilityTitle: LocalizedStringKey? = nil,
         @ViewBuilder label: @escaping (Item) -> Label
     ) {
         self.items = items
@@ -56,27 +39,21 @@ struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
     }
 
     var body: some View {
-        if let accessibilityTitle {
-            track.accessibilityLabel(Text(accessibilityTitle))
-        } else {
-            track
-        }
-    }
-
-    private var track: some View {
         HStack(spacing: WhiskyDesignSystem.Spacing.extraExtraSmall) {
             ForEach(items, id: \.self) { item in
                 segment(item)
             }
         }
         .padding(WhiskyDesignSystem.Spacing.extraExtraSmall)
-        .glassEffect(.regular, in: Capsule())
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous))
         .accessibilityElement(children: .contain)
+        .ifLet(accessibilityTitle) { view, title in
+            view.accessibilityLabel(title)
+        }
     }
 
     private func segment(_ item: Item) -> some View {
         let isSelected = item == selection
-        let isHovered = hovered == item && !isSelected
 
         return Button {
             guard !isSelected else { return }
@@ -84,53 +61,33 @@ struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
         } label: {
             label(item)
                 .font(.subheadline)
-                // Semibold on the selection and secondary on the rest, so the
-                // current category is legible even where the pill's tint is
-                // washed out by whatever the glass is sitting over.
                 .fontWeight(isSelected ? .semibold : .regular)
-                .foregroundStyle(isSelected || isHovered ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                 .padding(.horizontal, WhiskyDesignSystem.Spacing.medium)
                 .padding(.vertical, WhiskyDesignSystem.Spacing.extraSmall)
                 .background {
                     if isSelected {
-                        Capsule()
+                        RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous)
                             .fill(.tint.opacity(0.22))
                             .matchedGeometryEffect(id: "selection", in: indicator)
-                    } else if isHovered {
-                        // Fill rather than glass: a glass thumb inside a glass
-                        // track is glass stacked on glass, which the material
-                        // is explicitly not meant to do.
-                        Capsule().fill(.fill.quaternary)
                     }
                 }
-                .contentShape(Capsule())
+                .contentShape(RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.small, style: .continuous))
         }
         .buttonStyle(.plain)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) {
-                hovered = hovering ? item : (hovered == item ? nil : hovered)
-            }
-        }
         .accessibilityAddTraits(isSelected ? [.isSelected, .isButton] : .isButton)
     }
 }
 
-#if DEBUG
-private struct SegmentedPillPickerPreview: View {
-    @State private var selection = "Apps"
-
-    var body: some View {
-        SegmentedPillPicker(
-            items: ["Apps", "Configuration", "Processes", "Tools"],
-            selection: $selection
-        ) { item in
-            Text(verbatim: item)
+extension View {
+    @ViewBuilder func ifLet<V, Transform: View>(
+        _ value: V?,
+        transform: (Self, V) -> Transform
+    ) -> some View {
+        if let value = value {
+            transform(self, value)
+        } else {
+            self
         }
-        .padding(WhiskyDesignSystem.Spacing.extraLarge)
     }
 }
-
-#Preview("Segmented Pill Picker") {
-    SegmentedPillPickerPreview()
-}
-#endif

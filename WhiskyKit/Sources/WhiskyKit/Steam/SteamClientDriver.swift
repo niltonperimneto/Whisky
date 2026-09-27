@@ -35,7 +35,7 @@ public protocol SteamClientDriver: AnyObject {
     /// The bottle's process list, as `tasklist.exe` reports it.
     func processList() async -> [WineProcess]
 
-    /// Starts the Steam client silently. Must return promptly: the client runs
+    /// Starts the visible Steam client. Must return promptly: the client runs
     /// for the whole session and the orchestrator watches for it separately.
     func startClient(steamExe: URL)
 
@@ -113,11 +113,14 @@ open class WineSteamClientDriver: SteamClientDriver {
         return Wine.parseTasklistOutput(output)
     }
 
-    /// `steam.exe -silent` runs for the whole session, so the run is never awaited.
+    /// Steam runs for the whole session, so the run is never awaited.
+    ///
+    /// Launch without `-silent`: that flag intentionally keeps the client in the
+    /// background and prevents the Store/Library window from appearing.
     open func startClient(steamExe: URL) {
         let bottle = self.bottle
         Task {
-            _ = try? await Wine.runProgram(at: steamExe, args: ["-silent"], bottle: bottle)
+            _ = try? await Wine.runProgram(at: steamExe, args: [], bottle: bottle)
         }
     }
 

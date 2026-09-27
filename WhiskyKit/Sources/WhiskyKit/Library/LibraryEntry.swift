@@ -198,19 +198,19 @@ public enum SteamLibrarySource: LibrarySource {
     /// Matching on the filename rather than the path survives all three, and the
     /// next one as long as the names hold.
     ///
-    /// Landscape first because that is the shape of a card. A portrait capsule
-    /// is the fallback and gets cropped, which still beats an empty card.
+    /// Portrait first because it maps to the grid glass card. Remote fallback
+    /// 
     public static func artworkURL(appID: Int, steamRoot: URL) -> URL? {
+        let portrait = ["library_600x900_2x.jpg", "library_600x900.jpg", "library_capsule.jpg", "\(appID)_library_600x900.jpg"]
         let landscape = ["library_header.jpg", "header.jpg", "\(appID)_header.jpg"]
-        let portrait = ["library_capsule.jpg", "library_600x900.jpg", "\(appID)_library_600x900.jpg"]
         let cached = cachedFiles(appID: appID, steamRoot: steamRoot)
 
-        for name in landscape + portrait {
+        for name in portrait + landscape {
             if let match = cached.first(where: { $0.lastPathComponent == name }) {
                 return match
             }
         }
-        return nil
+        return URL(string: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/\(appID)/library_600x900_2x.jpg")
     }
 
     /// The small square icon Steam caches beside the art, if it left one.

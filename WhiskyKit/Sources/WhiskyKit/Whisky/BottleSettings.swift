@@ -106,7 +106,6 @@ public struct BottleInfo: Codable, Equatable {
 /// settings.name = "Gaming"
 /// settings.windowsVersion = .win10
 /// settings.dxvk = true
-/// settings.performancePreset = .performance
 /// ```
 ///
 /// ## Topics
@@ -136,7 +135,6 @@ public struct BottleInfo: Codable, Equatable {
 /// - ``dxvkHud``
 ///
 /// ### Performance
-/// - ``performancePreset``
 /// - ``shaderCacheEnabled``
 /// - ``forceD3D11``
 /// - ``vcRedistInstalled``
@@ -526,15 +524,6 @@ public struct BottleSettings: Codable, Equatable {
     }
 
     // MARK: - Performance settings
-
-    /// The performance optimization preset.
-    ///
-    /// Presets configure multiple settings at once for different
-    /// use cases like gaming, quality, or Unity games.
-    public var performancePreset: PerformancePreset {
-        get { performanceConfig.performancePreset }
-        set { performanceConfig.performancePreset = newValue }
-    }
 
     /// Whether shader caching is enabled.
     ///
@@ -966,6 +955,21 @@ public struct BottleSettings: Codable, Equatable {
         case .wined3d:
             // Disable D3DMetal, forcing Wine's OpenGL-based wined3d path
             builder.set("WINED3DMETAL", "0", layer: .bottleManaged)
+
+        case .relay12:
+            builder.set("RELAY12_EXPERIMENTAL_FRAME", "1", layer: .bottleManaged)
+            builder.set("RELAY12_TRACE_CREATION", "1", layer: .bottleManaged)
+            builder.remove("WINEMSYNC", layer: .bottleManaged)
+            builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12core", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxilconv", mode: .native), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d11on12host", mode: .builtin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "d3d12", mode: .builtin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "dxgi", mode: .builtin), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mscoree", mode: .disabled), source: .userBottle))
+            managedDLLOverrides.append((entry: DLLOverrideEntry(dllName: "mshtml", mode: .disabled), source: .userBottle))
         }
 
         // Enhanced sync mode
@@ -984,11 +988,13 @@ public struct BottleSettings: Codable, Equatable {
         case .esync:
             builder.set("WINEESYNC", "1", layer: .bottleManaged)
         case .msync:
-            builder.set("WINEMSYNC", "1", layer: .bottleManaged)
-            // D3DM detects ESYNC and changes behaviour accordingly
-            // so we have to lie to it so that it doesn't break
-            // under MSYNC. Values hardcoded in lid3dshared.dylib
-            builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            if resolvedBackend == .relay12 {
+                builder.remove("WINEMSYNC", layer: .bottleManaged)
+                builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            } else {
+                builder.set("WINEMSYNC", "1", layer: .bottleManaged)
+                builder.set("WINEESYNC", "1", layer: .bottleManaged)
+            }
         }
 
         if metalHud {
@@ -1016,9 +1022,6 @@ public struct BottleSettings: Codable, Equatable {
         // (MTL_DEBUG_LAYER, D3DM_VALIDATION, WINEFSYNC) are platform-layer
         // fixes on every supported macOS, so the toggle's off position changed
         // nothing and its on position only hid the provenance.
-
-        // Performance preset handling (whisky-app/whisky#1361 - FPS regression fix)
-        populatePerformancePreset(builder: &builder)
 
         // Shader cache control. DXVK_STATE_CACHE is the variable DXVK actually
         // reads; the previous pair (a compile-thread throttle and an NVIDIA GL
@@ -1189,54 +1192,6 @@ public struct BottleSettings: Codable, Equatable {
         // Audio settings are applied via Wine registry (WineAudioRegistry), not env vars.
         // This placeholder ensures the EnvironmentBuilder cascade has an audio integration
         // point for future audio-related environment variables.
-    }
-
-    /// Populates performance preset environment variables into the bottleManaged layer.
-    private func populatePerformancePreset(builder: inout EnvironmentBuilder) {
-        switch performancePreset {
-        case .balanced:
-            // Default settings, no changes needed
-            break
-
-        case .performance:
-            // Performance mode - prioritize FPS over visual quality (whisky-app/whisky#1361 fix)
-            // Disable extra validation that can slow down rendering
-            builder.set("D3DM_VALIDATION", "0", layer: .bottleManaged)
-            builder.set("MTL_DEBUG_LAYER", "0", layer: .bottleManaged)
-            // Enable DXVK async if not already enabled via the DXVK setting
-            if !dxvkAsync {
-                builder.set("DXVK_ASYNC", "1", layer: .bottleManaged)
-            }
-            // Use more aggressive shader compilation
-            builder.set("DXVK_SHADER_OPT_LEVEL", "0", layer: .bottleManaged)
-            // Reduce Metal resource tracking overhead
-            builder.set("MTL_ENABLE_METAL_EVENTS", "0", layer: .bottleManaged)
-
-        case .quality:
-            // Quality mode - prioritize visuals over performance
-            // Enable shader optimizations
-            builder.set("DXVK_SHADER_OPT_LEVEL", "2", layer: .bottleManaged)
-
-        case .unity:
-            // Unity games optimization (whisky-app/whisky#1313, #1312 - il2cpp fix)
-            // Unity games often need specific memory and threading settings
-
-            // Fix for il2cpp loading issues
-            builder.set("MONO_THREADS_SUSPEND", "1", layer: .bottleManaged)
-            // Increase file descriptor limit for Unity games
-            builder.set("WINE_LARGE_ADDRESS_AWARE", "65536", layer: .bottleManaged)
-
-            // Unity games often work better with D3D11
-            if !forceD3D11 {
-                builder.set("D3DM_FORCE_D3D11", "1", layer: .bottleManaged)
-            }
-
-            // Help with thread management for Unity's job system
-            builder.set("WINE_DISABLE_NTDLL_THREAD_REGS", "1", layer: .bottleManaged)
-
-            // Unity games may need more virtual memory
-            builder.set("WINEPRELOADRESERVE", "1", layer: .bottleManaged)
-        }
     }
 
     // MARK: - Deprecated Environment Variable API

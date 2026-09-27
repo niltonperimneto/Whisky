@@ -225,7 +225,7 @@ final class BottleAppGridModel {
         // does not stop it being a store game.
         guard tile.origin != .steam else { return }
         tiles[index] = BottleAppCatalogue.Tile(
-            entry: tile.entry,
+            id: tile.id, entry: tile.entry,
             origin: pinned ? .pinned : .installed
         )
     }

@@ -24,12 +24,10 @@ import UniformTypeIdentifiers
 import WhiskyKit
 
 struct ContentView: View {
-    // Not private: `rootLayout` reads both from an extension in another file.
-    @State var shelfModel = BottleShelfModel()
+    @State private var shelfModel = BottleShelfModel()
 
-    @AppStorage(ModernUI.defaultsKey) var modernUI: Bool = false
+    @AppStorage(ModernUI.defaultsKey) private var modernUI: Bool = false
     @Environment(BottleVM.self) var bottleVM: BottleVM
-    @Environment(\.openSettings) private var openSettings
     @Binding var showSetup: Bool
 
     @State var selected: URL?
@@ -57,21 +55,37 @@ struct ContentView: View {
     }
 
     private var splitView: some View {
-        rootLayout
-            .toast($toast)
-            .onReceive(NotificationCenter.default.publisher(for: .zombieProcessesCleaned)) { notification in
-                if let count = notification.userInfo?["count"] as? Int, count > 0 {
-                    withAnimation {
-                        toast = ToastData(
-                            message: String(
-                                format: String(localized: "cleanup.zombies.toast"),
-                                count
-                            ),
-                            style: .info
-                        )
-                    }
+        Group {
+            if modernUI {
+                if let bottleURL = selected, let bottle = bottleVM.bottles.first(where: { $0.url == bottleURL }) {
+                    ModernBottleDetailView(bottle: bottle, selected: $selected)
+                        .environment(shelfModel)
+                } else {
+                    ModernBottleShelfView(selected: $selected, showBottleCreation: $showBottleCreation)
+                        .environment(shelfModel)
+                }
+            } else {
+                NavigationSplitView {
+                    sidebar
+                } detail: {
+                    detail
                 }
             }
+        }
+        .toast($toast)
+        .onReceive(NotificationCenter.default.publisher(for: .zombieProcessesCleaned)) { notification in
+            if let count = notification.userInfo?["count"] as? Int, count > 0 {
+                withAnimation {
+                    toast = ToastData(
+                        message: String(
+                            format: String(localized: "cleanup.zombies.toast"),
+                            count
+                        ),
+                        style: .info
+                    )
+                }
+            }
+        }
     }
 
     private var alertLayer: some View {
@@ -85,9 +99,8 @@ struct ContentView: View {
                 presenting: bottleVM.bottleCreationAlert
             ) { alert in
                 if alert.isRuntimeMissing {
-                    Button("Open Runtime Settings") {
-                        UserDefaults.standard.set(SettingsTab.runtimes.rawValue, forKey: "selectedSettingsTab")
-                        openSettings()
+                    Button("bottle.creation.failed.runSetup") {
+                        showSetup = true
                     }
                 }
                 Button("bottle.creation.failed.copyDiagnostics") {
@@ -139,16 +152,12 @@ struct ContentView: View {
         alertLayer
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    // A `Label` rather than a bare `Image`: the title is what
-                    // names the button to VoiceOver and to the toolbar's
-                    // overflow menu, and `.help` on the image only ever
-                    // produced a tooltip.
                     Button {
                         showBottleCreation.toggle()
                     } label: {
-                        Label("button.createBottle", systemImage: "plus")
+                        Image(systemName: "plus")
+                            .help("button.createBottle")
                     }
-                    .help("button.createBottle")
                     .accessibilityIdentifier("toolbar.createBottle")
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -164,19 +173,17 @@ struct ContentView: View {
                             refreshAnimation = .degrees(0)
                         }
                     } label: {
-                        Label {
-                            Text("button.refresh")
-                        } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .rotationEffect(refreshAnimation)
-                        }
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .help("button.refresh")
+                            .rotationEffect(refreshAnimation)
                     }
-                    .help("button.refresh")
-                    .accessibilityIdentifier("toolbar.refresh")
                 }
             }
             .sheet(isPresented: $showBottleCreation) {
                 BottleCreationView(newlyCreatedBottleURL: $newlyCreatedBottleURL)
+            }
+            .sheet(isPresented: $showSetup) {
+                SetupView(showSetup: $showSetup, firstTime: false)
             }
             .sheet(isPresented: $showMigrate) {
                 MigrateBottlesSheet()
@@ -262,16 +269,33 @@ struct ContentView: View {
                 guard !WhiskyApp.isUITesting else { return }
 
                 if !WhiskyWineInstaller.isWhiskyWineInstalled() {
-                    UserDefaults.standard.set(SettingsTab.runtimes.rawValue, forKey: "selectedSettingsTab")
-                    openSettings()
+                    showSetup = true
                 }
                 let task = Task.detached {
                     await WhiskyWineInstaller.shouldUpdateWhiskyWine()
                 }
                 let updateInfo = await task.value
                 if updateInfo.0 {
-                    // Runtime updates are surfaced non-modally in the Runtime Hub.
-                    RuntimeCoordinator.shared.loadCatalog()
+                    let alert = NSAlert()
+                    alert.messageText = String(localized: "update.whiskywine.title")
+                    alert.informativeText = String(
+                        format: String(localized: "update.whiskywine.description"),
+                        String(WhiskyWineInstaller.whiskyWineVersion()
+                            ?? SemanticVersion(0, 0, 0)),
+                        String(updateInfo.1)
+                    )
+                    alert.alertStyle = .warning
+                    alert.addButton(withTitle: String(localized: "update.whiskywine.update"))
+                    alert.addButton(withTitle: String(localized: "button.removeAlert.cancel"))
+
+                    let response = alert.runModal()
+
+                    if response == .alertFirstButtonReturn {
+                        // No uninstall first: `install(tarball:into:)` replaces
+                        // `Libraries/` anyway, and removing it up front meant
+                        // backing out of setup left no runtime at all.
+                        showSetup = true
+                    }
                 }
             }
     }

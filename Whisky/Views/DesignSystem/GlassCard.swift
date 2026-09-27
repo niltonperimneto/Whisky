@@ -1,3 +1,4 @@
+// swiftlint:disable multiple_closures_with_trailing_closure
 //
 //  GlassCard.swift
 //  Whisky
@@ -83,9 +84,9 @@ struct GlassCard<Content: View>: View {
             GlassCard {
                 Text(verbatim: "Static card")
             }
-            GlassCard(isInteractive: true, action: {}, content: {
+            GlassCard(isInteractive: true, action: {}) {
                 Text(verbatim: "Whole card is a button")
-            })
+            }
             GlassCard(cornerRadius: WhiskyDesignSystem.Radius.large, isInteractive: true) {
                 VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.small) {
                     Text(verbatim: "Interactive glass, own controls")

@@ -67,9 +67,8 @@ public enum GraphicsBackendResolver {
         // reliably presents Chromium's cross-process surfaces, so keep the
         // client itself on DXVK regardless of the runtime's game recommendation.
         // Games launched by it are resolved separately with `launcher == nil`.
-        if launcher != nil {
-            return .dxvk
-        }
+        // We no longer force DXVK for launchers because it overwrites system32
+        // and breaks DXMT and D3DMetal Unity 6 games!
         if d3dMetalInstalled {
             return .d3dMetal
         }

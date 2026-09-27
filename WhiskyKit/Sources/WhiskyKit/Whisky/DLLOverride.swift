@@ -197,7 +197,7 @@ public struct DLLOverrideResolver: Sendable {
             dxvkPreset
         case .dxmt:
             dxmtPreset
-        case .d3dMetal, .wined3d, .recommended:
+        case .d3dMetal, .wined3d, .recommended, .relay12:
             []
         }
     }

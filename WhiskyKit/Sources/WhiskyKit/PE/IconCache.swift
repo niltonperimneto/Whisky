@@ -73,12 +73,23 @@ public actor IconCache {
     ///
     /// - Parameter url: The image file to load.
     /// - Returns: The image and its palette, or `nil` if it could not be decoded.
-    public func sampledArtwork(for url: URL) -> Sampled? {
+    public func sampledArtwork(for url: URL) async -> Sampled? {
         if let cached = artworkCache.object(forKey: url as NSURL) {
             return cached.sampled
         }
 
-        guard let image = NSImage(contentsOf: url) else { return nil }
+        let image: NSImage?
+        if url.isFileURL {
+            image = NSImage(contentsOf: url)
+        } else {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                image = NSImage(data: data)
+            } catch {
+                return nil
+            }
+        }
+        guard let image else { return nil }
         let sampled = Sampled(image: image, palette: IconPalette.palette(for: image))
         artworkCache.setObject(SampledBox(sampled), forKey: url as NSURL)
         return sampled

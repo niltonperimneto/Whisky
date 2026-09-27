@@ -17,7 +17,7 @@
  * Minimal Windows audio test helper for Whisky audio diagnostics.
  * Uses WinMM waveOut API for maximum Wine compatibility.
  *
- * Compile: x86_64-w64-mingw32-gcc -o WhiskyAudioTest.exe whisky_audio_test.c -lwinmm -lm
+ * Compile: x86_64-w64-mingw32-clang -o WhiskyAudioTest.exe whisky_audio_test.c -lwinmm -lm
  *
  * Usage:
  *   WhiskyAudioTest.exe          - Silent test (initialize, write silence, exit)

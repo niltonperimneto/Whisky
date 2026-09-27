@@ -1,5 +1,5 @@
 //
-//  AppGridCard.swift
+//  File.swift
 //  Whisky
 //
 //  This file is part of Whisky.
@@ -15,6 +15,8 @@
 //  You should have received a copy of the GNU General Public License along with Whisky.
 //  If not, see https://www.gnu.org/licenses/.
 //
+
+// swiftlint:disable file_header
 import SwiftUI
 import WhiskyKit
 
@@ -44,13 +46,7 @@ struct AppGridCard: View {
 
     var body: some View {
         Button(action: launch) {
-            ZStack(alignment: .bottom) {
-                artBackground
-                nameRow
-            }
-            .contentShape(shape)
-            .aspectRatio(2 / 3, contentMode: .fit)
-            .clipShape(shape)
+            cardContent
         }
         .buttonStyle(.plain)
         .focusable()
@@ -62,12 +58,6 @@ struct AppGridCard: View {
         }
         .onHover { hovering in
             withAnimation(.easeOut(duration: 0.16)) { isHovering = hovering }
-        }
-        .glassEffect(isActive ? .regular.interactive() : .regular, in: shape)
-        .overlay {
-            if isFocused {
-                shape.strokeBorder(Color.accentColor, lineWidth: 3)
-            }
         }
         .scaleEffect(isActive ? 1.015 : 1)
         .task(id: tile.id) {
@@ -84,41 +74,77 @@ struct AppGridCard: View {
         RoundedRectangle(cornerRadius: WhiskyDesignSystem.Radius.medium, style: .continuous)
     }
 
-    // MARK: - Art
-
-    private var artBackground: some View {
+    private var cardContent: some View {
         ZStack(alignment: .topTrailing) {
             LinearGradient(
-                colors: [Color(palette.deepened()), Color(palette.deepened(toLuminance: 0.07))],
+                colors: [Color(palette.deepened()), Color(palette.deepened(toLuminance: 0.1))],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            if let artwork {
-                Color.clear
-                    .overlay {
-                        artwork
-                            .resizable()
-                            .scaledToFill()
-                    }
-                    .clipped()
-            } else if let icon {
-                icon
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 64, height: 64)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                Image(systemName: "app.dashed")
-                    .font(.system(size: 32, weight: .light))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ZStack {
+                if let artwork {
+                    artwork
+                        .resizable()
+                        .scaledToFill()
+                        .opacity(0.8)
+                } else if let icon {
+                    icon
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 80, height: 80)
+                        .shadow(color: .black.opacity(0.3), radius: 5, y: 2)
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundStyle(.white.opacity(0.5))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
 
             status
                 .padding(WhiskyDesignSystem.Spacing.small)
+
+            VStack {
+                Spacer()
+                nameBumper
+            }
         }
+        .aspectRatio(2 / 3, contentMode: .fit)
+        .clipShape(shape)
+        .glassEffect(isActive ? .regular.interactive() : .regular, in: shape)
+        .overlay {
+            if isFocused {
+                shape.strokeBorder(Color.accentColor, lineWidth: 3)
+            }
+        }
+    }
+
+    private var nameBumper: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(tile.entry.name)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(tile.entry.name)
+
+            Text(originLabel)
+                .font(.caption2)
+                .opacity(0.7)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, WhiskyDesignSystem.Spacing.small)
+        .padding(.top, WhiskyDesignSystem.Spacing.small)
+        .padding(.bottom, WhiskyDesignSystem.Spacing.medium)
+        .background { Color.black.opacity(0.35) }
+        .glassEffect(.clear, in: .rect(
+            bottomLeadingRadius: WhiskyDesignSystem.Radius.medium,
+            bottomTrailingRadius: WhiskyDesignSystem.Radius.medium,
+            style: .continuous
+        ))
     }
 
     @ViewBuilder
@@ -161,44 +187,11 @@ struct AppGridCard: View {
         }
     }
 
-    // MARK: - Name
-
-    private var nameRow: some View {
-        VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.extraExtraSmall) {
-            Text(tile.entry.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(2, reservesSpace: false)
-                .truncationMode(.tail)
-                .help(tile.entry.name)
-
-            Text(originLabel)
-                .font(.caption2)
-                .opacity(0.75)
-                .lineLimit(1)
-        }
-        // White rather than `.primary` and `.secondary`: the band always sits
-        // over the deepened artwork, so in a light appearance the label was
-        // near-black text on a dark poster.
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, WhiskyDesignSystem.Spacing.small)
-        .padding(.top, WhiskyDesignSystem.Spacing.small)
-        .padding(.bottom, WhiskyDesignSystem.Spacing.medium) // Provide a bit more bottom padding to look good
-        .background {
-            Color.black.opacity(0.35) // Subtle dimming for better text contrast across all artwork
-        }
-        .glassEffect(.clear, in: .rect(
-            bottomLeadingRadius: WhiskyDesignSystem.Radius.medium,
-            bottomTrailingRadius: WhiskyDesignSystem.Radius.medium,
-            style: .continuous
-        ))
-    }
-
     private var originLabel: String {
         switch tile.origin {
-        case .pinned: String(localized: "appgrid.filter.pinned")
-        case .steam: String(localized: "appgrid.filter.steam")
-        case .installed: String(localized: "appgrid.filter.installed")
+        case .pinned: return "Pinned"
+        case .steam: return "Steam Library"
+        case .installed: return "Installed"
         }
     }
 

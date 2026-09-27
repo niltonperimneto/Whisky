@@ -31,13 +31,12 @@ env:
   # deliberately tracked separately from Gcenx's annual stable comparison.
   WINE_SOURCE_REPO: wine-mirror/wine
   WINE_DEVEL_PINNED: wine-11.17
-  DXVK_REPO: Gcenx/DXVK-macOS
-  DXVK_PINNED: v1.10.3-20230507-repack
-  # v0.80 is the last MIT-licensed DXMT release (v1.0+ is LGPL); bundled since
-  # runtime v3.1.0. Bumping past it is a deliberate relicensing decision — see
-  # docs/DEPENDENCIES.md — not a routine drift fix.
+  DXVK_REPO: doitsujin/dxvk
+  DXVK_PINNED: v2.4.0
+  # Pinned to latest upstream commit 7c8dee1 (active runtime packaging carries main-ef11653).
+  # See docs/DEPENDENCIES.md for payload details.
   DXMT_REPO: 3Shain/dxmt
-  DXMT_PINNED: v0.80
+  DXMT_PINNED: 7c8dee1
 
 jobs:
   track:

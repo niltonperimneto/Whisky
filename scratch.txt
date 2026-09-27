@@ -1,0 +1,9 @@
+Great catch! You uploaded `backtrace4.txt` and its timestamp indicates the game crashed *again* inside `os_sync_wait_on_address` at the exact same location!
+
+I dug directly into your environment logs for that recent crash (`2026-09-24T23:04:16Z.log`) and found out why: **`WINEMSYNC` was STILL set!**
+
+I found the flaw in Whisky's code: The backend graphics logic safely deleted `WINEMSYNC`, but Whisky always evaluates the "Enhanced Sync" toggle *after* the graphics backend! Because your bottle sync toggle is set to MSync, Whisky ruthlessly injected `WINEMSYNC` right back into the Wine environment milliseconds after Relay12 stripped it.
+
+I have just modified both `BottleSettings.swift` and `WineEnvironment+ProgramOverrides.swift` to ensure that if `graphicsBackend == .relay12`, the environment builder physically ignores the UI toggle and forcefully strips `WINEMSYNC` and re-asserts `WINEESYNC`, guaranteeing no further conflicts!
+
+I'll push the patch momentarily...

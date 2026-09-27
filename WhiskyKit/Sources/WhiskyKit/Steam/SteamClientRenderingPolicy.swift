@@ -19,7 +19,9 @@
 import Foundation
 
 enum SteamClientRenderingPolicy {
-    static let cefRenderingArguments = ["-cef-force-gpu"]
+    // Avoid -cef-force-gpu on DXMT/D3DMetal because it causes black screens,
+    // though DXMT 3.x might support it better. We need DXMT to rule system32.
+    static let cefRenderingArguments = ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
 
     static func arguments(
         for executable: URL,

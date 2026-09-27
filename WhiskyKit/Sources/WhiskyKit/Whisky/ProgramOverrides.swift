@@ -53,6 +53,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
 
     /// Whether to force DirectX 11 mode. `nil` inherits from bottle.
     public var forceD3D11: Bool?
+    public var metalHud: Bool?
     /// Whether D3DMetal uses the Metal 4 command encoding backend. `nil` inherits from bottle.
     ///
     /// D3DMetal only takes that path for D3D12 devices, so this is the one
@@ -69,8 +70,6 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
 
     // MARK: - Performance
 
-    /// The performance optimization preset. `nil` inherits from bottle.
-    public var performancePreset: PerformancePreset?
     /// Whether shader caching is enabled. `nil` inherits from bottle.
     public var shaderCacheEnabled: Bool?
 
@@ -123,9 +122,9 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             && dxvkHud == nil
             && enhancedSync == nil
             && forceD3D11 == nil
+            && metalHud == nil
             && metal4Enabled == nil
             && frameGeneration == nil
-            && performancePreset == nil
             && shaderCacheEnabled == nil
             && controllerCompatibilityMode == nil
             && disableHIDAPI == nil
@@ -153,9 +152,9 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
         self.dxvkHud = try container.decodeIfPresent(DXVKHUD.self, forKey: .dxvkHud)
         self.enhancedSync = try container.decodeIfPresent(EnhancedSync.self, forKey: .enhancedSync)
         self.forceD3D11 = try container.decodeIfPresent(Bool.self, forKey: .forceD3D11)
+        self.metalHud = try container.decodeIfPresent(Bool.self, forKey: .metalHud)
         self.metal4Enabled = try container.decodeIfPresent(Bool.self, forKey: .metal4Enabled)
         self.frameGeneration = try container.decodeIfPresent(Bool.self, forKey: .frameGeneration)
-        self.performancePreset = container.decodeLenientIfPresent(PerformancePreset.self, forKey: .performancePreset)
         self.shaderCacheEnabled = try container.decodeIfPresent(Bool.self, forKey: .shaderCacheEnabled)
         self.controllerCompatibilityMode = try container.decodeIfPresent(
             Bool.self, forKey: .controllerCompatibilityMode

@@ -187,6 +187,7 @@ struct GameConfigurationView: View {
         case .dxvk: "DXVK"
         case .dxmt: "DXMT"
         case .wined3d: "WineD3D"
+        case .relay12: "Relay12"
         case .recommended: nil
         }
     }

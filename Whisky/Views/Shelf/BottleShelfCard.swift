@@ -1,3 +1,4 @@
+// swiftlint:disable file_length type_body_length
 //
 //  BottleShelfCard.swift
 //  Whisky
@@ -50,9 +51,7 @@ struct BottleShelfCard: View {
 
     @State private var showRename = false
     @State private var showDuplicate = false
-    /// Not private: the extension that starts the duplication lives in
-    /// `BottleShelfCard+Derived.swift`.
-    @State var duplicationPhase: DuplicationPhase?
+    @State private var duplicationPhase: DuplicationPhase?
     /// Held while a Run… launch is in flight, so the control can disable.
     @State private var isLaunching = false
     @State private var isHovering = false
@@ -218,19 +217,11 @@ struct BottleShelfCard: View {
     /// to the same question and a tile has room for one of them.
     @ViewBuilder
     private var cornerSlot: some View {
-        if isActive, bottle.isAvailable, !isBusy {
+        if isActive, bottle.isAvailable, !bottle.inFlight, duplicationPhase == nil {
             controls
         } else {
-            // Work in progress outranks the controls even under the pointer: a
-            // disabled Run button says nothing, and the spinner it would have
-            // covered is the whole answer.
             statusPill
         }
-    }
-
-    /// Something long-running is already happening to this bottle.
-    private var isBusy: Bool {
-        bottle.inFlight || isLaunching || isStopping || duplicationPhase != nil
     }
 
     private var controls: some View {
@@ -300,7 +291,7 @@ struct BottleShelfCard: View {
     /// all for an idle bottle: a tile that is quiet should look quiet.
     @ViewBuilder
     private var statusPill: some View {
-        if isBusy {
+        if bottle.inFlight || isStopping || isLaunching || duplicationPhase != nil {
             pill { ProgressView().controlSize(.small) }
         } else if status.runningCount > 0 {
             pill {
@@ -328,5 +319,88 @@ struct BottleShelfCard: View {
             .frame(height: 26)
             .glassEffect(.regular, in: .capsule)
             .accessibilityHidden(true)
+    }
+
+    // MARK: - Derived
+
+    /// Resolved against the bottle's own runtime: D3DMetal is deployed per
+    /// runtime, so "recommended" is a different backend on each.
+    private var backendName: String {
+        let backend = bottle.settings.graphicsBackend
+        guard backend == .recommended else { return backend.displayName }
+        return GraphicsBackendResolver.resolve(for: bottle.settings.runtime).displayName
+    }
+
+    /// What the bottle is, in one line: "Windows 11 · D3DMetal". A bottle that
+    /// is not on disk says so instead — that is the only thing worth knowing
+    /// about it, and the tile's dimming alone does not say it.
+    private var subtitle: String {
+        guard bottle.isAvailable else { return String(localized: "shelf.bottle.unavailable") }
+        return [bottle.settings.windowsVersion.pretty(), backendName]
+            .joined(separator: " \u{00B7} ")
+    }
+
+    /// The tile's state, spoken. The corner pill is a glyph and a number, so
+    /// this is what VoiceOver reads as the tile's value.
+    private var stateDescription: String {
+        guard bottle.isAvailable else { return String(localized: "shelf.bottle.unavailable") }
+        if status.runningCount > 0 {
+            return String(localized: "shelf.subtitle.running \(status.runningCount)")
+        }
+        if status.hasOrphans { return String(localized: "bottle.orphan.tooltip") }
+        return String(localized: "shelf.bottle.idle")
+    }
+
+    /// A colour of its own for every bottle, derived from its name.
+    ///
+    /// Stable across launches because it is a hash written out here rather than
+    /// `hashValue`, which Swift seeds per process — a tile that changed colour
+    /// every time the app started would be worse than no colour at all.
+    private var palette: IconPalette {
+        var hash: UInt64 = 5381
+        for byte in bottle.settings.name.utf8 {
+            hash = (hash &* 33) &+ UInt64(byte)
+        }
+        let hue = Double(hash % 360) / 360
+        guard let rgb = NSColor(hue: hue, saturation: 0.5, brightness: 0.6, alpha: 1)
+            .usingColorSpace(.sRGB)
+        else { return .neutral }
+        return IconPalette(
+            red: Double(rgb.redComponent),
+            green: Double(rgb.greenComponent),
+            blue: Double(rgb.blueComponent)
+        )
+    }
+
+    private func duplicate(as newName: String) {
+        Task {
+            do {
+                let newURL = try await bottle.duplicate(newName: newName) { phase in
+                    Task { @MainActor in duplicationPhase = phase }
+                }
+                duplicationPhase = nil
+                selected = newURL
+                withAnimation {
+                    toast = ToastData(
+                        message: String(
+                            format: String(localized: "status.duplicateSuccess %@"),
+                            newName
+                        ),
+                        style: .success
+                    )
+                }
+            } catch {
+                duplicationPhase = nil
+                withAnimation {
+                    toast = ToastData(
+                        message: String(
+                            format: String(localized: "status.duplicateFailed %@"),
+                            error.localizedDescription
+                        ),
+                        style: .error
+                    )
+                }
+            }
+        }
     }
 }
