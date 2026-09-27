@@ -551,7 +551,8 @@ public class Wine {
         let programArguments = SteamClientRenderingPolicy.arguments(
             for: url,
             arguments: args,
-            blockInjectedOverlays: bottle.settings.blockInjectedOverlays
+            blockInjectedOverlays: bottle.settings.blockInjectedOverlays,
+            helperOnDXVK: steamHelper != nil || effectiveBackend == .dxvk
         )
         let command = SteamHelper.command(
             program: url, args: programArguments, workingDirectory: runDirectory, environment: wineEnvironment

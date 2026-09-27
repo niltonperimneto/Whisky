@@ -19,19 +19,39 @@
 import Foundation
 
 enum SteamClientRenderingPolicy {
-    // Avoid -cef-force-gpu on DXMT/D3DMetal because it causes black screens,
-    // though DXMT 3.x might support it better. We need DXMT to rule system32.
-    static let cefRenderingArguments = ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
+    /// CEF compositing on the GPU, for a helper whose D3D11 is DXVK.
+    ///
+    /// Chromium's GPU process then presents into a child window of the
+    /// browser's, which Wine carries across processes (CX HACK 23950).
+    static let gpuArguments = ["-cef-force-gpu"]
 
+    /// Software compositing, for a helper left on D3DMetal or DXMT, which do
+    /// not present Chromium's surfaces.
+    ///
+    /// Not a fix: the GPU process then draws straight into the browser's
+    /// window with GDI, and Wine drops drawing into another process's window,
+    /// so the client stays black. It is only the lesser failure there.
+    static let softwareArguments = ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
+
+    /// - Parameter helperOnDXVK: Whether `steamwebhelper.exe` loads DXVK's
+    ///   D3D11 this launch, staged beside it or from a DXVK bottle.
     static func arguments(
         for executable: URL,
         arguments: [String],
-        blockInjectedOverlays: Bool = false
+        blockInjectedOverlays: Bool = false,
+        helperOnDXVK: Bool = true
     ) -> [String] {
         guard executable.lastPathComponent.caseInsensitiveCompare("steam.exe") == .orderedSame else {
             return arguments
         }
-        let managedArguments = cefRenderingArguments
+        let chosen = helperOnDXVK ? gpuArguments : softwareArguments
+        let opposite = helperOnDXVK ? softwareArguments : gpuArguments
+        // A rendering flag the caller passed is theirs; adding the opposite
+        // one would hand CEF both.
+        let callerChose = arguments.contains { argument in
+            (chosen + opposite).contains { $0.caseInsensitiveCompare(argument) == .orderedSame }
+        }
+        let managedArguments = (callerChose ? [] : chosen)
             + OverlayBlockingPolicy.steamArguments(enabled: blockInjectedOverlays)
         return managedArguments.reduce(into: arguments) { result, argument in
             if !result.contains(where: { $0.caseInsensitiveCompare(argument) == .orderedSame }) {

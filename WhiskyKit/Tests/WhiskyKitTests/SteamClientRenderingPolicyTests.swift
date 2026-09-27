@@ -21,38 +21,46 @@ import Foundation
 import Testing
 
 struct SteamClientRenderingPolicyTests {
-    @Test("Steam keeps CEF on its GPU rendering path")
-    func steamUsesGPURendering() {
-        let steam = URL(filePath: "/Steam/steam.exe")
-        #expect(SteamClientRenderingPolicy.arguments(for: steam, arguments: []) == [
-            "-cef-disable-gpu", "-cef-disable-gpu-compositing"
-        ])
+    private let steam = URL(filePath: "/Steam/steam.exe")
+    private let game = URL(filePath: "/Steam/steamapps/common/game.exe")
+
+    @Test("A helper on DXVK composites on the GPU")
+    func dxvkHelperUsesGPU() {
+        #expect(SteamClientRenderingPolicy.arguments(for: steam, arguments: [], helperOnDXVK: true)
+            == ["-cef-force-gpu"])
+    }
+
+    @Test("A helper left on D3DMetal or DXMT composites in software")
+    func otherHelperUsesSoftware() {
+        #expect(SteamClientRenderingPolicy.arguments(for: steam, arguments: [], helperOnDXVK: false)
+            == ["-cef-disable-gpu", "-cef-disable-gpu-compositing"])
+    }
+
+    @Test("A rendering flag the caller passed is not contradicted")
+    func callerFlagWins() {
+        #expect(SteamClientRenderingPolicy.arguments(
+            for: steam, arguments: ["-cef-disable-gpu"], helperOnDXVK: true
+        ) == ["-cef-disable-gpu"])
+        #expect(SteamClientRenderingPolicy.arguments(
+            for: steam, arguments: ["-CEF-FORCE-GPU"], helperOnDXVK: false
+        ) == ["-CEF-FORCE-GPU"])
     }
 
     @Test("Overlay suppression is scoped to Steam and is idempotent")
     func overlaySuppression() {
-        let steam = URL(filePath: "/Steam/steam.exe")
-        let game = URL(filePath: "/Steam/game.exe")
         #expect(SteamClientRenderingPolicy.arguments(
-            for: steam,
-            arguments: ["-nooverlayui"],
-            blockInjectedOverlays: true
-        ) == ["-nooverlayui", "-cef-disable-gpu", "-cef-disable-gpu-compositing"])
+            for: steam, arguments: ["-nooverlayui"], blockInjectedOverlays: true, helperOnDXVK: true
+        ) == ["-nooverlayui", "-cef-force-gpu"])
         #expect(SteamClientRenderingPolicy.arguments(
-            for: game,
-            arguments: [],
-            blockInjectedOverlays: true
+            for: game, arguments: [], blockInjectedOverlays: true
         ).isEmpty)
     }
 
     @Test("The policy is idempotent and does not affect games")
     func policyScope() {
-        let steam = URL(filePath: "/Steam/steam.exe")
-        let game = URL(filePath: "/Steam/steamapps/common/game.exe")
         #expect(SteamClientRenderingPolicy.arguments(
-            for: steam,
-            arguments: ["-cef-disable-gpu", "-cef-disable-gpu-compositing"]
-        ) == ["-cef-disable-gpu", "-cef-disable-gpu-compositing"])
+            for: steam, arguments: ["-cef-force-gpu"], helperOnDXVK: true
+        ) == ["-cef-force-gpu"])
         #expect(SteamClientRenderingPolicy.arguments(for: game, arguments: []) == [])
     }
 }
