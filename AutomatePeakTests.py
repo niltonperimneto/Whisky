@@ -5,7 +5,7 @@ import time
 import argparse
 import sys
 
-WHISKY_PREVIEW_APP = "/Users/niltonperimneto/Library/Developer/Xcode/DerivedData/Whisky-bwvrnhfvocjgfngpdxazkxvsdyon/Build/Products/Release/Whisky Preview.app"
+WHISKY_PREVIEW_APP = "/Applications/Whisky Preview.app"
 BOTTLE_NAME = "STEAM"
 APP_ID = "3527290"
 PEAK_DIR = "/Users/niltonperimneto/Library/Containers/com.dappermint.WhiskyPreview/7B23E2E8-4D1B-451A-A24A-95A4BB90E13F/drive_c/Program Files (x86)/Steam/steamapps/common/PEAK"
@@ -38,6 +38,7 @@ def main():
     subprocess.run(["pkill", "-9", "-f", "-i", "peak"], capture_output=True)
     subprocess.run(["pkill", "-9", "-f", "-i", "steam"], capture_output=True)
     subprocess.run(["pkill", "-9", "-f", "wine"], capture_output=True)
+    subprocess.run(["pkill", "-9", "-f", "Whisky Preview"], capture_output=True)
 
     if os.path.exists(backtrace_path):
         print(f"[2/4] Removing old crash log: {backtrace_path}")
@@ -45,12 +46,12 @@ def main():
     else:
         print("[2/4] No old crash log found.")
 
-    print(f"[3/4] Launching PEAK (AppID {APP_ID}) via Whisky Preview.app...")
+    print(f"[3/4] Launching PEAK (AppID {APP_ID}) via {WHISKY_PREVIEW_APP}...")
     subprocess.run(["open", "-a", WHISKY_PREVIEW_APP])
-    time.sleep(2)
+    time.sleep(3)
     
-    # Launch via URL Scheme so it's managed by Whisky natively (WhiskyURL expects ?steam=<appid>[&bottle=<name>])
-    subprocess.run(["open", f"whisky://launch?steam={APP_ID}&bottle={BOTTLE_NAME}"])
+    # Launch via URL Scheme explicitly targeting the deployed Whisky Preview app
+    subprocess.run(["open", "-a", WHISKY_PREVIEW_APP, f"whisky://launch?steam={APP_ID}&bottle={BOTTLE_NAME}"])
 
     print(f"[4/4] Monitoring for {args.timeout} seconds for crash logs...")
     start = time.time()
