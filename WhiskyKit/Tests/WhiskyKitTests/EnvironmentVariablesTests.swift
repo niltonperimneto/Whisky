@@ -278,7 +278,6 @@ final class EnvironmentVariablesTests: XCTestCase {
 
     // MARK: - Performance Preset Environment Variables
 
-
     // MARK: - D3D11 and Shader Cache
 
     func testEnvironmentVariablesWithForceD3D11() {
