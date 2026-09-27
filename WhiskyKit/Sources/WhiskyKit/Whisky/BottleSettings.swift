@@ -988,7 +988,7 @@ public struct BottleSettings: Codable, Equatable {
         case .esync:
             builder.set("WINEESYNC", "1", layer: .bottleManaged)
         case .msync:
-            if effectiveBackend == .relay12 {
+            if resolvedBackend == .relay12 {
                 builder.remove("WINEMSYNC", layer: .bottleManaged)
                 builder.set("WINEESYNC", "1", layer: .bottleManaged)
             } else {
