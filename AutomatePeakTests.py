@@ -49,8 +49,8 @@ def main():
     subprocess.run(["open", "-a", WHISKY_PREVIEW_APP])
     time.sleep(2)
     
-    # Launch via URL Scheme so it's managed by Whisky natively
-    subprocess.run(["open", f"whisky://launch?appid={APP_ID}&bottle={BOTTLE_NAME}"])
+    # Launch via URL Scheme so it's managed by Whisky natively (WhiskyURL expects ?steam=<appid>[&bottle=<name>])
+    subprocess.run(["open", f"whisky://launch?steam={APP_ID}&bottle={BOTTLE_NAME}"])
 
     print(f"[4/4] Monitoring for {args.timeout} seconds for crash logs...")
     start = time.time()
@@ -59,8 +59,7 @@ def main():
     try:
         while time.time() - start < args.timeout:
             if check_for_crash(backtrace_path):
-                # Optionally kill the game automatically here
-                # subprocess.run(["pkill", "-9", "-f", "wine"], capture_output=True)
+                # Application crashed
                 sys.exit(1)
             
             ps = subprocess.run(["pgrep", "-i", "-f", "PEAK.exe"], capture_output=True)
@@ -71,8 +70,11 @@ def main():
             
             time.sleep(2)
 
-        print("\n✅ [SUCCESS] The timeout was reached with NO crashes.")
-        print("             The MSYNC logic fix is verified from an automated standpoint.")
+        if peak_seen:
+            print("\n✅ [SUCCESS] PEAK launched and ran with NO crashes.")
+            print("             The MSYNC logic fix is verified in real execution.")
+        else:
+            print("\n⚠️ [TIMEOUT] Timeout reached without a crash, but PEAK.exe was not detected.")
             
     except KeyboardInterrupt:
         print("\n[ABORTED] Monitoring cancelled by user.")
