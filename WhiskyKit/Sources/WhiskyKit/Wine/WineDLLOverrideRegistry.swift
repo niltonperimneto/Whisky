@@ -116,7 +116,8 @@ public extension Wine {
         bottle: Bottle,
         wineEnvironment: inout [String: String],
         applyToDescendants: Bool,
-        descendantRoutes: [BackendRoute] = []
+        descendantRoutes: [BackendRoute] = [],
+        helperBackendOverrides: [String: [String: String]] = [:]
     ) async throws {
         var scopes: [(scope: DLLOverrideScope, overrides: String)] = [
             (scope: .bottle, overrides: constructWineEnvironment(for: bottle)["WINEDLLOVERRIDES"] ?? "")
@@ -139,7 +140,7 @@ public extension Wine {
         for executable in helperExecutables(for: url) {
             scopes.append((
                 scope: .program(executable),
-                overrides: disablingNVAPI(in: helperOverrides)
+                overrides: steering(disablingNVAPI(in: helperOverrides), with: helperBackendOverrides[executable])
             ))
         }
 
@@ -216,6 +217,18 @@ public extension Wine {
         parsed["nvapi"] = ""
         parsed["nvngx"] = ""
         return parsed.keys.sorted().map { "\($0)=\(parsed[$0] ?? "")" }.joined(separator: ";")
+    }
+
+    /// Lays a helper's own backend over the launcher's overrides it shares.
+    ///
+    /// - Parameters:
+    ///   - overrides: A `WINEDLLOVERRIDES`-syntax string, possibly empty.
+    ///   - backend: The helper's entries, from `Wine.prepareSteamHelper`; `nil`
+    ///     leaves `overrides` as it is.
+    static func steering(_ overrides: String, with backend: [String: String]?) -> String {
+        guard let backend else { return overrides }
+        let merged = parseDLLOverrides(overrides).merging(backend) { _, helper in helper }
+        return merged.keys.sorted().map { "\($0)=\(merged[$0] ?? "")" }.joined(separator: ";")
     }
 
     /// Parses a `WINEDLLOVERRIDES` string into DLL name to load-order pairs.

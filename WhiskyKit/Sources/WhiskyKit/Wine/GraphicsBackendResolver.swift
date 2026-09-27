@@ -63,12 +63,11 @@ public enum GraphicsBackendResolver {
         if architecture == .x32 {
             return .dxvk
         }
-        // Launcher clients render through Chromium. Neither D3DMetal nor DXMT
-        // reliably presents Chromium's cross-process surfaces, so keep the
-        // client itself on DXVK regardless of the runtime's game recommendation.
-        // Games launched by it are resolved separately with `launcher == nil`.
-        // We no longer force DXVK for launchers because it overwrites system32
-        // and breaks DXMT and D3DMetal Unity 6 games!
+        // A launcher resolves like its games. Its backend is staged into the
+        // prefix's system32, which every game it starts shares, so steering the
+        // launcher onto DXVK put DXVK under games that asked for D3DMetal. The
+        // Chromium helper that cannot render on D3DMetal or DXMT is steered on
+        // its own instead: see ``helperBackend(for:launcherBackend:)``.
         if d3dMetalInstalled {
             return .d3dMetal
         }
@@ -85,6 +84,29 @@ public enum GraphicsBackendResolver {
             return .dxmt
         }
         return .dxvk
+    }
+
+    /// The backend a launcher's web helper renders on, when it is not the
+    /// launcher's own.
+    ///
+    /// Chromium presents through cross-process surfaces that neither D3DMetal
+    /// nor DXMT reliably shows: the window comes up and nothing paints. The
+    /// helper gets DXVK from its own directory, so the prefix, and every game
+    /// the launcher starts, keeps the launcher's backend. Only Steam's helper
+    /// has a known home to stage into.
+    ///
+    /// - Returns: `.dxvk` when the helper must be steered, `nil` when it runs on
+    ///   `launcherBackend` like the rest of the launcher.
+    public static func helperBackend(
+        for launcher: LauncherType?, launcherBackend: GraphicsBackend
+    ) -> GraphicsBackend? {
+        guard launcher == .steam else { return nil }
+        switch launcherBackend {
+        case .d3dMetal, .dxmt:
+            return .dxvk
+        case .dxvk, .wined3d, .recommended:
+            return nil
+        }
     }
 
     /// ``resolve(macOSVersion:runtimeInfo:d3dMetalInstalled:)`` against a

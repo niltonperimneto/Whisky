@@ -28,40 +28,40 @@ final class BackendResolverLauncherTests: XCTestCase {
         XCTAssertEqual(backend, .d3dMetal)
     }
 
-    /// And a launcher does not. Chromium cannot render on D3DMetal: the window
-    /// comes up, the process tree looks healthy, nothing paints.
-    func testLauncherGetsDXVKWhenD3DMetalIsInstalled() {
+    /// A launcher resolves like its games. Its backend is staged into the
+    /// shared system32, so a launcher on DXVK put DXVK under the games it
+    /// started; its Chromium helper is steered on its own instead.
+    func testLauncherResolvesLikeItsGames() {
         for launcher in LauncherType.allCases {
             XCTAssertEqual(
                 GraphicsBackendResolver.resolve(for: launcher, d3dMetalInstalled: true),
-                .dxvk,
-                "\(launcher.displayName) resolved to a backend its client cannot render on"
+                GraphicsBackendResolver.resolve(for: nil, d3dMetalInstalled: true),
+                "\(launcher.displayName) would stage a backend its games did not choose"
             )
         }
     }
 
-    /// DXMT is just as unrenderable for Chromium as D3DMetal, so on a runtime
-    /// that would recommend DXMT a launcher still gets DXVK. This is the
-    /// payload-less default install: without the steer, the first Steam launch
-    /// deploys DXMT and the client never shows a window.
-    func testLauncherGetsDXVKWhenDXMTWouldBeRecommended() {
-        let runtime = WhiskyWineVersion(version: SemanticVersion(3, 1, 1), dxmtVersion: "0.80")
-        XCTAssertEqual(
-            GraphicsBackendResolver.resolve(
-                for: nil, runtimeInfo: runtime, d3dMetalInstalled: false, dxmtRuntimeNative: true
-            ),
-            .dxmt
-        )
-        XCTAssertEqual(
-            GraphicsBackendResolver.resolve(
-                for: .steam, runtimeInfo: runtime, d3dMetalInstalled: false, dxmtRuntimeNative: true
-            ),
-            .dxvk
-        )
+    /// Chromium cannot paint on D3DMetal or DXMT, so Steam's helper gets DXVK
+    /// beside it whichever of the two the client runs on.
+    func testSteamHelperIsSteeredOffD3DMetalAndDXMT() {
+        for backend in [GraphicsBackend.d3dMetal, .dxmt] {
+            XCTAssertEqual(GraphicsBackendResolver.helperBackend(for: .steam, launcherBackend: backend), .dxvk)
+        }
     }
 
-    /// With neither D3DMetal nor DXMT the answer is DXVK for everyone, so the
-    /// steer changes nothing there.
+    /// Nothing to steer on DXVK or WineD3D, and no other launcher's helper has
+    /// a known directory to stage into.
+    func testHelperIsLeftAloneOtherwise() {
+        for backend in [GraphicsBackend.dxvk, .wined3d, .recommended] {
+            XCTAssertNil(GraphicsBackendResolver.helperBackend(for: .steam, launcherBackend: backend))
+        }
+        for launcher in LauncherType.allCases where launcher != .steam {
+            XCTAssertNil(GraphicsBackendResolver.helperBackend(for: launcher, launcherBackend: .d3dMetal))
+        }
+        XCTAssertNil(GraphicsBackendResolver.helperBackend(for: nil, launcherBackend: .d3dMetal))
+    }
+
+    /// With neither D3DMetal nor DXMT the answer is DXVK for everyone.
     func testLauncherAndGameAgreeWhenOnlyDXVKExists() {
         let runtime = WhiskyWineVersion(version: SemanticVersion(3, 0, 0))
         let game = GraphicsBackendResolver.resolve(
@@ -100,9 +100,7 @@ final class BackendResolverLauncherTests: XCTestCase {
         let url = URL(filePath: "/B/Steam/steam.exe")
         XCTAssertEqual(LauncherType.detect(from: url), .steam)
         XCTAssertEqual(
-            GraphicsBackendResolver.resolve(
-                for: LauncherType.detect(from: url), d3dMetalInstalled: true
-            ),
+            GraphicsBackendResolver.helperBackend(for: LauncherType.detect(from: url), launcherBackend: .d3dMetal),
             .dxvk
         )
     }

@@ -343,13 +343,10 @@ public class Wine {
             d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: bottle.settings.runtime),
             dxmtRuntimeNative: isDXMTRuntimeNative(for: bottle.settings.runtime)
         )
-        // A bottle-level backend describes its games, not a launcher's Chromium
-        // shell. Once GPTK makes D3DMetal available, returning the bottle choice
-        // here would bypass the launcher steer and turn Steam black again.
-        // An explicit per-program choice remains authoritative.
-        // [FIX]: Steam now natively supports all backends due to the CEF disable GPU changes,
-        // so we DO NOT bypass the user's bottle-level graphics choice for launchers.
-        // This ensures the launcher does not physically overwrite the Native DLLs for the Bottle's games!
+        // A launcher takes the bottle's backend like its games do: that backend
+        // is staged into the shared system32, so a launcher on another one put
+        // it under every game it started. Steam's Chromium helper, which cannot
+        // paint on D3DMetal, is steered on its own by `prepareSteamHelper`.
         if choice != .recommended, servable {
             return GraphicsLaunchPlan(
                 requestedBackend: choice,
@@ -499,11 +496,13 @@ public class Wine {
             resolvedBackend: effectiveBackend
         )
 
+        let steamHelper = prepareSteamHelper(for: url, bottle: bottle, plan: graphicsPlan, log: fileHandle)
         try await applyDLLOverrides(
             for: url, bottle: bottle,
             wineEnvironment: &wineEnvironment,
             applyToDescendants: overridesApplyToDescendants,
-            descendantRoutes: descendantBackendRoutes
+            descendantRoutes: descendantBackendRoutes,
+            helperBackendOverrides: steamHelper.map { ["steamwebhelper.exe": $0] } ?? [:]
         )
 
         let programName = url.lastPathComponent
@@ -1268,7 +1267,7 @@ public class Wine {
     }
 
     /// Strips the "Wine builtin DLL" marker at offset 0x40 from a PE file.
-    private static func stripBuiltinMarker(at fileURL: URL) throws {
+    static func stripBuiltinMarker(at fileURL: URL) throws {
         guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else { return }
         let handle = try FileHandle(forUpdating: fileURL)
         defer { try? handle.close() }
