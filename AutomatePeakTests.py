@@ -5,7 +5,7 @@ import time
 import argparse
 import sys
 
-WHISKY_PREVIEW_APP = "/Applications/Whisky Preview.app"
+WHISKY_CMD = "/Applications/Whisky Preview.app/Contents/Resources/WhiskyCmd"
 BOTTLE_NAME = "STEAM"
 APP_ID = "3527290"
 PEAK_DIR = "/Users/niltonperimneto/Library/Containers/com.dappermint.WhiskyPreview/7B23E2E8-4D1B-451A-A24A-95A4BB90E13F/drive_c/Program Files (x86)/Steam/steamapps/common/PEAK"
@@ -29,16 +29,21 @@ def check_for_crash(backtrace_path):
 
 def main():
     parser = argparse.ArgumentParser(description="Automate PEAK launch and debugging crash logs")
-    parser.add_argument("--timeout", type=int, default=60, help="Seconds to wait before assuming stable launch")
+    parser.add_argument("--timeout", type=int, default=90, help="Seconds to wait before assuming stable launch")
+    parser.add_argument("--no-kill", action="store_true", help="Don't kill existing processes before launch")
     args = parser.parse_args()
 
     backtrace_path = os.path.join(PEAK_DIR, "backtrace.txt")
 
-    print("[1/4] Preparing environment (killing stale processes)...")
-    subprocess.run(["pkill", "-9", "-f", "-i", "peak"], capture_output=True)
-    subprocess.run(["pkill", "-9", "-f", "-i", "steam"], capture_output=True)
-    subprocess.run(["pkill", "-9", "-f", "wine"], capture_output=True)
-    subprocess.run(["pkill", "-9", "-f", "Whisky Preview"], capture_output=True)
+    if not args.no_kill:
+        print("[1/4] Preparing environment (killing stale processes)...")
+        subprocess.run(["pkill", "-9", "-f", "-i", "peak"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "-i", "steam"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "wine"], capture_output=True)
+        subprocess.run(["pkill", "-9", "-f", "Whisky Preview"], capture_output=True)
+        time.sleep(2)
+    else:
+        print("[1/4] Skipping process kill as requested...")
 
     if os.path.exists(backtrace_path):
         print(f"[2/4] Removing old crash log: {backtrace_path}")
@@ -46,17 +51,19 @@ def main():
     else:
         print("[2/4] No old crash log found.")
 
-    print(f"[3/4] Launching PEAK (AppID {APP_ID}) via {WHISKY_PREVIEW_APP}...")
-    subprocess.run(["open", "-a", WHISKY_PREVIEW_APP])
-    time.sleep(3)
-    
-    # Launch via URL Scheme explicitly targeting the deployed Whisky Preview app
-    subprocess.run(["open", "-a", WHISKY_PREVIEW_APP, f"whisky://launch?steam={APP_ID}&bottle={BOTTLE_NAME}"])
+    print(f"[3/4] Launching PEAK (AppID {APP_ID}) via WhiskyCmd...")
+    cmd = [
+        WHISKY_CMD, "run", BOTTLE_NAME,
+        r"C:\Program Files (x86)\Steam\steam.exe",
+        "--", "-applaunch", APP_ID, "-force-d3d11", "-force-gfx-direct", "-window-mode", "windowed"
+    ]
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     print(f"[4/4] Monitoring for {args.timeout} seconds for crash logs...")
     start = time.time()
     
     peak_seen = False
+    steam_send_retry = False
     try:
         while time.time() - start < args.timeout:
             if check_for_crash(backtrace_path):
@@ -68,7 +75,22 @@ def main():
                 if not peak_seen:
                     print("      --> PEAK.exe process is running!")
                     peak_seen = True
-            
+            elif peak_seen:
+                # Was running but stopped
+                print("\n⚠️ [NOTICE] PEAK.exe exited.")
+                if check_for_crash(backtrace_path):
+                    sys.exit(1)
+                break
+            else:
+                # If Steam takes a while to boot, re-send -applaunch once Steam client is ready
+                elapsed = time.time() - start
+                if elapsed > 25 and not steam_send_retry:
+                    steam_ps = subprocess.run(["pgrep", "-i", "-f", "steamwebhelper"], capture_output=True)
+                    if steam_ps.returncode == 0:
+                        print("      --> Steam UI detected; sending -applaunch trigger...")
+                        subprocess.run(cmd, capture_output=True)
+                        steam_send_retry = True
+
             time.sleep(2)
 
         if peak_seen:
