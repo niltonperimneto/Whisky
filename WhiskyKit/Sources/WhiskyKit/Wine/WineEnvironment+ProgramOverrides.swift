@@ -229,7 +229,11 @@ extension Wine {
             builder.remove(relay12Key, layer: .programUser)
         } else if let enabled = overrides.relay12 ?? (resolvedOverrideBackend != nil ? relay12 : nil) {
             if enabled {
+                // The program asked for Relay12 itself, so its own process tree is
+                // not narrowed by the bottle's lists, which name other programs.
                 builder.set(relay12Key, "1", layer: .programUser)
+                builder.remove(BottleSettings.relay12AppsEnvironmentKey, layer: .programUser)
+                builder.remove(BottleSettings.relay12SkipEnvironmentKey, layer: .programUser)
             } else {
                 builder.remove(relay12Key, layer: .programUser)
             }
@@ -302,7 +306,8 @@ extension Wine {
         let allowedKeys = [
             "DXVK_ASYNC", "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
             "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL",
-            BottleSettings.relay12EnvironmentKey
+            BottleSettings.relay12EnvironmentKey, BottleSettings.relay12AppsEnvironmentKey,
+            BottleSettings.relay12SkipEnvironmentKey
         ]
         let safeEntries = allowedKeys.compactMap { key -> String? in
             guard let value = environment[key] else { return nil }

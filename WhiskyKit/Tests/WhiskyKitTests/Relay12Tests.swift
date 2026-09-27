@@ -306,3 +306,68 @@ struct Relay12Tests {
         #expect(try Data(contentsOf: system32(bottle, "d3d12.dll")) == old)
     }
 }
+
+@Suite("Relay12 per-program scope")
+struct Relay12ScopeTests {
+    private let key = BottleSettings.relay12EnvironmentKey
+
+    private let apps = BottleSettings.relay12AppsEnvironmentKey
+    private let skip = BottleSettings.relay12SkipEnvironmentKey
+
+    @Test("With the bottle off, only the programs turned on are routed")
+    func bottleOffListsTheProgramsTurnedOn() {
+        let scope = BottleSettings.relay12ProgramScope(
+            bottleEnabled: false, backend: .d3dMetal,
+            programs: [("PEAK.exe", true), ("Other.exe", nil), ("Old.exe", false), ("zeta.exe", true)]
+        )
+        #expect(scope == [key: "1", apps: "PEAK.exe;zeta.exe"])
+    }
+
+    @Test("With the bottle on, programs turned off are skipped")
+    func bottleOnSkipsTheProgramsTurnedOff() {
+        let scope = BottleSettings.relay12ProgramScope(
+            bottleEnabled: true, backend: .dxvk,
+            programs: [("PEAK.exe", true), ("Launcher.exe", false), ("Old.exe", false)]
+        )
+        #expect(scope == [skip: "Launcher.exe;Old.exe"])
+    }
+
+    @Test("No per-program choice adds nothing, whatever the bottle says")
+    func noChoicesNoLists() {
+        for enabled in [false, true] {
+            #expect(BottleSettings.relay12ProgramScope(
+                bottleEnabled: enabled, backend: .d3dMetal, programs: [("PEAK.exe", nil)]
+            ).isEmpty)
+        }
+    }
+
+    @Test("A WineD3D bottle carries no Relay12 lists")
+    func wineD3DNoLists() {
+        #expect(BottleSettings.relay12ProgramScope(
+            bottleEnabled: false, backend: .wined3d, programs: [("PEAK.exe", true)]
+        ).isEmpty)
+    }
+
+    @Test("Two copies of one executable name are listed once")
+    func duplicatesListedOnce() {
+        let scope = BottleSettings.relay12ProgramScope(
+            bottleEnabled: false, backend: .d3dMetal, programs: [("PEAK.exe", true), ("PEAK.exe", true)]
+        )
+        #expect(scope[apps] == "PEAK.exe")
+    }
+
+    @Test("A program Whisky starts with Relay12 on is not narrowed by the bottle's lists")
+    func programOnClearsTheLists() {
+        var builder = EnvironmentBuilder()
+        var dllResolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
+        builder.set(apps, "Other.exe", layer: .bottleManaged)
+        builder.set(skip, "PEAK.exe", layer: .bottleManaged)
+        var program = ProgramOverrides()
+        program.relay12 = true
+        Wine.applyProgramOverrides(program, builder: &builder, dllResolver: &dllResolver)
+        let env = builder.resolve().0
+        #expect(env[key] == "1")
+        #expect(env[apps] == nil)
+        #expect(env[skip] == nil)
+    }
+}

@@ -111,6 +111,20 @@ extension Wine {
         )
         dllResolver.managed.append(contentsOf: managedOverrides)
 
+        // Relay12's per-program choices, as lists for the processes this launch
+        // does not start itself: the games Steam starts from its own window.
+        let relay12Backend = resolvedBackend ?? (bottle.settings.graphicsBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+            : bottle.settings.graphicsBackend)
+        let relay12Scope = BottleSettings.relay12ProgramScope(
+            bottleEnabled: bottle.settings.relay12,
+            backend: relay12Backend,
+            programs: bottle.programs.map { ($0.url.lastPathComponent, $0.settings.overrides?.relay12) }
+        )
+        for (key, value) in relay12Scope.sorted(by: { $0.key < $1.key }) {
+            builder.set(key, value, layer: .bottleManaged, reason: "Relay12 per-program choices")
+        }
+
         // DXVK reads its config from DXVK_CONFIG_FILE or the process working
         // directory, and the working directory of a launch is never the bottle
         // root the config editor writes to, so without this line the file is

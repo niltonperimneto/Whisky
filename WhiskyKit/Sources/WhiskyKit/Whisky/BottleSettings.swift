@@ -408,6 +408,39 @@ public struct BottleSettings: Codable, Equatable {
 
     /// The variable the runtime's d3d12 interposer and Relay12's core both read.
     public static let relay12EnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME"
+    /// Executable names the interposer routes when set, and only those.
+    public static let relay12AppsEnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME_APPS"
+    /// Executable names the interposer never routes.
+    public static let relay12SkipEnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME_SKIP"
+
+    /// The variables that carry each program's Relay12 choice to the processes
+    /// Whisky does not start itself.
+    ///
+    /// Steam hands its own environment to every game it starts, so a per-program
+    /// choice only reaches a game launched from Steam's window as a list the
+    /// interposer checks against its own executable name. With the bottle on,
+    /// programs turned off go in the skip list; with it off, programs turned on
+    /// go in the list of the only programs routed. The interposer never routes
+    /// Steam's own processes either way. WineD3D has no D3DMetal behind D3D12,
+    /// so it gets nothing.
+    public static func relay12ProgramScope(
+        bottleEnabled: Bool,
+        backend: GraphicsBackend,
+        programs: [(executable: String, relay12: Bool?)]
+    ) -> [String: String] {
+        guard backend != .wined3d else { return [:] }
+        func names(_ choice: Bool) -> String {
+            Set(programs.filter { $0.relay12 == choice }.map(\.executable))
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                .joined(separator: ";")
+        }
+        if bottleEnabled {
+            let skipped = names(false)
+            return skipped.isEmpty ? [:] : [relay12SkipEnvironmentKey: skipped]
+        }
+        let enabled = names(true)
+        return enabled.isEmpty ? [:] : [relay12EnvironmentKey: "1", relay12AppsEnvironmentKey: enabled]
+    }
 
     /// Whether Whisky publishes the program this bottle launched to Discord.
     ///
