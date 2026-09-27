@@ -113,6 +113,7 @@ private struct ShelfGalleryView: View {
         let executable = bottle.url.appending(path: "drive_c/\(name).exe")
         return AppGridCard(
             tile: BottleAppCatalogue.Tile(
+                id: "preview:\(name)",
                 entry: LibraryEntry(
                     id: "preview:\(name)",
                     recordID: .pin(at: executable, bottleURL: bottle.url),

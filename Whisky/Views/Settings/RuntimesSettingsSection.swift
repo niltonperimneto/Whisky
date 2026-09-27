@@ -16,7 +16,6 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-// swiftlint:disable all
 import SwiftUI
 import UniformTypeIdentifiers
 import WhiskyKit
@@ -95,14 +94,14 @@ struct RuntimesHubView: View {
                         }
                     }
                 }
-                
+
                 HStack {
                     Button("Refresh catalog") { coordinator.loadCatalog() }
                         .disabled(coordinator.isBusy)
                     Button("Import runtime archive…") { showImporter = true }
                         .disabled(coordinator.isBusy)
                 }
-                
+
                 if coordinator.isBusy {
                     HStack {
                         ProgressView().controlSize(.small)
@@ -112,7 +111,7 @@ struct RuntimesHubView: View {
                     }
                     .padding()
                 }
-                
+
                 if let error = coordinator.errorMessage {
                     GlassCard {
                         VStack(alignment: .leading, spacing: 8) {
@@ -165,29 +164,4 @@ struct RuntimesSettingsSection: View {
     var body: some View {
         RuntimesHubView()
     }
-}
-
-@MainActor
-@Observable
-public final class RuntimeCoordinator {
-    public static let shared = RuntimeCoordinator()
-    public var rosettaInstalled: Bool = true
-    public var isBusy: Bool = false
-    public var operation: Operation = .idle
-    public var errorMessage: String? = nil
-    public enum Operation: Equatable {
-        case idle, loadingCatalog, downloading, installingRosetta, verifying, installing, removing, importing
-    }
-    public var installedRuntimes: [InstalledRuntime] = []
-    public var availableRuntimes: [AvailableRuntime] = []
-    public init() {}
-    public func retry() {}
-    public func install(_ param: AvailableRuntime) {}
-    public func remove(_ param: InstalledRuntime) {}
-    public func installRosetta() {}
-    public func refreshInstalled() {}
-    public func loadCatalog() {}
-    public func importRuntime(from url: URL) {}
-    public func cancel() {}
-    public func clearError() {}
 }
