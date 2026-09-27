@@ -83,16 +83,29 @@ class WhiskyUITestCase: XCTestCase {
 
     /// Walk every visible static text label and return any that look like raw localization keys.
     /// Heuristic: contains a `.`, no whitespace, starts lowercase.
+    ///
+    /// Buttons are walked too: a key used as a button title (a tool row, a
+    /// menu button) is not a static text, and went unseen here.
+    ///
+    /// Reads one snapshot of the tree rather than querying element by element,
+    /// so a pane that refreshes while it is walked (the process list) cannot
+    /// pull an element out from under the walk.
     func rawKeyLeaks() -> [String] {
-        app.staticTexts.allElementsBoundByIndex.compactMap { element -> String? in
-            let label = element.label
+        guard let root = try? app.snapshot() else { return [] }
+        var leaks: [String] = []
+        var pending = [root]
+        while let node = pending.popLast() {
+            pending.append(contentsOf: node.children)
+            guard node.elementType == .staticText || node.elementType == .button else { continue }
+            let label = node.label
             guard !label.isEmpty,
                   label.contains("."),
                   !label.contains(" "),
                   let first = label.first, first.isLowercase
-            else { return nil }
-            return label
+            else { continue }
+            leaks.append(label)
         }
+        return leaks
     }
 
     /// Navigate to Bottle Configuration view of the currently-selected bottle.

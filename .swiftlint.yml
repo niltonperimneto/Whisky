@@ -7,6 +7,8 @@ excluded:
   - .build
   - WhiskyKit/.build
   - build
+  # Package checkouts land here when a build uses the repo as its derived-data path.
+  - SourcePackages
 
 file_header:
     severity: error

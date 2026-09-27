@@ -22,6 +22,7 @@
 		3BF2ED15CB7C5C816A55CBEF /* ModernUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AA00D4EFA2170C05A49A27 /* ModernUI.swift */; };
 		484A57DAD0A7634094236533 /* DiagnosticsPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8797408D60F55718DFC61664 /* DiagnosticsPickerSheet.swift */; };
 		49C28DB7891C5D1E2F407817 /* DesignSystemPreviews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69FE0AFCEB15AF8706402F99 /* DesignSystemPreviews.swift */; };
+		C4E5F6A7B8C90113A9B0C1E1 /* HeroHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E5F6A7B8C90113A9B0C1E2 /* HeroHeader.swift */; };
 		4BC790C576117853A2ACD544 /* StatusBeacon.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87CAC478901D4BA429F1EDEF /* StatusBeacon.swift */; };
 		578002C0BB4FD4E9C12F3D6A /* IconPalette+Color.swift in Sources */ = {isa = PBXBuildFile; fileRef = F47A316A5F97C9DC50EB4685 /* IconPalette+Color.swift */; };
 		604BAA08E1342B0603630C14 /* BottleActionsMenu.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8040D2A9DF41CBDBA246D3 /* BottleActionsMenu.swift */; };
@@ -254,6 +255,7 @@
 		6763D8F52BC6314100651D27 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
 		67D278502BC5907E006F9A1E /* ActionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionView.swift; sourceTree = "<group>"; };
 		69FE0AFCEB15AF8706402F99 /* DesignSystemPreviews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DesignSystemPreviews.swift; sourceTree = "<group>"; };
+		C4E5F6A7B8C90113A9B0C1E2 /* HeroHeader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HeroHeader.swift; sourceTree = "<group>"; };
 		6E17B6452AF3FDC100831173 /* PinView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinView.swift; sourceTree = "<group>"; };
 		6E17B6482AF4118F00831173 /* EnvironmentArgView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnvironmentArgView.swift; sourceTree = "<group>"; };
 		6E182FC92B0BF64E00AADE81 /* WinetricksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WinetricksView.swift; sourceTree = "<group>"; };
@@ -460,6 +462,7 @@
 				3B9A73B4B9286DDD901542C3 /* UnifiedToggleRow.swift */,
 				87CAC478901D4BA429F1EDEF /* StatusBeacon.swift */,
 				69FE0AFCEB15AF8706402F99 /* DesignSystemPreviews.swift */,
+				C4E5F6A7B8C90113A9B0C1E2 /* HeroHeader.swift */,
 				E60D3C220F9D9270BDCDC542 /* MetricBadge.swift */,
 				F47A316A5F97C9DC50EB4685 /* IconPalette+Color.swift */,
 				CBCA6AF32393A3EF6AB9ACCD /* AppGridCard.swift */,
@@ -1219,6 +1222,7 @@
 				7BF67B059611F9C66F91FA0B /* UnifiedToggleRow.swift in Sources */,
 				4BC790C576117853A2ACD544 /* StatusBeacon.swift in Sources */,
 				49C28DB7891C5D1E2F407817 /* DesignSystemPreviews.swift in Sources */,
+				C4E5F6A7B8C90113A9B0C1E1 /* HeroHeader.swift in Sources */,
 				BCC41D581299E4FFDD24E80F /* MetricBadge.swift in Sources */,
 				578002C0BB4FD4E9C12F3D6A /* IconPalette+Color.swift in Sources */,
 				B764C82E69BC1691D2B78A24 /* DuplicationProgressRow.swift in Sources */,
