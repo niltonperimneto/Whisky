@@ -54,8 +54,10 @@ struct Relay12NonBlockingPSOsTests {
         #expect(environment(settings, backend: .d3dMetal)[nonBlocking] == nil)
     }
 
-    @Test("A bottle with Relay12 and non-blocking pipelines on sets the compat switch",
-          arguments: [GraphicsBackend.d3dMetal, .dxvk, .dxmt])
+    @Test(
+        "A bottle with Relay12 and non-blocking pipelines on sets the compat switch",
+        arguments: [GraphicsBackend.d3dMetal, .dxvk, .dxmt]
+    )
     func nonBlockingBottleSetsIt(backend: GraphicsBackend) {
         var settings = BottleSettings()
         settings.relay12 = true

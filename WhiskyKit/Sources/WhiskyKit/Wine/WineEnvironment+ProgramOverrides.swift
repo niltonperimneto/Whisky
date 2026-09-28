@@ -244,10 +244,11 @@ extension Wine {
         // Relay12 choice, so it is restated whenever that choice or its own
         // override could differ from what the bottle layer decided.
         let nonBlockingKey = BottleSettings.relay12NonBlockingPSOsEnvironmentKey
+        let restatesNonBlocking = overrides.relay12 != nil || overrides.relay12NonBlockingPSOs != nil
+            || resolvedOverrideBackend != nil
         if resolvedOverrideBackend == .wined3d {
             builder.remove(nonBlockingKey, layer: .programUser)
-        } else if overrides.relay12 != nil || overrides.relay12NonBlockingPSOs != nil
-                    || resolvedOverrideBackend != nil {
+        } else if restatesNonBlocking {
             let enabled = overrides.relay12 ?? relay12
             if enabled, overrides.relay12NonBlockingPSOs ?? relay12NonBlockingPSOs {
                 builder.set(nonBlockingKey, "1", layer: .programUser)
