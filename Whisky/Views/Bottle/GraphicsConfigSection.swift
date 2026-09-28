@@ -99,16 +99,17 @@ struct GraphicsConfigSection: View {
             // does not ship it.
             if resolvedBackend != .wined3d {
                 relay12Toggle
-                // Only Relay12's D3D11On12 reads it, so it means nothing with
-                // Relay12 off.
-                if bottle.settings.relay12 {
+                // Relay12 reads the async toggle too, to skip draws whose
+                // pipeline is compiling. A DXVK bottle already shows it with
+                // DXVK's settings.
+                if bottle.settings.relay12, resolvedBackend != .dxvk {
                     SettingsToggle(
-                        "config.relay12.nonBlockingPSOs",
-                        detail: "config.relay12.nonBlockingPSOs.info",
-                        isOn: $bottle.settings.relay12NonBlockingPSOs
+                        "config.dxvk.async",
+                        detail: "config.dxvk.async.info",
+                        isOn: $bottle.settings.asyncShaderCompilation
                     )
                     .disabled(!relay12Available)
-                    .accessibilityIdentifier("relay12NonBlockingPSOsToggle")
+                    .accessibilityIdentifier("asyncShaderToggle")
                 }
             }
 

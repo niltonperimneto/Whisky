@@ -193,17 +193,6 @@ public struct BottleGraphicsConfig: Codable, Equatable {
     /// whose Steam launches D3D12 games.
     var relay12: Bool = false
 
-    /// Whether Relay12 skips a draw whose pipeline is still compiling instead
-    /// of waiting for it, like `DXVK_ASYNC`.
-    ///
-    /// D3D12TranslationLayer compiles pipelines on a thread pool, but a draw
-    /// that needs one still blocks until it is done, which is the stutter the
-    /// first sight of a new shader causes. With this on, such a draw is dropped
-    /// and the next one retries, so a one-shot draw issued while its pipeline
-    /// compiles is lost for that frame. Compute is never skipped. Off by
-    /// default, and only read where Relay12 is on.
-    var relay12NonBlockingPSOs: Bool = false
-
     /// The raw value an earlier build wrote to `backend` when Relay12 was
     /// offered as a backend. It meant "D3DMetal, with Relay12".
     static let legacyRelay12Backend = "relay12"
@@ -227,8 +216,5 @@ public struct BottleGraphicsConfig: Codable, Equatable {
         // Off for a bottle written before the key existed, unless it chose the
         // old Relay12 backend, which asked for exactly this.
         self.relay12 = (try? container.decodeIfPresent(Bool.self, forKey: .relay12)) ?? legacyRelay12
-        self.relay12NonBlockingPSOs = (try? container.decodeIfPresent(
-            Bool.self, forKey: .relay12NonBlockingPSOs
-        )) ?? false
     }
 }

@@ -398,7 +398,7 @@ public class Wine {
             let relay12 = programOverrides?.relay12 ?? bottle.settings.relay12
             fileHandle.write(line: "Relay12 D3D11On12: \(relay12)")
             if relay12 {
-                let nonBlocking = programOverrides?.relay12NonBlockingPSOs ?? bottle.settings.relay12NonBlockingPSOs
+                let nonBlocking = programOverrides?.dxvkAsync ?? bottle.settings.relay12NonBlockingPSOs
                 fileHandle.write(line: "Relay12 non-blocking pipelines: \(nonBlocking)")
             }
         }

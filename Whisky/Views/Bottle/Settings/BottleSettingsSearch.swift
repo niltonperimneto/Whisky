@@ -72,12 +72,11 @@ enum BottleSettingsSearch {
         .init(tab: .graphics, titleKey: "config.metal4", keywords: ["D3DM_MTL4"]),
         .init(tab: .graphics, titleKey: "config.frameGeneration", keywords: ["dlss-g"]),
         .init(tab: .graphics, titleKey: "config.relay12", keywords: ["d3d11on12", "d3d12"]),
-        .init(
-            tab: .graphics, titleKey: "config.relay12.nonBlockingPSOs",
-            keywords: ["d3d11on12", "shader", "stutter", "async", "pipeline"]
-        ),
         .init(tab: .graphics, titleKey: "config.forceD3D11", keywords: ["dx11", "directx 11"]),
-        .init(tab: .graphics, titleKey: "config.dxvk.async", keywords: ["DXVK_ASYNC"]),
+        .init(
+            tab: .graphics, titleKey: "config.dxvk.async",
+            keywords: ["DXVK_ASYNC", "D3D11ON12_COMPAT_NonBlockingPSOs", "shader", "stutter", "pipeline"]
+        ),
         .init(tab: .graphics, titleKey: "config.dxvkHud", keywords: ["DXVK_HUD", "fps"]),
         .init(tab: .graphics, titleKey: "config.dxvk.confFile"),
         .init(tab: .graphics, titleKey: "config.metalHud", keywords: ["MTL_HUD_ENABLED", "fps"]),

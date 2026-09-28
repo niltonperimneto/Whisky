@@ -241,16 +241,18 @@ extension Wine {
         }
 
         // Relay12's non-blocking pipeline switch follows the program's own
-        // Relay12 choice, so it is restated whenever that choice or its own
-        // override could differ from what the bottle layer decided.
+        // Relay12 choice and its async toggle, so it is restated whenever
+        // either could differ from what the bottle layer decided. A program's
+        // async override is always the user's choice, so unlike the bottle's
+        // default it counts.
         let nonBlockingKey = BottleSettings.relay12NonBlockingPSOsEnvironmentKey
-        let restatesNonBlocking = overrides.relay12 != nil || overrides.relay12NonBlockingPSOs != nil
+        let restatesNonBlocking = overrides.relay12 != nil || overrides.dxvkAsync != nil
             || resolvedOverrideBackend != nil
         if resolvedOverrideBackend == .wined3d {
             builder.remove(nonBlockingKey, layer: .programUser)
         } else if restatesNonBlocking {
             let enabled = overrides.relay12 ?? relay12
-            if enabled, overrides.relay12NonBlockingPSOs ?? relay12NonBlockingPSOs {
+            if enabled, overrides.dxvkAsync ?? relay12NonBlockingPSOs {
                 builder.set(nonBlockingKey, "1", layer: .programUser)
             } else {
                 builder.remove(nonBlockingKey, layer: .programUser)
