@@ -141,7 +141,8 @@ extension WhiskyWineInstaller {
         }
 
         guard let attributes = try? fileManager.attributesOfItem(atPath: filePath),
-              attributes[.type] as? FileAttributeType == .typeSymbolicLink else {
+              attributes[.type] as? FileAttributeType == .typeSymbolicLink
+        else {
             return false
         }
 
@@ -201,7 +202,8 @@ extension WhiskyWineInstaller {
             at: libraryFolder,
             includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles]
-        ) else { return }
+        )
+        else { return }
         for case let file as URL in enumerator {
             guard try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
             let path = String(file.standardizedFileURL.path.dropFirst(root.count))

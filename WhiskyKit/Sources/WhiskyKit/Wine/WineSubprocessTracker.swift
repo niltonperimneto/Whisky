@@ -171,7 +171,8 @@ extension WineSubprocessTracker {
     ) -> Bool {
         guard let existingWineId = activeChildren.first(where: {
             $0.value.info.bottleURL == bottleURL && $0.value.info.imageName.lowercased() == exeLower
-        })?.key else { return false }
+        })?.key
+        else { return false }
 
         if let existingChild = activeChildren.removeValue(forKey: existingWineId) {
             var updatedInfo = existingChild.info

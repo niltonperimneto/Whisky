@@ -41,7 +41,12 @@ struct SteamHelperDXVKTests {
             dxvk = root.appending(path: "DXVK")
             originalDXGI = root.appending(path: "originals/dxgi.dll")
             let manager = FileManager.default
-            for directory in [helper64, helper32, dxvk.appending(path: "x64"), originalDXGI.deletingLastPathComponent()] {
+            for directory in [
+                helper64,
+                helper32,
+                dxvk.appending(path: "x64"),
+                originalDXGI.deletingLastPathComponent()
+            ] {
                 try manager.createDirectory(at: directory, withIntermediateDirectories: true)
             }
             try Data().write(to: client)
@@ -77,7 +82,7 @@ struct SteamHelperDXVKTests {
             == ["steamwebhelper.exe", "d3d11.dll", "d3d10core.dll", "dxgi.dll"])
         let dxgi = try Data(contentsOf: fixture.helper64.appending(path: "dxgi.dll"))
         #expect(try Wine.isNativePE(fixture.helper64.appending(path: "dxgi.dll")))
-        #expect(dxgi == Wine.strippingBuiltinMarker(try Data(contentsOf: fixture.originalDXGI)))
+        #expect(try dxgi == Wine.strippingBuiltinMarker(Data(contentsOf: fixture.originalDXGI)))
         #expect(fixture.contents(fixture.helper32) == ["steamwebhelper.exe"])
     }
 

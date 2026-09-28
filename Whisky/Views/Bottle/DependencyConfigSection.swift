@@ -100,7 +100,12 @@ struct DependencyConfigSection: View {
     private func detailLine(_ depStatus: DependencyStatus) -> String {
         var parts: [String] = []
         if let lastChecked = depStatus.lastChecked {
-            parts.append(String(localized: "config.dependencies.checked \(lastChecked.formatted(.relative(presentation: .named)))"))
+            parts
+                .append(
+                    String(
+                        localized: "config.dependencies.checked \(lastChecked.formatted(.relative(presentation: .named)))"
+                    )
+                )
         }
         if depStatus.confidence == .cached || depStatus.confidence == .heuristic {
             parts.append(depStatus.confidence.rawValue)

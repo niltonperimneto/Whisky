@@ -201,7 +201,7 @@ final class WhiskyUITestsLayoutProbe: WhiskyUITestCase {
 
         let tiles = app.descendants(matching: .any).matching(identifier: "appgrid.card")
         print("=====PROBE: tiles=\(tiles.count)")
-        for index in 0..<min(tiles.count, 4) {
+        for index in 0 ..< min(tiles.count, 4) {
             let tile = tiles.element(boundBy: index)
             print("=====PROBE tile '\(tile.label)' w=\(tile.frame.width) h=\(tile.frame.height)")
         }

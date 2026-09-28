@@ -285,7 +285,8 @@ public class WhiskyWineInstaller {
     static func validateRuntimeCandidate(_ folder: URL) throws {
         guard isRuntimePresent(inLibraryFolder: folder), let info = whiskyWineInfo(
             at: folder.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
-        ) else {
+        )
+        else {
             throw WhiskyWineInstallError.runtimeIncomplete
         }
         try verifyRuntimeManifest(in: folder, info: info)

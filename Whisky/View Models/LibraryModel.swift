@@ -79,6 +79,7 @@ final class LibraryModel {
             _launchError = newValue
         }
     }
+
     private var _launchError: String?
     var toast: ToastData?
 

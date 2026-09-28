@@ -64,7 +64,7 @@ extension BottleShelfCard {
     /// that changed colour every time the app started would be worse than no
     /// colour at all.
     var palette: IconPalette {
-        var hash: UInt64 = 5381
+        var hash: UInt64 = 5_381
         for byte in bottle.settings.name.utf8 {
             hash = (hash &* 33) &+ UInt64(byte)
         }
