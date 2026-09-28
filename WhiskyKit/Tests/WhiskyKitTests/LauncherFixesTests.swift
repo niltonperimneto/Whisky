@@ -150,6 +150,7 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         // Steam profile, not just the flag.
         let bottle = makeBottle()
         XCTAssertFalse(bottle.settings.launcherCompatibilityMode)
+        let asyncBefore = bottle.settings.dxvkAsync
 
         LauncherFixes.apply(to: bottle, launcher: .steam)
 
@@ -157,7 +158,9 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         XCTAssertEqual(bottle.settings.detectedLauncher, .steam)
         XCTAssertEqual(bottle.settings.launcherLocale, .english)
         XCTAssertTrue(bottle.settings.dxvk)
-        XCTAssertFalse(bottle.settings.dxvkAsync)
+        // The Steam profile does not touch async (see the two tests below);
+        // a fresh bottle keeps whatever its default is.
+        XCTAssertEqual(bottle.settings.dxvkAsync, asyncBefore)
         XCTAssertTrue(bottle.settings.gpuSpoofing)
         XCTAssertEqual(bottle.settings.networkTimeout, 90_000)
 
@@ -167,7 +170,7 @@ final class LauncherFixesApplyTests: LauncherFixesTestCase {
         XCTAssertEqual(persisted.detectedLauncher, .steam)
         XCTAssertEqual(persisted.launcherLocale, .english)
         XCTAssertTrue(persisted.dxvk)
-        XCTAssertFalse(persisted.dxvkAsync)
+        XCTAssertEqual(persisted.dxvkAsync, asyncBefore)
         XCTAssertTrue(persisted.gpuSpoofing)
         XCTAssertEqual(persisted.networkTimeout, 90_000)
     }

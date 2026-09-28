@@ -97,6 +97,7 @@ public enum GPTKImporter {
         return originalsFolder(inStore: store, key: originalsKey(for: runtime))
             .appending(path: "dxgi.dll")
     }
+
     static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "GPTKImporter")
 
     /// The D3D forwarders Apple ships, and the only ones deployed. GPTK 4 has

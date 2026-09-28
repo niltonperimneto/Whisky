@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  WineSessionTypes.swift
 //  Whisky
 //
 //  This file is part of Whisky.

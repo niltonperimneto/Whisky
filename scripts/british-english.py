@@ -86,40 +86,22 @@ def to_british(text: str) -> str:
     return result
 
 
-def entry_bounds(text: str, key: str) -> tuple[int, int]:
-    """Character range of one entry's `localizations` object, braces matched by
-    hand because the values contain braces of their own."""
-    anchor = '    %s : {\n' % json.dumps(key, ensure_ascii=False)
-    start = text.index(anchor)
-    loc = text.index('"localizations" : {', start)
-    depth, index = 0, text.index("{", loc)
-    while True:
-        if text[index] == "{":
-            depth += 1
-        elif text[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return text.index("\n", loc) + 1, index
-        elif text[index] == '"':
-            index += 1
-            while text[index] != '"':
-                index += 2 if text[index] == "\\" else 1
-        index += 1
+def unit(value: str) -> dict:
+    return {"stringUnit": {"state": "translated", "value": value}}
 
 
-def block(value: str) -> str:
-    return ('        "en-GB" : {\n'
-            '          "stringUnit" : {\n'
-            '            "state" : "translated",\n'
-            '            "value" : %s\n'
-            '          }\n'
-            '        },\n' % json.dumps(value, ensure_ascii=False))
+def write_catalog(catalog: dict) -> None:
+    """Writes the catalog in the shape it is stored in: two-space JSON with
+    non-ASCII escaped and no trailing newline, which round-trips the file byte
+    for byte. Editing the text in place instead broke when the file stopped
+    being in Xcode's `"key" : {` spacing."""
+    CATALOG.write_text(json.dumps(catalog, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
 def main() -> int:
     check_only = "--check" in sys.argv
-    raw = CATALOG.read_text(encoding="utf-8")
-    strings = json.loads(raw)["strings"]
+    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    strings = catalog["strings"]
 
     expected: dict[str, str] = {}
     for key, entry in strings.items():
@@ -137,7 +119,7 @@ def main() -> int:
     if check_only:
         stale = [
             key for key, value in expected.items()
-            if strings[key]["localizations"].get("en-GB", {}).get("stringUnit", {}).get("value") != value
+            if strings[key].get("localizations", {}).get("en-GB", {}).get("stringUnit", {}).get("value") != value
         ]
         if stale:
             print("en-GB is out of date, %d string(s), run scripts/british-english.py:" % len(stale))
@@ -149,39 +131,17 @@ def main() -> int:
 
     written = 0
     for key, value in expected.items():
-        current = strings[key]["localizations"].get("en-GB", {}).get("stringUnit", {}).get("value")
-        if current == value:
+        localizations = strings[key].setdefault("localizations", {})
+        if localizations.get("en-GB", {}).get("stringUnit", {}).get("value") == value:
             continue
-        start, end = entry_bounds(raw, key)
-        region = raw[start:end]
-        if '"en-GB" : {' in region:
-            head = region.index('        "en-GB" : {')
-            tail = region.index("        },\n", head) + len("        },\n")
-            region = region[:head] + block(value) + region[tail:]
-        elif '        "en" : {' in region:
-            at = region.index('        "en" : {')
-            closing = region.index("\n        }", at) + len("\n        }")
-            if region[closing:closing + 1] == ",":
-                # Another language follows, so a comma-terminated block slots in.
-                region = region[:closing + 2] + block(value) + region[closing + 2:]
-            else:
-                # en is the only language here. It needs the comma, and the row
-                # going in after it must not have one.
-                region = (region[:closing] + ",\n"
-                          + block(value).rstrip(",\n") + "\n"
-                          + region[closing + 1:])
-        else:
-            # No en block to anchor to, which means the key is its own source
-            # string. Head of the map: always comma-safe, unlike the tail.
-            region = block(value) + region
-        raw = raw[:start] + region + raw[end:]
+        localizations["en-GB"] = unit(value)
+        strings[key]["localizations"] = dict(sorted(localizations.items()))
         written += 1
 
-    CATALOG.write_text(raw, encoding="utf-8")
-    check = json.loads(CATALOG.read_text(encoding="utf-8"))["strings"]
+    write_catalog(catalog)
     differing = sum(
         1 for key, value in expected.items()
-        if value != check[key]["localizations"].get("en", {}).get("stringUnit", {}).get("value", key)
+        if value != strings[key]["localizations"].get("en", {}).get("stringUnit", {}).get("value", key)
     )
     print("en-GB covers %d strings, %d spelled differently, %d rows written"
           % (len(expected), differing, written))

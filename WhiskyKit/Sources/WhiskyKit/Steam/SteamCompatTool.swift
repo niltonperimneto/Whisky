@@ -104,9 +104,7 @@ public enum SteamCompatTool {
     /// `to_oslist` has to read exactly `macos`. The client rejects `osx`, and it
     /// rejects the key being absent, which was measured against three tools
     /// installed side by side that differed in nothing else.
-    public static func compatibilityToolManifest(
-        for runtime: String? = nil, label: String? = nil
-    ) -> String {
+    public static func compatibilityToolManifest(for runtime: String? = nil, label: String? = nil) -> String {
         VDFWriter.serialize(["compatibilitytools": .object(["compat_tools": .object([
             name(for: runtime): .object([
                 "install_path": .string("."),
@@ -116,6 +114,7 @@ public enum SteamCompatTool {
             ])
         ])])])
     }
+
     /// The file that tells the client how to invoke the tool.
     ///
     /// `waitforexitandrun` is the verb that makes Steam wait for the game
@@ -358,11 +357,11 @@ public enum SteamCompatTool {
         from environment: [String: String] = ProcessInfo.processInfo.environment,
         clientLibrary directory: URL? = clientLibraryDirectory()
     ) -> [String: String] {
-let pfx = ["steam", "wine", "dxvk", "mtl", "d3dm", "dxmt", "gameoverlay"]
-var passed = environment.filter { env in
-    let lower = env.key.lowercased()
-    return pfx.contains(where: lower.hasPrefix) || lower == "cg_context_show_backtrace"
-}
+        let pfx = ["steam", "wine", "dxvk", "mtl", "d3dm", "dxmt", "gameoverlay"]
+        var passed = environment.filter { env in
+            let lower = env.key.lowercased()
+            return pfx.contains(where: lower.hasPrefix) || lower == "cg_context_show_backtrace"
+        }
         if let directory { passed[clientInstallPathKey] = directory.path(percentEncoded: false) }
         return passed
     }

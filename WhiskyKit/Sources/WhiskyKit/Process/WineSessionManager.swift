@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  WineSessionManager.swift
 //  Whisky
 //
 //  This file is part of Whisky.
@@ -25,7 +25,7 @@ public final class WineSessionManager: @unchecked Sendable {
     public init() {}
 
     public func processCount(for bottleURL: URL) -> Int {
-        return 0
+        0
     }
 
     public func stopBottle(bottle: Bottle, force: Bool) async -> StopSummary {

@@ -478,7 +478,7 @@ final class LauncherDiagnosticsTests: XCTestCase {
 
         // Base Wine environment should be set
         XCTAssertEqual(env["WINEPREFIX"], tempURL.path)
-        XCTAssertEqual(env["WINEDEBUG"], "fixme-all")
+        XCTAssertEqual(env["WINEDEBUG"], Wine.defaultWineDebug)
     }
 
     // MARK: - Codable Compliance Tests

@@ -228,7 +228,7 @@ public final class RuntimeCoordinator {
         task = nil
     }
 
-    nonisolated private static func fetchCatalog() async throws -> [AvailableRuntime] {
+    private nonisolated static func fetchCatalog() async throws -> [AvailableRuntime] {
         if let catalogURL = URL(string: DistributionConfig.runtimeCatalogURL) {
             do {
                 let data = try await fetchData(from: catalogURL)
@@ -262,7 +262,7 @@ public final class RuntimeCoordinator {
         )]
     }
 
-    nonisolated private static func fetchData(from url: URL) async throws -> Data {
+    private nonisolated static func fetchData(from url: URL) async throws -> Data {
         let (data, response) = try await URLSession(configuration: .ephemeral).data(from: url)
         if let response = response as? HTTPURLResponse {
             if response.statusCode == 404 { throw RuntimeOperationError.notFound }
@@ -273,7 +273,7 @@ public final class RuntimeCoordinator {
         return data
     }
 
-    nonisolated private static func downloadArchive(from url: URL) async throws -> URL {
+    private nonisolated static func downloadArchive(from url: URL) async throws -> URL {
         let (temporaryURL, response) = try await URLSession(configuration: .ephemeral).download(from: url)
         if let response = response as? HTTPURLResponse,
            !(200 ... 299).contains(response.statusCode) {

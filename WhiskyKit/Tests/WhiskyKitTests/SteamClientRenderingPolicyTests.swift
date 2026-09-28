@@ -17,8 +17,8 @@
 //
 
 import Foundation
-@testable import WhiskyKit
 import Testing
+@testable import WhiskyKit
 
 struct SteamClientRenderingPolicyTests {
     private let steam = URL(filePath: "/Steam/steam.exe")

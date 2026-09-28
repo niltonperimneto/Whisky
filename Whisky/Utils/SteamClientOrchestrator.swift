@@ -82,7 +82,6 @@ final class SteamClientOrchestrator {
 
     init(bottle: Bottle) {
         self.bottle = bottle
-
     }
 
     /// Launches a game via `-applaunch`, bringing the client up first if needed.

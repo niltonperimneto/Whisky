@@ -198,34 +198,35 @@ struct LibraryCatalogueTests {
         #expect(LibraryCatalogue.merge([[pin], [steam]]).count == 2)
     }
 
-    @Test("Steam artwork resolves the folder layout, then the flat one")
+    @Test("Steam artwork prefers the cached portrait, then the banner, in either layout")
     func steamArtworkLayouts() throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
         let cache = root.appending(path: "appcache").appending(path: "librarycache")
         try FileManager.default.createDirectory(at: cache.appending(path: "12345"), withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        #expect(SteamLibrarySource.artworkURL(appID: 12_345, steamRoot: root) == nil)
+        // A banner is the fallback: a portrait card can crop it, and no art is worse.
+        try Data().write(to: cache.appending(path: "12345").appending(path: "header.jpg"))
+        #expect(SteamLibrarySource.artworkURL(appID: 12_345, steamRoot: root)?.lastPathComponent == "header.jpg")
 
-        // The portrait is a fallback: a card can crop it, and no art is worse.
+        // The portrait is the shape the grid's card actually wants, so it wins.
         try Data().write(to: cache.appending(path: "12345").appending(path: "library_600x900.jpg"))
         #expect(SteamLibrarySource.artworkURL(appID: 12_345, steamRoot: root)?.lastPathComponent
             == "library_600x900.jpg")
-
-        // The landscape banner is the shape a card actually wants, so it wins.
-        try Data().write(to: cache.appending(path: "12345").appending(path: "header.jpg"))
-        #expect(SteamLibrarySource.artworkURL(appID: 12_345, steamRoot: root)?.lastPathComponent == "header.jpg")
 
         // Steam used a flat name before it used a folder per app.
         try Data().write(to: cache.appending(path: "999_header.jpg"))
         #expect(SteamLibrarySource.artworkURL(appID: 999, steamRoot: root)?.lastPathComponent == "999_header.jpg")
     }
 
-    @Test("An entry with no artwork says so rather than pointing at a missing file")
-    func missingArtworkIsNil() {
+    @Test("An entry with nothing cached falls back to the store portrait on Steam's CDN")
+    func missingArtworkFallsBackToTheCDN() throws {
         let root = URL.temporaryDirectory.appending(path: UUID().uuidString)
 
-        #expect(SteamLibrarySource.artworkURL(appID: 1, steamRoot: root) == nil)
+        let url = try #require(SteamLibrarySource.artworkURL(appID: 1, steamRoot: root))
+        #expect(url.scheme == "https")
+        #expect(url.host() == "shared.akamai.steamstatic.com")
+        #expect(url.path().contains("/apps/1/"))
     }
 
     @Test("A source id round-trips, so it can be persisted alongside a filter")

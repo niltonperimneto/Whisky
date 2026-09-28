@@ -57,7 +57,8 @@ public enum SteamMinidumpScanner {
             at: dumpsURL,
             includingPropertiesForKeys: Array(keys),
             options: [.skipsHiddenFiles]
-        ) else { return nil }
+        )
+        else { return nil }
 
         let candidates = urls.compactMap { url -> (URL, Date)? in
             guard url.pathExtension.lowercased() == "dmp",

@@ -1,5 +1,5 @@
 //
-//  File.swift
+//  AppGridCard.swift
 //  Whisky
 //
 //  This file is part of Whisky.
@@ -189,9 +189,9 @@ struct AppGridCard: View {
 
     private var originLabel: String {
         switch tile.origin {
-        case .pinned: return "Pinned"
-        case .steam: return "Steam Library"
-        case .installed: return "Installed"
+        case .pinned: "Pinned"
+        case .steam: "Steam Library"
+        case .installed: "Installed"
         }
     }
 

@@ -268,13 +268,15 @@ extension GPTKImporter {
                 atPath: runtimePE.appending(path: name).path(percentEncoded: false),
                 andPath: storePE.appending(path: name).path(percentEncoded: false)
             )
-        }) else { return false }
+        })
+        else { return false }
 
         let unixDir = runtimeLib.appending(path: "wine/x86_64-unix")
         guard unixLibraryNames.allSatisfy({ name in
             let path = unixDir.appending(path: name).path(percentEncoded: false)
             return (try? fileManager.destinationOfSymbolicLink(atPath: path)) == unixLinkDestination
-        }) else { return false }
+        })
+        else { return false }
 
         let external = runtimeLib.appending(path: "external")
         return ["D3DMetal.framework", "libd3dshared.dylib"].allSatisfy { name in

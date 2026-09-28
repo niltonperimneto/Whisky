@@ -24,12 +24,12 @@ extension WineSubprocessTracker {
     func extractWineId(from line: String) -> String? {
         guard let colonIndex = line.firstIndex(of: ":") else { return nil }
         let prefix = line[..<colonIndex].trimmingCharacters(in: .whitespaces)
-        guard prefix.count >= 4, prefix.count <= 8, prefix.allSatisfy({ $0.isHexDigit }) else {
+        guard prefix.count >= 4, prefix.count <= 8, prefix.allSatisfy(\.isHexDigit) else {
             if let threadRange = line.range(of: "(thread ") {
                 let after = line[threadRange.upperBound...]
                 if let endParen = after.firstIndex(of: ")") {
                     let tid = String(after[..<endParen]).trimmingCharacters(in: .whitespaces)
-                    if !tid.isEmpty && tid.allSatisfy({ $0.isHexDigit }) {
+                    if !tid.isEmpty, tid.allSatisfy(\.isHexDigit) {
                         return tid
                     }
                 }
@@ -103,7 +103,7 @@ extension WineSubprocessTracker {
         if let parenStart = line.firstIndex(of: "("),
            let parenEnd = line.firstIndex(of: ")"),
            parenStart < parenEnd {
-            let codeStr = line[line.index(after: parenStart)..<parenEnd].trimmingCharacters(in: .whitespaces)
+            let codeStr = line[line.index(after: parenStart) ..< parenEnd].trimmingCharacters(in: .whitespaces)
             if let hex = UInt32(codeStr, radix: 16) {
                 return Int32(bitPattern: hex)
             }

@@ -1,6 +1,6 @@
 // swiftlint:disable cyclomatic_complexity file_header function_body_length identifier_name trailing_whitespace
 //
-//  File.swift
+//  BottleAppCatalogue.swift
 //  Whisky
 //
 //  This file is part of Whisky.
@@ -19,7 +19,7 @@
 
 import Foundation
 
-public struct BottleAppCatalogue {
+public enum BottleAppCatalogue {
     public enum Origin: String, Equatable, Hashable {
         case pinned
         case steam
@@ -140,7 +140,7 @@ public struct BottleAppCatalogue {
     }
 }
 
-extension Set where Element == BottleAppCatalogue.Tile {
+extension Set<BottleAppCatalogue.Tile> {
     func sorted(by: (Element, Element) -> Bool) -> [Element] {
         Array(self).sorted(by: by)
     }

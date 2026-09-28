@@ -37,7 +37,7 @@ private final class WineLogCapRegistry: @unchecked Sendable {
     private nonisolated(unsafe) static var deinitObserverKey: UInt8 = 0
 
     /// Size reserved for the rolling tail buffer when logs exceed the limit (4 MiB).
-    private static let tailCapBytes: Int = 4 * 1024 * 1024
+    private static let tailCapBytes: Int = 4 * 1_024 * 1_024
 
     private final class DeinitObserver {
         let onDeinit: () -> Void

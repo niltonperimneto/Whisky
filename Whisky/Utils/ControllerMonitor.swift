@@ -17,8 +17,8 @@
 //
 
 import Foundation
-import Observation
 import GameController
+import Observation
 import os.log
 
 /// The type of game controller based on its product category.
