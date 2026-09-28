@@ -66,7 +66,9 @@ struct StatusBeacon: View {
 
     private let state: State
     private let size: Size
-    @State private var isPulsing: Bool = false
+    // Qualified: the nested `State` enum above shadows the property wrapper,
+    // which Xcode 26's compiler resolves to the enum.
+    @SwiftUI.State private var isPulsing: Bool = false
 
     init(state: State, size: Size = .standard) {
         self.state = state
