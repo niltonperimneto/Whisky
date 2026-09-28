@@ -32298,6 +32298,26 @@
         }
       }
     },
+    "config.relay12.nonBlockingPSOs": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't wait for shader compiles"
+          }
+        }
+      }
+    },
+    "config.relay12.nonBlockingPSOs.info": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Off by default. Relay12 skips a draw whose shader is still compiling instead of stalling for it, like DXVK_ASYNC. Removes the hitch when a new shader first appears, but that draw may be missing for a frame."
+          }
+        }
+      }
+    },
     "config.relay12.unavailable": {
       "localizations": {
         "en": {

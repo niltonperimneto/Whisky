@@ -42,6 +42,7 @@ extension Wine {
         frameGeneration: Bool = false,
         metal4Enabled: Bool = true,
         relay12: Bool = false,
+        relay12NonBlockingPSOs: Bool = false,
         builder: inout EnvironmentBuilder,
         dllResolver: inout DLLOverrideResolver
     ) {
@@ -239,6 +240,22 @@ extension Wine {
             }
         }
 
+        // Relay12's non-blocking pipeline switch follows the program's own
+        // Relay12 choice, so it is restated whenever that choice or its own
+        // override could differ from what the bottle layer decided.
+        let nonBlockingKey = BottleSettings.relay12NonBlockingPSOsEnvironmentKey
+        if resolvedOverrideBackend == .wined3d {
+            builder.remove(nonBlockingKey, layer: .programUser)
+        } else if overrides.relay12 != nil || overrides.relay12NonBlockingPSOs != nil
+                    || resolvedOverrideBackend != nil {
+            let enabled = overrides.relay12 ?? relay12
+            if enabled, overrides.relay12NonBlockingPSOs ?? relay12NonBlockingPSOs {
+                builder.set(nonBlockingKey, "1", layer: .programUser)
+            } else {
+                builder.remove(nonBlockingKey, layer: .programUser)
+            }
+        }
+
         // Shader cache override, on the variable DXVK actually reads.
         if let shaderCache = overrides.shaderCacheEnabled {
             if !shaderCache {
@@ -307,7 +324,7 @@ extension Wine {
             "DXVK_ASYNC", "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
             "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL",
             BottleSettings.relay12EnvironmentKey, BottleSettings.relay12AppsEnvironmentKey,
-            BottleSettings.relay12SkipEnvironmentKey
+            BottleSettings.relay12SkipEnvironmentKey, BottleSettings.relay12NonBlockingPSOsEnvironmentKey
         ]
         let safeEntries = allowedKeys.compactMap { key -> String? in
             guard let value = environment[key] else { return nil }

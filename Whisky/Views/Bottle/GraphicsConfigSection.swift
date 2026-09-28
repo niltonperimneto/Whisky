@@ -99,6 +99,17 @@ struct GraphicsConfigSection: View {
             // does not ship it.
             if resolvedBackend != .wined3d {
                 relay12Toggle
+                // Only Relay12's D3D11On12 reads it, so it means nothing with
+                // Relay12 off.
+                if bottle.settings.relay12 {
+                    SettingsToggle(
+                        "config.relay12.nonBlockingPSOs",
+                        detail: "config.relay12.nonBlockingPSOs.info",
+                        isOn: $bottle.settings.relay12NonBlockingPSOs
+                    )
+                    .disabled(!relay12Available)
+                    .accessibilityIdentifier("relay12NonBlockingPSOsToggle")
+                }
             }
 
             SettingsToggle("config.forceD3D11", detail: "config.forceD3D11.info", isOn: $bottle.settings.forceD3D11)

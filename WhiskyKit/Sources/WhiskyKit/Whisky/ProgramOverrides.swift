@@ -73,6 +73,9 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
     /// Experimental and needed only by titles that ask for a D3D11On12 device,
     /// so it is as much a per-title decision as a per-bottle one.
     public var relay12: Bool?
+    /// Whether Relay12 skips draws whose pipeline is still compiling. `nil`
+    /// inherits from bottle. Only takes effect where Relay12 is on.
+    public var relay12NonBlockingPSOs: Bool?
 
     // MARK: - Performance
 
@@ -132,6 +135,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             && metal4Enabled == nil
             && frameGeneration == nil
             && relay12 == nil
+            && relay12NonBlockingPSOs == nil
             && shaderCacheEnabled == nil
             && controllerCompatibilityMode == nil
             && disableHIDAPI == nil
@@ -169,6 +173,7 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
         self.metal4Enabled = try container.decodeIfPresent(Bool.self, forKey: .metal4Enabled)
         self.frameGeneration = try container.decodeIfPresent(Bool.self, forKey: .frameGeneration)
         self.relay12 = try container.decodeIfPresent(Bool.self, forKey: .relay12) ?? (legacyRelay12 ? true : nil)
+        self.relay12NonBlockingPSOs = try container.decodeIfPresent(Bool.self, forKey: .relay12NonBlockingPSOs)
         self.shaderCacheEnabled = try container.decodeIfPresent(Bool.self, forKey: .shaderCacheEnabled)
         self.controllerCompatibilityMode = try container.decodeIfPresent(
             Bool.self, forKey: .controllerCompatibilityMode

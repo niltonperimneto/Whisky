@@ -406,6 +406,17 @@ public struct BottleSettings: Codable, Equatable {
         set { graphicsConfig.relay12 = newValue }
     }
 
+    /// Whether Relay12 skips draws whose pipeline is still compiling. Off by
+    /// default. See ``BottleGraphicsConfig/relay12NonBlockingPSOs``.
+    public var relay12NonBlockingPSOs: Bool {
+        get { graphicsConfig.relay12NonBlockingPSOs }
+        set { graphicsConfig.relay12NonBlockingPSOs = newValue }
+    }
+
+    /// The compat switch Relay12's D3D11On12 reads when dxgi has no
+    /// `CompatValue`, as Wine's and D3DMetal's do not. Nothing else reads it.
+    public static let relay12NonBlockingPSOsEnvironmentKey = "D3D11ON12_COMPAT_NonBlockingPSOs"
+
     /// The variable the runtime's d3d12 interposer and Relay12's core both read.
     public static let relay12EnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME"
     /// Executable names the interposer routes when set, and only those.
@@ -1007,6 +1018,9 @@ public struct BottleSettings: Codable, Equatable {
         // passes it to the D3D12 games it launches, so only WineD3D withholds it.
         if relay12, resolvedBackend != .wined3d {
             builder.set(Self.relay12EnvironmentKey, "1", layer: .bottleManaged)
+            if relay12NonBlockingPSOs {
+                builder.set(Self.relay12NonBlockingPSOsEnvironmentKey, "1", layer: .bottleManaged)
+            }
         }
 
         // Enhanced sync mode

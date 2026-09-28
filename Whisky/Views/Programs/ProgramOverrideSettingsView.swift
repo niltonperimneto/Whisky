@@ -161,6 +161,16 @@ extension ProgramOverrideSettingsView {
                 )
                 .disabled(!relay12Available)
                 .accessibilityIdentifier("programRelay12Toggle")
+                if program.settings.overrides?.relay12 ?? bottle.settings.relay12 {
+                    InheritableToggle(
+                        "config.relay12.nonBlockingPSOs",
+                        detail: "config.relay12.nonBlockingPSOs.info",
+                        value: field(\.relay12NonBlockingPSOs),
+                        inherited: bottle.settings.relay12NonBlockingPSOs
+                    )
+                    .disabled(!relay12Available)
+                    .accessibilityIdentifier("programRelay12NonBlockingPSOsToggle")
+                }
             }
 
             InheritableToggle(
