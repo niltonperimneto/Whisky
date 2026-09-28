@@ -25,6 +25,14 @@ public enum DXVKHUD: Codable, Equatable, Sendable {
 public struct BottleDXVKConfig: Codable, Equatable {
     var dxvk: Bool = false
     var dxvkAsync: Bool = true
+    /// Whether the user set ``dxvkAsync`` themselves, through the settings UI.
+    ///
+    /// `dxvkAsync` defaults to on and Whisky also sets it for launcher and game
+    /// fixes, so its value alone says nothing about whether anyone asked for it.
+    /// Relay12 reads the same toggle to drop draws whose pipeline is still
+    /// compiling, which is unproven on real devices, so it honours only a
+    /// value the user chose.
+    var dxvkAsyncChosen: Bool = false
     var dxvkHud: DXVKHUD = .off
 
     public init() {}
@@ -33,6 +41,7 @@ public struct BottleDXVKConfig: Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.dxvk = try container.decodeIfPresent(Bool.self, forKey: .dxvk) ?? false
         self.dxvkAsync = try container.decodeIfPresent(Bool.self, forKey: .dxvkAsync) ?? true
+        self.dxvkAsyncChosen = try container.decodeIfPresent(Bool.self, forKey: .dxvkAsyncChosen) ?? false
         self.dxvkHud = try container.decodeIfPresent(DXVKHUD.self, forKey: .dxvkHud) ?? .off
     }
 }

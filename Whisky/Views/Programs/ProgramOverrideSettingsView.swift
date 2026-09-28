@@ -161,6 +161,18 @@ extension ProgramOverrideSettingsView {
                 )
                 .disabled(!relay12Available)
                 .accessibilityIdentifier("programRelay12Toggle")
+                // Relay12 reads the async toggle too, to skip draws whose
+                // pipeline is compiling. Under DXVK it is already shown above.
+                if effectiveBackend != .dxvk, program.settings.overrides?.relay12 ?? bottle.settings.relay12 {
+                    InheritableToggle(
+                        "config.dxvk.async",
+                        detail: "config.dxvk.async.info",
+                        value: field(\.dxvkAsync),
+                        inherited: bottle.settings.relay12NonBlockingPSOs
+                    )
+                    .disabled(!relay12Available)
+                    .accessibilityIdentifier("programAsyncShaderToggle")
+                }
             }
 
             InheritableToggle(

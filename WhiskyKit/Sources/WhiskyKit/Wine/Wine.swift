@@ -397,6 +397,10 @@ public class Wine {
         if backend != .wined3d {
             let relay12 = programOverrides?.relay12 ?? bottle.settings.relay12
             fileHandle.write(line: "Relay12 D3D11On12: \(relay12)")
+            if relay12 {
+                let nonBlocking = programOverrides?.dxvkAsync ?? bottle.settings.relay12NonBlockingPSOs
+                fileHandle.write(line: "Relay12 non-blocking pipelines: \(nonBlocking)")
+            }
         }
 
         if isPEAK {

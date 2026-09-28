@@ -148,6 +148,10 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
     /// Creates a new ProgramOverrides with all fields set to `nil` (inherit everything).
     public init() {}
 
+    private enum LegacyCodingKeys: String, CodingKey {
+        case relay12NonBlockingPSOs
+    }
+
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         // An earlier build offered Relay12 as a backend; it meant D3DMetal with
@@ -162,6 +166,13 @@ public struct ProgramOverrides: Codable, Equatable, Sendable {
             self.dxvk = nil
         }
         self.dxvkAsync = try container.decodeIfPresent(Bool.self, forKey: .dxvkAsync)
+        // An earlier build had a separate Relay12 switch for skipping draws
+        // whose pipeline is compiling. The async toggle now means that too.
+        if self.dxvkAsync == nil,
+           (try? decoder.container(keyedBy: LegacyCodingKeys.self)
+               .decodeIfPresent(Bool.self, forKey: .relay12NonBlockingPSOs)) == true {
+            self.dxvkAsync = true
+        }
         self.dxvkHud = try container.decodeIfPresent(DXVKHUD.self, forKey: .dxvkHud)
         self.enhancedSync = try container.decodeIfPresent(EnhancedSync.self, forKey: .enhancedSync)
         self.forceD3D11 = try container.decodeIfPresent(Bool.self, forKey: .forceD3D11)

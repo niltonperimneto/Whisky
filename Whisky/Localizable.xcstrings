@@ -28722,145 +28722,145 @@
       "localizations": {
         "ar": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "cs": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Asynchronn\u00ed DXVK"
           }
         },
         "da": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "de": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "DXVK Async"
+            "value": "Asynchronous shader compilation"
           }
         },
         "en-GB": {
           "stringUnit": {
             "state": "translated",
-            "value": "DXVK Async"
+            "value": "Asynchronous shader compilation"
           }
         },
         "es": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK As\u00edncrono"
           }
         },
         "fi": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "fr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK asynchrone"
           }
         },
         "it": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK asincrono"
           }
         },
         "ja": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "nl": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "pl": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Asynchroniczny DXVK"
           }
         },
         "pt-BR": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK ass\u00edncrono"
           }
         },
         "pt-PT": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK ass\u00edncrono"
           }
         },
         "ro": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Async DXVK"
           }
         },
         "ru": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u0410\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u044b\u0439 DXVK"
           }
         },
         "sv": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "tr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "uk": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u0410\u0441\u0438\u043d\u0445\u0440\u043e\u043d\u043d\u0438\u0439 DXVK"
           }
         },
         "vi": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "DXVK Async"
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u5f02\u6b65 DXVK"
           }
         },
         "zh-Hant": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u975e\u540c\u6b65 DXVK"
           }
         }
@@ -28870,145 +28870,145 @@
       "localizations": {
         "ar": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u064a\u062c\u0645\u0651\u0639 \u0627\u0644\u0645\u0638\u0644\u0644\u0627\u062a \u0641\u064a \u0627\u0644\u062e\u0644\u0641\u064a\u0629 \u0644\u062a\u0642\u0644\u064a\u0644 \u0627\u0644\u062a\u0642\u0637\u064a\u0639\u060c \u0645\u0639 \u0627\u062d\u062a\u0645\u0627\u0644 \u0636\u0626\u064a\u0644 \u0644\u0638\u0647\u0648\u0631 \u062e\u0644\u0644 \u0628\u0635\u0631\u064a \u0642\u0635\u064a\u0631."
           }
         },
         "cs": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Kompiluje shadery na pozad\u00ed, omezuje sek\u00e1n\u00ed; z\u0159\u00eddka se m\u016f\u017eou objevit kr\u00e1tk\u00e9 grafick\u00e9 artefakty."
           }
         },
         "da": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Kompilerer shaders i baggrunden for at mindske hakken, med en lille risiko for kortvarige grafikfejl."
           }
         },
         "de": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Kompiliert Shader im Hintergrund, um Ruckler zu reduzieren \u2013 mit geringem Risiko kurzer Bildfehler."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Compile shaders in the background to reduce stutter, with a small risk of brief visual glitches."
+            "value": "Compile shaders in the background instead of stalling for them. Under DXVK this sets DXVK_ASYNC, with a small risk of brief visual glitches. With Relay12 on, a draw whose pipeline is still compiling is skipped, so a one-off draw can be missing for a frame."
           }
         },
         "en-GB": {
           "stringUnit": {
             "state": "translated",
-            "value": "Compile shaders in the background to reduce stutter, with a small risk of brief visual glitches."
+            "value": "Compile shaders in the background instead of stalling for them. Under DXVK this sets DXVK_ASYNC, with a small risk of brief visual glitches. With Relay12 on, a draw whose pipeline is still compiling is skipped, so a one-off draw can be missing for a frame."
           }
         },
         "es": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compila los shaders en segundo plano para reducir los tirones, con un peque\u00f1o riesgo de fallos visuales breves."
           }
         },
         "fi": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "K\u00e4\u00e4nt\u00e4\u00e4 varjostimet taustalla nykimisen v\u00e4hent\u00e4miseksi; pieni riski hetkellisist\u00e4 visuaalisista h\u00e4iri\u00f6ist\u00e4."
           }
         },
         "fr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compile les shaders en arri\u00e8re-plan pour r\u00e9duire les saccades, avec un faible risque de brefs d\u00e9fauts d'affichage."
           }
         },
         "it": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compila gli shader in background per ridurre gli scatti, con un piccolo rischio di brevi glitch visivi."
           }
         },
         "ja": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u30b7\u30a7\u30fc\u30c0\u30fc\u3092\u30d0\u30c3\u30af\u30b0\u30e9\u30a6\u30f3\u30c9\u3067\u30b3\u30f3\u30d1\u30a4\u30eb\u3057\u3066\u30ab\u30af\u3064\u304d\u3092\u6e1b\u3089\u3057\u307e\u3059\u3002\u307e\u308c\u306b\u4e00\u77ac\u306e\u63cf\u753b\u306e\u4e71\u308c\u304c\u8d77\u304d\u308b\u3053\u3068\u304c\u3042\u308a\u307e\u3059\u3002"
           }
         },
         "ko": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\ubc31\uadf8\ub77c\uc6b4\ub4dc\uc5d0\uc11c \uc170\uc774\ub354\ub97c \ucef4\ud30c\uc77c\ud574 \ub04a\uae40\uc744 \uc904\uc785\ub2c8\ub2e4. \ub4dc\ubb3c\uac8c \ud654\uba74\uc774 \uc7a0\uae50 \uae68\uc9c8 \uc218 \uc788\uc2b5\ub2c8\ub2e4."
           }
         },
         "nl": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compileert shaders op de achtergrond om haperingen te verminderen, met een klein risico op korte beeldfouten."
           }
         },
         "pl": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Kompiluje shadery w tle, ograniczaj\u0105c przyci\u0119cia; rzadko mog\u0105 pojawi\u0107 si\u0119 kr\u00f3tkie artefakty graficzne."
           }
         },
         "pt-BR": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compila shaders em segundo plano para reduzir engasgos, com um pequeno risco de falhas visuais r\u00e1pidas."
           }
         },
         "pt-PT": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compila shaders em segundo plano para reduzir engasgos, com um pequeno risco de falhas visuais breves."
           }
         },
         "ro": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Compileaz\u0103 shaderele \u00een fundal pentru a reduce sacad\u0103rile, cu un mic risc de scurte defecte vizuale."
           }
         },
         "ru": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u041a\u043e\u043c\u043f\u0438\u043b\u0438\u0440\u0443\u0435\u0442 \u0448\u0435\u0439\u0434\u0435\u0440\u044b \u0432 \u0444\u043e\u043d\u0435, \u0443\u043c\u0435\u043d\u044c\u0448\u0430\u044f \u043f\u043e\u0434\u0442\u043e\u0440\u043c\u0430\u0436\u0438\u0432\u0430\u043d\u0438\u044f; \u0438\u0437\u0440\u0435\u0434\u043a\u0430 \u0432\u043e\u0437\u043c\u043e\u0436\u043d\u044b \u043a\u0440\u0430\u0442\u043a\u043e\u0432\u0440\u0435\u043c\u0435\u043d\u043d\u044b\u0435 \u0433\u0440\u0430\u0444\u0438\u0447\u0435\u0441\u043a\u0438\u0435 \u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442\u044b."
           }
         },
         "sv": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Kompilerar shaders i bakgrunden f\u00f6r att minska hack, med en liten risk f\u00f6r kortvariga grafikfel."
           }
         },
         "tr": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Tak\u0131lmay\u0131 azaltmak i\u00e7in g\u00f6lgelendiricileri arka planda derler; k\u00fc\u00e7\u00fck bir g\u00f6rsel bozulma riski vard\u0131r."
           }
         },
         "uk": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u041a\u043e\u043c\u043f\u0456\u043b\u044e\u0454 \u0448\u0435\u0439\u0434\u0435\u0440\u0438 \u0443 \u0444\u043e\u043d\u0456, \u0437\u043c\u0435\u043d\u0448\u0443\u044e\u0447\u0438 \u043f\u0456\u0434\u0433\u0430\u043b\u044c\u043c\u043e\u0432\u0443\u0432\u0430\u043d\u043d\u044f; \u0437\u0440\u0456\u0434\u043a\u0430 \u043c\u043e\u0436\u043b\u0438\u0432\u0456 \u043a\u043e\u0440\u043e\u0442\u043a\u043e\u0447\u0430\u0441\u043d\u0456 \u0433\u0440\u0430\u0444\u0456\u0447\u043d\u0456 \u0430\u0440\u0442\u0435\u0444\u0430\u043a\u0442\u0438."
           }
         },
         "vi": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "Bi\u00ean d\u1ecbch shader \u1edf n\u1ec1n \u0111\u1ec3 gi\u1ea3m gi\u1eadt, \u0111\u1ed5i l\u1ea1i c\u00f3 nguy c\u01a1 nh\u1ecf xu\u1ea5t hi\u1ec7n l\u1ed7i h\u00ecnh \u1ea3nh tho\u00e1ng qua."
           }
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u5728\u540e\u53f0\u7f16\u8bd1\u7740\u8272\u5668\u4ee5\u51cf\u5c11\u5361\u987f\uff0c\u4f46\u6709\u6781\u5c0f\u6982\u7387\u51fa\u73b0\u77ed\u6682\u7684\u753b\u9762\u5f02\u5e38\u3002"
           }
         },
         "zh-Hant": {
           "stringUnit": {
-            "state": "translated",
+            "state": "needs_review",
             "value": "\u5728\u80cc\u666f\u7de8\u8b6f\u8457\u8272\u5668\u4ee5\u6e1b\u5c11\u9813\u632b\uff0c\u4f46\u6709\u6975\u5c0f\u6a5f\u7387\u51fa\u73fe\u77ed\u66ab\u7684\u756b\u9762\u7570\u5e38\u3002"
           }
         }

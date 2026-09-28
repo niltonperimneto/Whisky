@@ -220,6 +220,14 @@ public struct BottleSettings: Codable, Equatable {
             BottleGraphicsConfig.self,
             forKey: .graphicsConfig
         ) ?? BottleGraphicsConfig()
+        // Migration: an earlier build had a separate Relay12 switch for skipping
+        // draws whose pipeline is compiling. The async toggle now means that
+        // too, so someone who turned it on keeps it, as a choice they made.
+        if (try? container.decodeIfPresent(LegacyGraphicsConfig.self, forKey: .graphicsConfig))??
+            .relay12NonBlockingPSOs == true {
+            self.dxvkConfig.dxvkAsync = true
+            self.dxvkConfig.dxvkAsyncChosen = true
+        }
         // Migration: preserve DXVK choice from old bottles that lack graphicsConfig
         if !hasGraphicsConfig, self.dxvkConfig.dxvk {
             self.graphicsConfig.backend = .dxvk
@@ -241,6 +249,11 @@ public struct BottleSettings: Codable, Equatable {
             forKey: .customDLLOverrides
         ) ?? []
         normalizeLegacyGraphicsConfig(hasGraphicsConfig: hasGraphicsConfig)
+    }
+
+    /// The keys an earlier build wrote to `graphicsConfig` that now live elsewhere.
+    private struct LegacyGraphicsConfig: Decodable {
+        var relay12NonBlockingPSOs: Bool?
     }
 
     private mutating func normalizeLegacyGraphicsConfig(hasGraphicsConfig: Bool) {
@@ -406,6 +419,27 @@ public struct BottleSettings: Codable, Equatable {
         set { graphicsConfig.relay12 = newValue }
     }
 
+    /// Whether Relay12 skips a draw whose pipeline is still compiling instead
+    /// of waiting for it, like `DXVK_ASYNC`.
+    ///
+    /// D3D12TranslationLayer compiles pipelines on a thread pool, but a draw
+    /// that needs one still blocks until it is done, which is the stutter the
+    /// first sight of a new shader causes. With this on, such a draw is dropped
+    /// and the next one retries, so a one-shot draw issued while its pipeline
+    /// compiles is lost for that frame. Compute is never skipped.
+    ///
+    /// It follows the async toggle, but only once the user has set that toggle
+    /// (``asyncShaderCompilation``): ``dxvkAsync`` is on by default and set by
+    /// Whisky's own fixes, and neither should opt Relay12 into dropping draws.
+    /// Only read where Relay12 is on.
+    public var relay12NonBlockingPSOs: Bool {
+        dxvkConfig.dxvkAsync && dxvkConfig.dxvkAsyncChosen
+    }
+
+    /// The compat switch Relay12's D3D11On12 reads when dxgi has no
+    /// `CompatValue`, as Wine's and D3DMetal's do not. Nothing else reads it.
+    public static let relay12NonBlockingPSOsEnvironmentKey = "D3D11ON12_COMPAT_NonBlockingPSOs"
+
     /// The variable the runtime's d3d12 interposer and Relay12's core both read.
     public static let relay12EnvironmentKey = "RELAY12_EXPERIMENTAL_FRAME"
     /// Executable names the interposer routes when set, and only those.
@@ -478,6 +512,20 @@ public struct BottleSettings: Codable, Equatable {
     public var dxvkAsync: Bool {
         get { dxvkConfig.dxvkAsync }
         set { dxvkConfig.dxvkAsync = newValue }
+    }
+
+    /// The async shader compilation toggle as the user sets it.
+    ///
+    /// Reads ``dxvkAsync``. Writing it also records that the user chose the
+    /// value, which is what lets Relay12 act on it (``relay12NonBlockingPSOs``).
+    /// Only the settings UI writes through this; code that adjusts async for a
+    /// fix writes ``dxvkAsync`` and makes no choice on the user's behalf.
+    public var asyncShaderCompilation: Bool {
+        get { dxvkConfig.dxvkAsync }
+        set {
+            dxvkConfig.dxvkAsync = newValue
+            dxvkConfig.dxvkAsyncChosen = true
+        }
     }
 
     /// The DXVK HUD display mode.
@@ -1007,6 +1055,9 @@ public struct BottleSettings: Codable, Equatable {
         // passes it to the D3D12 games it launches, so only WineD3D withholds it.
         if relay12, resolvedBackend != .wined3d {
             builder.set(Self.relay12EnvironmentKey, "1", layer: .bottleManaged)
+            if relay12NonBlockingPSOs {
+                builder.set(Self.relay12NonBlockingPSOsEnvironmentKey, "1", layer: .bottleManaged)
+            }
         }
 
         // Enhanced sync mode
