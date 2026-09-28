@@ -19,6 +19,10 @@
 import SwiftUI
 import WhiskyKit
 
+/// The backend cards: one per backend, the selected one prominent glass.
+///
+/// Cards rather than a menu because each backend needs its one-line summary
+/// and its availability next to its name to be chosen well.
 struct BackendPickerView: View {
     @Binding var selection: GraphicsBackend
     let resolvedBackend: GraphicsBackend
@@ -27,11 +31,11 @@ struct BackendPickerView: View {
     /// installed runtime.
     var isBackendAvailable: (GraphicsBackend) -> Bool = { _ in true }
 
-    private let columns = [GridItem(.flexible()), GridItem(.flexible())]
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LazyVGrid(columns: columns, spacing: 12) {
+        GlassEffectContainer(spacing: 10) {
+            LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(GraphicsBackend.allCases, id: \.self) { backend in
                     BackendCard(
                         backend: backend,
@@ -43,25 +47,10 @@ struct BackendPickerView: View {
                     }
                 }
             }
-
-            // Helper text below grid
-            helperText
         }
-    }
-
-    // MARK: - Helper Text
-
-    @ViewBuilder
-    private var helperText: some View {
-        if selection == .recommended {
-            Text("config.graphics.helperCurrently \(resolvedBackend.displayName)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("config.graphics.helperNextLaunch")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("config.graphics.backend"))
     }
 }
 
@@ -77,80 +66,74 @@ private struct BackendCard: View {
     @State private var showRationale: Bool = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Image(systemName: iconName)
-                        .font(.title3)
-                        .foregroundStyle(isSelected ? .white : .secondary)
-                    Spacer()
-                    if let tag = tagLabel {
-                        Text(tag.text)
-                            .font(.caption2)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(tag.color.opacity(isSelected ? 0.3 : 0.15), in: Capsule())
-                            .foregroundStyle(isSelected ? .white : tag.color)
-                    }
-                    if backend == .recommended {
-                        Button {
-                            showRationale.toggle()
-                        } label: {
-                            Image(systemName: "questionmark.circle")
-                                .font(.caption)
-                                .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .popover(isPresented: $showRationale) {
-                            Text(GraphicsBackendResolver.rationale())
-                                .font(.caption)
-                                .padding()
-                                .frame(maxWidth: 240)
-                        }
-                    }
+        Group {
+            if isSelected {
+                Button(action: action) { cardLabel }
+                    .buttonStyle(.glassProminent)
+            } else {
+                Button(action: action) { cardLabel }
+                    .buttonStyle(.glass)
+            }
+        }
+        .buttonBorderShape(.roundedRectangle(radius: 12))
+        .disabled(!isAvailable)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityIdentifier("backend.\(backend.rawValue)")
+    }
+
+    private var cardLabel: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: iconName)
+                    .font(.title3)
+                    .accessibilityHidden(true)
+                Spacer()
+                if let tag = tagLabel {
+                    Text(tag.text)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(isSelected ? AnyShapeStyle(.secondary) : AnyShapeStyle(tag.color))
                 }
-
-                Text(backend.displayName)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(isSelected ? .white : .primary)
-
-                if isAvailable {
-                    Text(backend.summary)
-                        .font(.caption2)
-                        .foregroundStyle(isSelected ? .white.opacity(0.8) : .secondary)
-                        .lineLimit(2)
-                } else {
-                    Text(unavailableReasonKey)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                if backend == .recommended, isSelected, let resolved = resolvedBackend {
-                    Text("config.graphics.currentlyUsing \(resolved.displayName)")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.7))
+                if backend == .recommended {
+                    Button {
+                        showRationale.toggle()
+                    } label: {
+                        Image(systemName: "questionmark.circle")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("config.graphics.backend.recommended.rationale"))
+                    .popover(isPresented: $showRationale) {
+                        Text(GraphicsBackendResolver.rationale())
+                            .font(.caption)
+                            .padding()
+                            .frame(maxWidth: 240)
+                    }
                 }
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? Color.accentColor : Color(.controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(
-                        isSelected ? Color.accentColor : Color.secondary.opacity(0.3),
-                        lineWidth: isSelected ? 2 : 1
-                    )
-            )
+
+            Text(backend.displayName)
+                .font(.subheadline.weight(.semibold))
+
+            Group {
+                if isAvailable {
+                    Text(backend.summary)
+                } else {
+                    Text(unavailableReasonKey)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(2, reservesSpace: true)
+            .multilineTextAlignment(.leading)
+
+            if backend == .recommended, isSelected, let resolved = resolvedBackend {
+                Text("config.graphics.currentlyUsing \(resolved.displayName)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(!isAvailable)
-        .opacity(isAvailable ? 1 : 0.5)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Unavailability

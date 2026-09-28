@@ -28,26 +28,30 @@ struct RuntimePickerView: View {
     private static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "RuntimePicker")
 
     @Bindable var bottle: Bottle
-    @State private var runtimes: [InstalledRuntime] = []
+    /// Read up front rather than in `.task`: a hidden row has no view for a
+    /// task to run on, so it would never learn there is a second runtime.
+    @State private var runtimes = WhiskyWineInstaller.installedRuntimes()
     @State private var loadingState: LoadingState = .success
 
     var body: some View {
-        Section("config.runtime") {
-
-                SettingItemView(
+        // One runtime is no choice at all. A bottle still pointed at one that
+        // has since been removed keeps the row, so it can be moved back to one
+        // that exists.
+        if runtimes.count > 1 || bottle.settings.runtime != nil {
+            Section("config.runtime") {
+                SettingsLoadingRow(
                     title: "config.runtime",
-                    description: "config.runtime.info",
-                    loadingState: loadingState
+                    detail: "config.runtime.info",
+                    state: loadingState
                 ) {
                     Picker("config.runtime", selection: runtimeBinding) {
                         ForEach(runtimes) { runtime in
                             Text(label(for: runtime)).tag(runtime.runtime)
                         }
                     }
-                    .labelsHidden()
                 }
+            }
         }
-        .task { runtimes = WhiskyWineInstaller.installedRuntimes() }
     }
 
     /// Writes through to the bottle and reboots the prefix.

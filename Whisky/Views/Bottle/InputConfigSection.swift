@@ -19,107 +19,118 @@
 import SwiftUI
 import WhiskyKit
 
-// swiftlint:disable type_body_length
+/// The Input tab: controller workarounds, the controllers macOS can see, and
+/// the keyboard.
+///
+/// The keyboard is its own section because mapping Command to Ctrl has
+/// nothing to do with controllers; it used to sit behind the controller
+/// switch, out of reach of anyone without a gamepad.
 struct InputConfigSection: View {
     @Bindable var bottle: Bottle
 
     @State private var controllerMonitor = ControllerMonitor()
-    @State private var controllersExpanded = false
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                // Main toggle for controller compatibility mode
-                Toggle("Controller Compatibility Mode", isOn: $bottle.settings.controllerCompatibilityMode)
-                    .help("""
-                    Enables workarounds for common game controller detection \
-                    and mapping issues on macOS (frankea/Whisky#42)
-                    """)
+            SettingsToggle(
+                "config.controllerCompat",
+                detail: "config.input.controllerCompat.detail",
+                isOn: $bottle.settings.controllerCompatibilityMode
+            )
 
-                if bottle.settings.controllerCompatibilityMode {
-                    // Info notice about controller compatibility
-                    controllerCompatInfoBanner
-
-                    Divider()
-
-                    // HIDAPI toggle
-                    Toggle("Disable HIDAPI", isOn: $bottle.settings.disableHIDAPI)
-                        .help("""
-                        Sets SDL_JOYSTICK_HIDAPI=0 to force SDL to use alternative \
-                        input backends. May improve detection for some controllers.
-                        """)
-
-                    // Background events toggle
-                    Toggle("Allow Background Events", isOn: $bottle.settings.allowBackgroundEvents)
-                        .help("""
-                        Sets SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1 to enable \
-                        controller input when the game window doesn't have focus.
-                        """)
-
-                    // Button mapping toggle (legacy)
-                    Toggle(
-                        "Disable Controller Mapping",
-                        isOn: $bottle.settings.disableControllerMapping
-                    )
-                    .help("""
-                    Sets SDL_GAMECONTROLLER_USE_BUTTON_LABELS=1 to preserve \
-                    native button layouts for PlayStation and Switch controllers \
-                    instead of converting to XInput format.
-                    """)
-
-                    // Native button labels toggle (new from Plan 02)
-                    Toggle("Use Native Button Labels", isOn: $bottle.settings.useButtonLabels)
-                        .help("""
-                        Preserves physical button positions (Cross/Circle) for \
-                        PlayStation controllers instead of XInput layout (A/B/X/Y).
-                        """)
-
-                    // Map macOS Cmd to Windows Ctrl inside Wine
-                    Toggle("Map Command Key to Windows Ctrl", isOn: $bottle.settings.commandActsAsControl)
-                        .help("""
-                        Sets LeftCommandIsCtrl/RightCommandIsCtrl in Wine's Mac \
-                        driver registry so Cmd+A/C/V/S register inside Wine apps \
-                        as Ctrl+A/C/V/S.
-                        """)
-                        .onChange(of: bottle.settings.commandActsAsControl) { _, newValue in
-                            applyCommandKeyMapping(enabled: newValue)
-                        }
-                        .accessibilityIdentifier("input.commandActsAsControl")
-
-                    Divider()
-
-                    // Connected Controllers subpanel
-                    connectedControllersPanel
-
-                    Divider()
-
-                    // Helpful links/info
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "questionmark.circle")
-                            .foregroundColor(.secondary)
-
-                        Text("""
-                        If controllers still don't work, try connecting via USB \
-                        instead of Bluetooth, or check if the game has native \
-                        controller support settings.
-                        """)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    }
-                }
+            if bottle.settings.controllerCompatibilityMode {
+                SettingsToggle(
+                    "config.disableHIDAPI",
+                    detail: "config.input.disableHIDAPI.detail",
+                    isOn: $bottle.settings.disableHIDAPI
+                )
+                SettingsToggle(
+                    "config.allowBackgroundEvents",
+                    detail: "config.input.allowBackgroundEvents.detail",
+                    isOn: $bottle.settings.allowBackgroundEvents
+                )
+                SettingsToggle(
+                    "config.disableControllerMapping",
+                    detail: "config.input.disableControllerMapping.detail",
+                    isOn: $bottle.settings.disableControllerMapping
+                )
+                SettingsToggle(
+                    "config.useButtonLabels",
+                    detail: "config.input.useButtonLabels.detail",
+                    isOn: $bottle.settings.useButtonLabels
+                )
             }
-            .padding(.vertical, 8)
         } header: {
-            HStack {
-                Label("Controller & Input", systemImage: "gamecontroller")
-                    .font(.headline)
+            Text("config.input.controllers")
+        } footer: {
+            if bottle.settings.controllerCompatibilityMode {
+                Text("config.input.controllerCompat.footer")
+            }
+        }
 
-                if bottle.settings.controllerCompatibilityMode {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                        .font(.caption)
+        if bottle.settings.controllerCompatibilityMode {
+            connectedControllersSection
+        }
+
+        Section("config.input.keyboard") {
+            SettingsToggle(
+                "config.input.commandAsCtrl",
+                detail: "config.input.commandAsCtrl.detail",
+                isOn: commandActsAsControlBinding
+            )
+            .accessibilityIdentifier("input.commandActsAsControl")
+        }
+    }
+
+    /// Writes the registry only when the user flips the switch, never on a
+    /// redraw: each write is a `wine reg` run.
+    private var commandActsAsControlBinding: Binding<Bool> {
+        Binding(
+            get: { bottle.settings.commandActsAsControl },
+            set: { enabled in
+                bottle.settings.commandActsAsControl = enabled
+                applyCommandKeyMapping(enabled: enabled)
+            }
+        )
+    }
+
+    // MARK: - Connected Controllers
+
+    private var connectedControllersSection: some View {
+        Section {
+            if controllerMonitor.controllers.isEmpty {
+                LabeledContent {
+                    EmptyView()
+                } label: {
+                    Text("config.input.noControllers")
+                    Text("config.input.noControllers.detail")
+                }
+            } else {
+                ForEach(controllerMonitor.controllers) { controller in
+                    controllerRow(controller)
+                }
+                if controllerMonitor.controllers.contains(where: { $0.connectionType == .bluetooth }) {
+                    SettingsNotice(.warning, "config.input.bluetoothWarning")
                 }
             }
+
+            HStack {
+                Button("config.input.refresh", systemImage: "arrow.clockwise") {
+                    controllerMonitor.refresh()
+                }
+                Button("config.input.copyInfo", systemImage: "doc.on.doc") {
+                    copyControllerInfo()
+                }
+                .disabled(controllerMonitor.controllers.isEmpty)
+                Spacer()
+                Text("config.input.lastRefreshed \(controllerMonitor.lastRefreshed, style: .relative)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("config.input.connected")
+        } footer: {
+            Text("config.input.troubleshootHint")
         }
         .onAppear {
             controllerMonitor.startMonitoring()
@@ -129,206 +140,22 @@ struct InputConfigSection: View {
         }
     }
 
-    // MARK: - Info Banner
-
-    private var controllerCompatInfoBanner: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "info.circle.fill")
-                .foregroundColor(.blue)
-                .font(.title3)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Controller Workarounds")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.blue)
-
-                Text("""
-                These settings modify SDL environment variables to improve \
-                controller detection and button mapping. Try different \
-                combinations if your controller isn't working correctly.
-                """)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color.blue.opacity(0.1))
-        .cornerRadius(8)
-    }
-
-    // MARK: - Connected Controllers Panel
-
-    private var connectedControllersPanel: some View {
-        DisclosureGroup(isExpanded: $controllersExpanded) {
-            VStack(alignment: .leading, spacing: 8) {
-                if controllerMonitor.controllers.isEmpty {
-                    emptyControllerState
-                } else {
-                    controllerList
-                    bluetoothWarningBanner
+    private func controllerRow(_ controller: ControllerInfo) -> some View {
+        LabeledContent {
+            if let level = controller.batteryLevel {
+                Label {
+                    Text(Double(level), format: .percent.precision(.fractionLength(0)))
+                } icon: {
+                    Image(systemName: batterySymbol(level: level, state: controller.batteryState))
                 }
-
-                controllerActionButtons
-
-                // Last refreshed timestamp
-                Text(
-                    "Last refreshed: \(controllerMonitor.lastRefreshed, style: .relative) ago"
-                )
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
             }
         } label: {
-            HStack(spacing: 6) {
-                Label("Connected Controllers", systemImage: "gamecontroller.fill")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                if !controllerMonitor.controllers.isEmpty {
-                    Text("\(controllerMonitor.controllers.count)")
-                        .font(.caption2)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.accentColor.opacity(0.15))
-                        .clipShape(Capsule())
-                }
-            }
-        }
-    }
-
-    // MARK: - Empty State
-
-    private var emptyControllerState: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Image(systemName: "gamecontroller")
-                    .foregroundStyle(.secondary)
-                Text("No controllers detected")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("Try connecting via USB or check System Settings > Bluetooth")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 4)
-    }
-
-    // MARK: - Controller List
-
-    private var controllerList: some View {
-        ForEach(controllerMonitor.controllers) { controller in
-            controllerRow(controller)
-        }
-    }
-
-    private func controllerRow(_ controller: ControllerInfo) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Controller name
             Text(controller.name)
-                .font(.callout)
-                .fontWeight(.semibold)
-
-            HStack(spacing: 12) {
-                // Type badge
-                HStack(spacing: 4) {
-                    Image(systemName: controller.typeBadge.sfSymbol)
-                        .font(.caption)
-                    Text(controller.typeBadge.displayName)
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-
-                // Connection badge
-                HStack(spacing: 4) {
-                    Image(systemName: controller.connectionType.sfSymbol)
-                        .font(.caption)
-                    Text(controller.connectionType.rawValue)
-                        .font(.caption)
-                }
-                .foregroundStyle(.secondary)
-
-                // Battery level
-                if let level = controller.batteryLevel {
-                    HStack(spacing: 4) {
-                        Image(systemName: batterySymbol(level: level, state: controller.batteryState))
-                            .font(.caption)
-                        Text("Battery: \(Int(level * 100))%")
-                            .font(.caption)
-                        if controller.batteryState == "charging" {
-                            Image(systemName: "bolt.fill")
-                                .font(.caption2)
-                                .foregroundStyle(.green)
-                        }
-                    }
-                    .foregroundStyle(.secondary)
-                }
+            HStack(spacing: 10) {
+                Label(controller.typeBadge.displayName, systemImage: controller.typeBadge.sfSymbol)
+                Label(controller.connectionType.rawValue, systemImage: controller.connectionType.sfSymbol)
             }
-        }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .cornerRadius(8)
-    }
-
-    // MARK: - Bluetooth Warning Banner
-
-    @ViewBuilder
-    private var bluetoothWarningBanner: some View {
-        let hasBluetoothController = controllerMonitor.controllers.contains {
-            $0.connectionType == .bluetooth
-        }
-
-        if hasBluetoothController {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
-                    .font(.caption)
-
-                Text("Bluetooth dropouts can break input; USB is more reliable")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 10)
-            .background(Color.orange.opacity(0.1))
-            .cornerRadius(6)
-        }
-    }
-
-    // MARK: - Action Buttons
-
-    private var controllerActionButtons: some View {
-        HStack(spacing: 12) {
-            Button {
-                controllerMonitor.refresh()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-
-            Button {
-                copyControllerInfo()
-            } label: {
-                Label("Copy Controller Info", systemImage: "doc.on.doc")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-            .disabled(controllerMonitor.controllers.isEmpty)
-
-            Spacer()
-
-            // Test Input hint
-            Text("Test Input: System Settings > Game Controllers")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
     }
 
@@ -393,5 +220,3 @@ struct InputConfigSection: View {
         }
     }
 }
-
-// swiftlint:enable type_body_length

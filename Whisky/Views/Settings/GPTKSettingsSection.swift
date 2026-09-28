@@ -32,37 +32,35 @@ struct GPTKSettingsSection: View {
 
     var body: some View {
         Section {
-            if let storedRecord {
-                LabeledContent("settings.gptk.version", value: storedRecord.gptkVersion)
-            } else {
-                Text("settings.gptk.status.none")
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack {
-                Button("settings.gptk.import") {
-                    showImporter = true
-                }
-                .disabled(importing)
-
-                if importing {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                if storedRecord != nil {
-                    Button("settings.gptk.remove", role: .destructive) {
-                        removePayload()
+            LabeledContent {
+                HStack(spacing: 8) {
+                    if importing {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    if storedRecord != nil {
+                        Button("settings.gptk.remove", role: .destructive) {
+                            removePayload()
+                        }
+                        .disabled(importing)
+                    }
+                    Button("settings.gptk.import") {
+                        showImporter = true
                     }
                     .disabled(importing)
+                }
+            } label: {
+                if let storedRecord {
+                    Text("settings.gptk.version")
+                    Text(storedRecord.gptkVersion)
+                } else {
+                    Text("settings.gptk.status.none")
                 }
             }
         } header: {
             Text("settings.gptk")
         } footer: {
             Text(runtimeCapable ? "settings.gptk.capability.ok" : "settings.gptk.capability.blocked")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
         .task {
             await Task.detached(priority: .utility) {

@@ -24,30 +24,22 @@ struct DiscordConfigSection: View {
 
     var body: some View {
         Section("config.discord") {
-            Toggle(isOn: $bottle.settings.discordPresence) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("config.discord.presence")
-                    // The unconfigured case is a build without a Discord
-                    // application behind it, which no setting here can fix.
-                    Text(
-                        DiscordPresence.isAvailable
-                            ? "config.discord.presence.info"
-                            : "config.discord.presence.unavailable"
-                    )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-            }
+            // The unconfigured case is a build without a Discord application
+            // behind it, which no setting here can fix.
+            SettingsToggle(
+                "config.discord.presence",
+                detail: DiscordPresence.isAvailable
+                    ? "config.discord.presence.info"
+                    : "config.discord.presence.unavailable",
+                isOn: $bottle.settings.discordPresence
+            )
             .disabled(!DiscordPresence.isAvailable)
 
-            Toggle(isOn: $bottle.settings.discordBridge) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("config.discord.bridge")
-                    Text("config.discord.bridge.info")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            SettingsToggle(
+                "config.discord.bridge",
+                detail: "config.discord.bridge.info",
+                isOn: $bottle.settings.discordBridge
+            )
         }
     }
 }

@@ -19,47 +19,39 @@
 import SwiftUI
 import WhiskyKit
 
-/// Dependencies section for the bottle Config view.
+/// The Dependencies tab: the four standard Windows components (Visual C++
+/// Runtime, .NET Framework, DirectX, DirectX Audio) with their status and an
+/// Install action, then the full Winetricks catalogue.
 ///
-/// Shows 4 standard Windows components (Visual C++ Runtime, .NET Framework,
-/// DirectX, DirectX Audio) with installation status, confidence indicator,
-/// last-checked timestamp, and Install action. Manages its own state and
-/// presents ``DependencyInstallSheet`` via a sheet binding.
+/// Manages its own state and presents ``DependencyInstallSheet`` and
+/// ``WinetricksView`` itself.
 struct DependencyConfigSection: View {
     @Bindable var bottle: Bottle
 
     @State private var statuses: [DependencyStatus] = []
     @State private var isLoading: Bool = true
     @State private var selectedDependency: DependencyDefinition?
+    @State private var showWinetricks = false
 
     var body: some View {
         Section {
             if isLoading {
-                HStack(spacing: 8) {
+                LabeledContent("config.dependencies.checking") {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Checking installed dependencies\u{2026}")
-                        .foregroundStyle(.secondary)
                 }
             } else {
                 ForEach(statuses) { status in
                     dependencyRow(status)
                 }
             }
-        } header: {
-            HStack {
-                Label("Dependencies", systemImage: "shippingbox")
-                Spacer()
-                Button {
-                    loadDependencies()
-                } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.borderless)
-                .disabled(isLoading)
-                .help("Re-check all dependency statuses")
+            Button("config.dependencies.refresh", systemImage: "arrow.clockwise") {
+                loadDependencies()
             }
+            .disabled(isLoading)
+            .help("config.dependencies.refresh.help")
+        } header: {
+            Text("config.dependencies.title")
         }
         .onAppear {
             loadDependencies()
@@ -68,68 +60,53 @@ struct DependencyConfigSection: View {
             DependencyInstallSheet(definition: definition, bottle: bottle)
                 .frame(minWidth: 500, minHeight: 400)
         }
+
+        Section {
+            LabeledContent {
+                Button("config.dependencies.winetricks.open") {
+                    showWinetricks = true
+                }
+            } label: {
+                Text("config.dependencies.winetricks")
+                Text("config.dependencies.winetricks.detail")
+            }
+            .sheet(isPresented: $showWinetricks) {
+                WinetricksView(bottle: bottle)
+            }
+        }
     }
 
     // MARK: - Row View
 
     private func dependencyRow(_ depStatus: DependencyStatus) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(depStatus.definition.displayName)
-                        .font(.body)
-                    Text(depStatus.definition.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
+        LabeledContent {
+            HStack(spacing: 8) {
                 statusBadge(depStatus.status)
-
-                if depStatus.confidence == .cached || depStatus.confidence == .heuristic {
-                    Text("(\(depStatus.confidence.rawValue))")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                }
-
                 if !isInstalled(depStatus.status) {
-                    Button("Install") {
+                    Button("config.dependencies.install") {
                         selectedDependency = depStatus.definition
                     }
-                    .controlSize(.small)
                 }
             }
-
-            dependencyRowDetails(depStatus)
+        } label: {
+            Text(depStatus.definition.displayName)
+            Text(depStatus.definition.description)
+            Text(detailLine(depStatus))
+                .textSelection(.enabled)
         }
-        .padding(.vertical, 2)
     }
 
-    private func dependencyRowDetails(_ depStatus: DependencyStatus) -> some View {
-        HStack(spacing: 4) {
-            if let lastChecked = depStatus.lastChecked {
-                Text("Checked \(lastChecked, style: .relative) ago")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-
-            Spacer()
-
-            DisclosureGroup {
-                Text(depStatus.definition.winetricksVerbs.joined(separator: ", "))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            } label: {
-                Text("Details")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: 200)
+    /// When it was checked, how sure the check is, and the verbs behind it.
+    private func detailLine(_ depStatus: DependencyStatus) -> String {
+        var parts: [String] = []
+        if let lastChecked = depStatus.lastChecked {
+            parts.append(String(localized: "config.dependencies.checked \(lastChecked.formatted(.relative(presentation: .named)))"))
         }
+        if depStatus.confidence == .cached || depStatus.confidence == .heuristic {
+            parts.append(depStatus.confidence.rawValue)
+        }
+        parts.append(depStatus.definition.winetricksVerbs.joined(separator: ", "))
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     // MARK: - Status Badge
@@ -138,21 +115,17 @@ struct DependencyConfigSection: View {
     private func statusBadge(_ status: DependencyInstallStatus) -> some View {
         switch status {
         case .installed:
-            Label("Installed", systemImage: "checkmark.circle.fill")
-                .font(.caption)
+            Label("config.dependencies.status.installed", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .notInstalled:
-            Label("Not Installed", systemImage: "xmark.circle.fill")
-                .font(.caption)
+            Label("config.dependencies.status.notInstalled", systemImage: "xmark.circle.fill")
                 .foregroundStyle(.red)
         case .partiallyInstalled:
-            Label("Partially Installed", systemImage: "exclamationmark.triangle.fill")
-                .font(.caption)
+            Label("config.dependencies.status.partial", systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.yellow)
         case .unknown:
-            Label("Unknown", systemImage: "questionmark.circle.fill")
-                .font(.caption)
-                .foregroundStyle(.gray)
+            Label("config.dependencies.status.unknown", systemImage: "questionmark.circle.fill")
+                .foregroundStyle(.secondary)
         }
     }
 

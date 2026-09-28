@@ -19,14 +19,12 @@
 import SwiftUI
 import WhiskyKit
 
-/// The main Audio section composing status, test buttons, settings, and findings.
-///
-/// Placed in ConfigView between Graphics and Performance, matching the
-/// section-per-subsystem pattern established in Phase 4.
+/// The Audio tab: how the bottle's audio is doing, the tests that tell, the
+/// settings, and what the last test found.
 struct AudioConfigSection: View {
     @Bindable var bottle: Bottle
 
-    @AppStorage("audioAdvancedMode") private var advancedMode: Bool = false
+    @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
     @State private var monitor = AudioDeviceMonitor()
 
     @State private var audioStatus: AudioStatus = .unknown
@@ -39,8 +37,7 @@ struct AudioConfigSection: View {
     @State private var debounceTask: Task<Void, Never>?
 
     var body: some View {
-        Section("Audio") {
-            // 1. Status line
+        Section("config.audio.status") {
             AudioStatusView(
                 audioStatus: audioStatus,
                 lastTestedDate: lastTestedDate,
@@ -50,7 +47,6 @@ struct AudioConfigSection: View {
                 channelCount: monitor.defaultOutputDevice()?.outputChannelCount
             )
 
-            // 2. Test buttons row
             AudioTestButtonsView(
                 bottle: bottle,
                 onStatusUpdate: { status in
@@ -62,49 +58,45 @@ struct AudioConfigSection: View {
                 },
                 testExeURL: Bundle.main.url(forResource: "WhiskyAudioTest", withExtension: "exe")
             )
+        }
 
-            // 3. Simple/Advanced toggle
-            Picker("", selection: $advancedMode) {
-                Text("Simple").tag(false)
-                Text("Advanced").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+        Section("config.title.audio") {
+            AudioSettingsView(bottle: bottle, advancedMode: showAdvanced)
+            AdvancedSettingsNotice(isActive: hasAdvancedAudioOverrides)
+        }
 
-            // 4. Settings
-            AudioSettingsView(bottle: bottle, advancedMode: advancedMode)
-
-            // 5. Badge if advanced overrides in Simple mode
-            if !advancedMode, hasAdvancedAudioOverrides {
-                advancedOverridesBadge
-            }
-
-            // 6. Findings (if any from last test)
-            if !currentFindings.isEmpty {
+        if !currentFindings.isEmpty {
+            Section("audio.findings.title") {
                 AudioFindingsView(findings: currentFindings, onApplyFix: handleApplyFix)
             }
+        }
 
-            // 7. Advanced device views
-            if advancedMode {
-                advancedDeviceViews
+        if showAdvanced {
+            Section {
+                DisclosureGroup("audio.devices.title") {
+                    AudioDeviceListView(devices: monitor.allOutputDevices())
+                }
+                DisclosureGroup("audio.history.title") {
+                    AudioDeviceHistoryView(history: deviceHistory)
+                }
             }
+        }
 
-            // 8. Troubleshooting link
+        Section {
             Button("audio.troubleshoot.button") {
                 showTroubleshootingWizard = true
             }
-        }
-        .animation(.default, value: advancedMode)
-        .onAppear {
-            startDeviceListening()
-        }
-        .sheet(isPresented: $showTroubleshootingWizard) {
-            TroubleshootingWizardView(
-                bottle: bottle,
-                program: nil,
-                entryContext: .bottleDiagnostics(bottleURL: bottle.url),
-                preselectedCategory: .audio
-            )
+            .onAppear {
+                startDeviceListening()
+            }
+            .sheet(isPresented: $showTroubleshootingWizard) {
+                TroubleshootingWizardView(
+                    bottle: bottle,
+                    program: nil,
+                    entryContext: .bottleDiagnostics(bottleURL: bottle.url),
+                    preselectedCategory: .audio
+                )
+            }
         }
     }
 }
@@ -112,51 +104,16 @@ struct AudioConfigSection: View {
 // MARK: - Computed Properties
 
 extension AudioConfigSection {
-    /// True if any advanced-only audio settings differ from defaults.
+    /// True if a setting only offered with advanced settings shown is in use.
     private var hasAdvancedAudioOverrides: Bool {
-        bottle.settings.audioDriver != .auto
-            || bottle.settings.audioLatencyPreset != .defaultPreset
+        ![AudioDriverMode.auto, .disabled].contains(bottle.settings.audioDriver)
+            || ![AudioLatencyPreset.defaultPreset, .stable].contains(bottle.settings.audioLatencyPreset)
             || bottle.settings.outputDeviceMode != .followSystem
     }
 
     /// Aggregated findings from the most recent probe results.
     private var currentFindings: [AudioFinding] {
         probeResults.flatMap(\.findings)
-    }
-}
-
-// MARK: - Advanced Overrides Badge
-
-extension AudioConfigSection {
-    private var advancedOverridesBadge: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.secondary)
-            Text("Advanced audio settings active")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button("Show") {
-                advancedMode = true
-            }
-            .font(.caption)
-        }
-    }
-}
-
-// MARK: - Advanced Device Views
-
-extension AudioConfigSection {
-    private var advancedDeviceViews: some View {
-        Group {
-            DisclosureGroup(String(localized: "audio.devices.title")) {
-                AudioDeviceListView(devices: monitor.allOutputDevices())
-            }
-
-            DisclosureGroup(String(localized: "audio.history.title")) {
-                AudioDeviceHistoryView(history: deviceHistory)
-            }
-        }
     }
 }
 

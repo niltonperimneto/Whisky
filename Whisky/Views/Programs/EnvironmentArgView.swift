@@ -43,46 +43,46 @@ class Key: Identifiable {
     }
 }
 
+/// The program's own environment variables: one row per variable, edited in
+/// place, and an Add row. Written back when the tab closes.
 struct EnvironmentArgView: View {
     @Bindable var program: Program
-    @Binding var isExpanded: Bool
 
     @FocusState var focus: Focusable?
     @State private var environmentKeys: [Key] = []
     @State private var movedToIllegalKey = false
 
     var body: some View {
-        Section(isExpanded: $isExpanded) {
-            List(environmentKeys, id: \.id) { key in
+        Section {
+            if environmentKeys.isEmpty {
+                Text("program.env.none")
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(environmentKeys, id: \.id) { key in
                 KeyItem(
                     focus: _focus,
                     environmentKeys: $environmentKeys,
                     key: key
                 )
             }
-            .alternatingRowBackgrounds(.enabled)
-            .onAppear {
-                let keys = program.settings.environment.map { (key: String, value: String) in
-                    Key(key: key, value: value)
-                }
-                environmentKeys = keys.sorted(by: { $0.key < $1.key })
-            }
-            .onDisappear {
-                program.settings.environment.removeAll()
-                for key in environmentKeys where !key.key.isEmpty {
-                    program.settings.environment[key.key] = key.value
-                }
+            Button("environment.add", systemImage: "plus") {
+                createNewKey()
             }
         } header: {
-            HStack {
-                Text("program.env").frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                Button("environment.add", systemImage: "plus") {
-                    createNewKey()
-                }
-                .buttonStyle(.plain)
-                .labelStyle(.titleAndIcon)
-                .opacity(isExpanded ? 1 : 0)
+            Text("program.env")
+        } footer: {
+            Text("program.env.footer")
+        }
+        .onAppear {
+            let keys = program.settings.environment.map { (key: String, value: String) in
+                Key(key: key, value: value)
+            }
+            environmentKeys = keys.sorted(by: { $0.key < $1.key })
+        }
+        .onDisappear {
+            program.settings.environment.removeAll()
+            for key in environmentKeys where !key.key.isEmpty {
+                program.settings.environment[key.key] = key.value
             }
         }
         .onChange(of: focus) { oldValue, newValue in
@@ -147,8 +147,8 @@ struct KeyItem: View {
 
     var body: some View {
         HStack {
-            TextField(String(), text: $key.key)
-                .textFieldStyle(.roundedBorder)
+            TextField("program.env.name", text: $key.key, prompt: Text("program.env.name"))
+                .font(.body.monospaced())
                 .labelsHidden()
                 .frame(maxHeight: .infinity)
                 .focused($focus, equals: .row(id: key.id, section: .key))
@@ -159,22 +159,20 @@ struct KeyItem: View {
                     // Try to move on to value
                     focus = .row(id: key.id, section: .value)
                 }
-            TextField(String(), text: $key.value)
-                .textFieldStyle(.roundedBorder)
+            TextField("program.env.value", text: $key.value, prompt: Text("program.env.value"))
+                .font(.body.monospaced())
                 .labelsHidden()
                 .frame(maxHeight: .infinity)
                 .focused($focus, equals: .row(id: key.id, section: .value))
-            Button {
+            Button("environment.remove", systemImage: "xmark.circle.fill") {
                 environmentKeys.removeAll(where: { $0.id == key.id })
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .help("environment.remove")
             }
+            .labelStyle(.iconOnly)
+            .help("environment.remove")
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
             .opacity(hovered ? 1 : 0)
         }
-        .padding(.vertical, 4)
         .onHover { hover in
             hovered = hover
         }

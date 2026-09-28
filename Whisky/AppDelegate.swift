@@ -37,6 +37,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // Settings shows this switch on before anyone touches it, so the value
+        // read at quit has to agree; unregistered, `bool(forKey:)` said off.
+        UserDefaults.standard.register(defaults: ["killOnTerminate": true])
+        SettingsKeys.migrateLegacyAdvancedModes()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Crash notifications route their clicks through this delegate.
         UNUserNotificationCenter.current().delegate = CrashNotificationDelegate.shared

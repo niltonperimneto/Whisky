@@ -24,20 +24,26 @@ struct CleanupConfigSection: View {
 
     var body: some View {
         Section("config.cleanup") {
-            Picker("config.cleanup.clipboardPolicy", selection: $bottle.settings.clipboardPolicy) {
+            SettingsPicker(
+                "config.cleanup.clipboardPolicy",
+                detail: "config.cleanup.clipboardPolicy.help",
+                selection: $bottle.settings.clipboardPolicy
+            ) {
                 Text("config.cleanup.clipboardPolicy.auto").tag(ClipboardPolicy.auto)
                 Text("config.cleanup.clipboardPolicy.warn").tag(ClipboardPolicy.alwaysWarn)
                 Text("config.cleanup.clipboardPolicy.clear").tag(ClipboardPolicy.alwaysClear)
                 Text("config.cleanup.clipboardPolicy.never").tag(ClipboardPolicy.never)
             }
-            .help("config.cleanup.clipboardPolicy.help")
 
-            Picker("config.cleanup.killOnQuit", selection: $bottle.settings.killOnQuit) {
+            SettingsPicker(
+                "config.cleanup.killOnQuit",
+                detail: "config.cleanup.killOnQuit.help",
+                selection: $bottle.settings.killOnQuit
+            ) {
                 Text("config.cleanup.killOnQuit.inherit").tag(KillOnQuitPolicy.inherit)
                 Text("config.cleanup.killOnQuit.always").tag(KillOnQuitPolicy.alwaysKill)
                 Text("config.cleanup.killOnQuit.never").tag(KillOnQuitPolicy.neverKill)
             }
-            .help("config.cleanup.killOnQuit.help")
         }
     }
 }

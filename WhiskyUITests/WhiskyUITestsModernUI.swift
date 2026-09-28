@@ -56,11 +56,12 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
 
     // MARK: - Workspace
 
-    func testWorkspaceOffersAllFourTabs() throws {
+    func testWorkspaceOffersItsTabsAndSettings() throws {
         try openFirstBottleFromShelf()
 
         require(app.buttons["nav.applications"], "applications tab", timeout: 8)
-        XCTAssertTrue(app.buttons["nav.bottleConfiguration"].exists, "configuration tab missing")
+        // Configuration is a window of its own, opened from the toolbar.
+        XCTAssertTrue(app.buttons["nav.bottleConfiguration"].exists, "bottle settings button missing")
         XCTAssertTrue(app.buttons["nav.runningProcesses"].exists, "processes tab missing")
         XCTAssertTrue(app.buttons["nav.tools"].exists, "tools tab missing")
     }

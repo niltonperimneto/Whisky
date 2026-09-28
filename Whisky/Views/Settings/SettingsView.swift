@@ -19,60 +19,48 @@
 import SwiftUI
 import WhiskyKit
 
+/// Whisky's Settings window (⌘,), laid out like Safari's: icon tabs in the
+/// toolbar, one grouped form per tab, and a window that takes each tab's
+/// height.
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .general
+    @AppStorage("selectedSettingsTab") private var selectedTab: SettingsTab = .general
     @State private var showRuntimeSetup = false
-    @State private var runtimeRefreshID = UUID()
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            GeneralSettingsTab()
-                .tabItem {
-                    Label(SettingsTab.general.title, systemImage: SettingsTab.general.systemImage)
-                }
-                .tag(SettingsTab.general)
-
-            RuntimesSettingsTab(onInstallRuntimes: {
-                showRuntimeSetup = true
-            })
-            .id(runtimeRefreshID)
-            .tabItem {
-                Label(SettingsTab.runtimes.title, systemImage: SettingsTab.runtimes.systemImage)
+            ForEach(SettingsTab.allCases) { tab in
+                pane(for: tab)
+                    .tabItem {
+                        Label(tab.title, systemImage: tab.systemImage)
+                    }
+                    .tag(tab)
             }
-            .tag(SettingsTab.runtimes)
-
-            GraphicsSettingsTab()
-                .tabItem {
-                    Label(SettingsTab.graphics.title, systemImage: SettingsTab.graphics.systemImage)
-                }
-                .tag(SettingsTab.graphics)
-
-            CompatibilitySettingsTab()
-                .tabItem {
-                    Label(SettingsTab.compatibility.title, systemImage: SettingsTab.compatibility.systemImage)
-                }
-                .tag(SettingsTab.compatibility)
-
-            PrivacySettingsTab()
-                .tabItem {
-                    Label(SettingsTab.privacy.title, systemImage: SettingsTab.privacy.systemImage)
-                }
-                .tag(SettingsTab.privacy)
-
-            AdvancedSettingsTab()
-                .tabItem {
-                    Label(SettingsTab.advanced.title, systemImage: SettingsTab.advanced.systemImage)
-                }
-                .tag(SettingsTab.advanced)
         }
-        .controlSize(.small)
-        .environment(\.defaultMinListRowHeight, 10)
-        .frame(width: 580, height: 460)
         .sheet(
             isPresented: $showRuntimeSetup,
-            onDismiss: { runtimeRefreshID = UUID() },
+            onDismiss: { RuntimeCoordinator.shared.refreshInstalled() },
             content: { SetupView(showSetup: $showRuntimeSetup, firstTime: false) }
         )
+    }
+
+    @ViewBuilder
+    private func pane(for tab: SettingsTab) -> some View {
+        switch tab {
+        case .general:
+            SettingsPane(height: 400) { GeneralSettingsPane() }
+        case .runtimes:
+            SettingsPane(height: 560) {
+                RuntimesSettingsSection(onSetUpRuntimes: { showRuntimeSetup = true })
+            }
+        case .graphics:
+            SettingsPane(height: 240) { GPTKSettingsSection() }
+        case .compatibility:
+            SettingsPane(height: 440) { CompatibilitySettingsPane() }
+        case .privacy:
+            SettingsPane(height: 200) { PrivacySettingsPane() }
+        case .advanced:
+            SettingsPane(height: 360) { AdvancedSettingsPane() }
+        }
     }
 }
 
@@ -88,12 +76,12 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 
     var title: LocalizedStringKey {
         switch self {
-        case .general: "General"
-        case .runtimes: "Runtimes"
-        case .graphics: "Graphics"
-        case .compatibility: "Compatibility"
-        case .privacy: "Privacy"
-        case .advanced: "Advanced"
+        case .general: "settings.general"
+        case .runtimes: "settings.runtimes.title"
+        case .graphics: "settings.tab.graphics"
+        case .compatibility: "settings.tab.compatibility"
+        case .privacy: "settings.privacy"
+        case .advanced: "settings.tab.advanced"
         }
     }
 
@@ -104,214 +92,63 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
         case .graphics: "display"
         case .compatibility: "checkmark.shield"
         case .privacy: "hand.raised"
-        case .advanced: "slider.horizontal.3"
+        case .advanced: "gearshape.2"
         }
     }
 }
 
-private struct GeneralSettingsTab: View {
+// MARK: - General
+
+private struct GeneralSettingsPane: View {
     @AppStorage("killOnTerminate") private var killOnTerminate = true
     @AppStorage("showMenuBarExtra") private var showMenuBarExtra = false
     @AppStorage("audioDeviceAlerts") private var audioDeviceAlerts = true
-
-    var body: some View {
-        Form {
-            Section("Application") {
-                Toggle("Quit Wine processes when Whisky quits", isOn: $killOnTerminate)
-                Toggle("Show Whisky in the menu bar", isOn: $showMenuBarExtra)
-                    .help("Keep quick controls available after closing the main window.")
-                Toggle("Show audio device alerts", isOn: $audioDeviceAlerts)
-                    .help("Surface guidance when audio hardware issues are detected.")
-            }
-        }
-        .formStyle(.grouped)
-        .padding(12)
-    }
-}
-
-private struct RuntimesSettingsTab: View {
-    var onInstallRuntimes: () -> Void
-
-    var body: some View {
-        Form {
-            Section {
-                Button("Install or manage Whisky Wine runtimes…") {
-                    onInstallRuntimes()
-                }
-            } header: {
-                Text("Wine Runtimes")
-            } footer: {
-                Text("Download new runtime engines or manage installed versions.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            RuntimesSettingsSection()
-        }
-        .formStyle(.grouped)
-        .padding(12)
-    }
-}
-
-private struct GraphicsSettingsTab: View {
-    var body: some View {
-        Form {
-            GPTKSettingsSection()
-        }
-        .formStyle(.grouped)
-        .padding(12)
-    }
-}
-
-private struct CompatibilitySettingsTab: View {
-    @State private var rosettaInstalled = Rosetta2.isRosettaInstalled
-    @State private var installingRosetta = false
-    @State private var rosettaError: String?
-
-    var body: some View {
-        Form {
-            Section("Mac") {
-                CompatibilityRow(
-                    title: "Apple Silicon",
-                    detail: HostArchitecture.isAppleSilicon ? "Supported" : "Unsupported",
-                    isReady: HostArchitecture.isAppleSilicon
-                )
-                CompatibilityRow(
-                    title: "macOS",
-                    detail: ProcessInfo.processInfo.operatingSystemVersionString,
-                    isReady: true
-                )
-                CompatibilityRow(
-                    title: "Rosetta 2",
-                    detail: rosettaInstalled ? "Installed" : "Required by Wine runtimes",
-                    isReady: rosettaInstalled
-                )
-
-                if !rosettaInstalled {
-                    Button("Install Rosetta 2") {
-                        installRosetta()
-                    }
-                    .disabled(installingRosetta)
-
-                    if installingRosetta {
-                        ProgressView("Installing Rosetta 2…")
-                            .controlSize(.small)
-                    }
-                }
-            }
-
-            Section("Runtime capabilities") {
-                ForEach(WhiskyWineInstaller.installedRuntimes()) { runtime in
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(runtime.isDefault ? "Stable runtime" : runtime.displayName)
-                            .fontWeight(.medium)
-                        HStack(spacing: 12) {
-                            CapabilityLabel(
-                                title: "GPTK",
-                                available: runtime.gptkCapable
-                            )
-                            CapabilityLabel(
-                                title: "Steam/EOS receive path",
-                                available: runtime.hasVerifiedNetworkPath
-                            )
-                            CapabilityLabel(
-                                title: "Host compatible",
-                                available: runtime.isCompatible
-                            )
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .padding(12)
-        .alert(
-            "Rosetta installation failed",
-            isPresented: .init(
-                get: { rosettaError != nil },
-                set: { if !$0 { rosettaError = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(rosettaError ?? "")
-        }
-    }
-
-    private func installRosetta() {
-        installingRosetta = true
-        Task {
-            do {
-                rosettaInstalled = try await Rosetta2.installRosetta()
-                if !rosettaInstalled {
-                    rosettaError = "macOS did not report a successful Rosetta installation."
-                }
-            } catch {
-                rosettaError = error.localizedDescription
-            }
-            installingRosetta = false
-        }
-    }
-}
-
-private struct PrivacySettingsTab: View {
-    @AppStorage(Telemetry.consentDefaultsKey) private var telemetryConsentRaw = Telemetry.ConsentState
-        .undecided.rawValue
-
-    private var telemetryOptIn: Binding<Bool> {
-        Binding(
-            get: { telemetryConsentRaw == Telemetry.ConsentState.granted.rawValue },
-            set: { Telemetry.setConsent(granted: $0) }
-        )
-    }
-
-    var body: some View {
-        Form {
-            Section("Diagnostics data") {
-                Toggle("Share anonymous usage and reliability data", isOn: telemetryOptIn)
-                    .help("No bottle contents, account credentials, or personal files are included.")
-            }
-        }
-        .formStyle(.grouped)
-        .padding(12)
-    }
-}
-
-private struct AdvancedSettingsTab: View {
+    @AppStorage("preferredTerminal") private var preferredTerminal = TerminalApp.terminal.rawValue
     @AppStorage("defaultBottleLocation") private var defaultBottleLocation = BottleData.defaultBottleDir
-    @AppStorage("preferredTerminal") private var preferredTerminal = "terminal"
 
     var body: some View {
-        Form {
-            Section("Tools") {
-                Picker("Preferred terminal", selection: $preferredTerminal) {
-                    let terminals = TerminalApp.installedTerminals
-                    ForEach(terminals.isEmpty ? [.terminal] : terminals) { terminal in
-                        Text(terminal.displayName).tag(terminal.rawValue)
-                    }
-                }
+        Section("settings.general.application") {
+            SettingsToggle("settings.toggle.kill.on.terminate", isOn: $killOnTerminate)
+            SettingsToggle(
+                "settings.toggle.menubar",
+                detail: "settings.toggle.menubar.help",
+                isOn: $showMenuBarExtra
+            )
+            SettingsToggle(
+                "settings.toggle.audioAlerts",
+                detail: "settings.toggle.audioAlerts.help",
+                isOn: $audioDeviceAlerts
+            )
+        }
 
-                ActionView(
-                    text: "Default bottle location",
-                    subtitle: defaultBottleLocation.prettyPath(),
-                    actionName: "Choose…"
-                ) {
+        Section("settings.general.files") {
+            SettingsPicker(
+                "settings.general.terminal",
+                detail: "settings.general.terminal.detail",
+                selection: $preferredTerminal
+            ) {
+                ForEach(terminals) { terminal in
+                    Text(terminal.displayName).tag(terminal.rawValue)
+                }
+            }
+
+            LabeledContent {
+                Button("settings.general.bottleLocation.choose") {
                     chooseBottleLocation()
                 }
-            }
-
-            Section("Diagnostics") {
-                Button("Open logs folder") {
-                    WhiskyApp.openLogsFolder()
-                }
-                Text("Launch plans, environment overrides, and troubleshooting remain available from each bottle.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            } label: {
+                Text("settings.general.bottleLocation")
+                Text(defaultBottleLocation.prettyPath())
+                    .truncationMode(.middle)
             }
         }
-        .formStyle(.grouped)
-        .padding(12)
+    }
+
+    /// Terminal.app is always offered: it is the fallback when the preferred
+    /// terminal has been uninstalled, so it has to be choosable too.
+    private var terminals: [TerminalApp] {
+        let installed = TerminalApp.installedTerminals
+        return installed.contains(.terminal) ? installed : [.terminal] + installed
     }
 
     private func chooseBottleLocation() {
@@ -329,13 +166,49 @@ private struct AdvancedSettingsTab: View {
     }
 }
 
-private struct RuntimeStatusLabel: View {
-    let installed: Bool
+// MARK: - Compatibility
+
+private struct CompatibilitySettingsPane: View {
+    @State private var coordinator = RuntimeCoordinator.shared
 
     var body: some View {
-        Label(installed ? "Installed" : "Not installed",
-              systemImage: installed ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            .foregroundStyle(installed ? .green : .orange)
+        Section("settings.compatibility.mac") {
+            CompatibilityRow(
+                title: "settings.compatibility.appleSilicon",
+                detail: HostArchitecture.isAppleSilicon
+                    ? String(localized: "settings.compatibility.supported")
+                    : String(localized: "settings.compatibility.unsupported"),
+                isReady: HostArchitecture.isAppleSilicon
+            )
+            CompatibilityRow(
+                title: "settings.compatibility.macOS",
+                detail: ProcessInfo.processInfo.operatingSystemVersionString,
+                isReady: true
+            )
+            RosettaRow()
+            RuntimeErrorNotice()
+        }
+
+        Section("settings.compatibility.runtimes") {
+            ForEach(coordinator.installedRuntimes) { runtime in
+                LabeledContent {
+                    HStack(spacing: 12) {
+                        CapabilityLabel(title: "settings.compatibility.gptk", available: runtime.gptkCapable)
+                        CapabilityLabel(
+                            title: "settings.compatibility.networkPath",
+                            available: runtime.hasVerifiedNetworkPath
+                        )
+                        CapabilityLabel(
+                            title: "settings.compatibility.hostCompatible",
+                            available: runtime.isCompatible
+                        )
+                    }
+                } label: {
+                    Text(runtime.isDefault ? String(localized: "settings.runtimes.default") : runtime.displayName)
+                }
+            }
+        }
+        .onAppear { coordinator.refreshInstalled() }
     }
 }
 
@@ -362,6 +235,66 @@ private struct CapabilityLabel: View {
         Label(title, systemImage: available ? "checkmark.circle.fill" : "minus.circle")
             .font(.caption)
             .foregroundStyle(available ? .green : .secondary)
+    }
+}
+
+// MARK: - Privacy
+
+private struct PrivacySettingsPane: View {
+    @AppStorage(Telemetry.consentDefaultsKey) private var telemetryConsentRaw = Telemetry.ConsentState
+        .undecided.rawValue
+
+    private var telemetryOptIn: Binding<Bool> {
+        Binding(
+            get: { telemetryConsentRaw == Telemetry.ConsentState.granted.rawValue },
+            set: { Telemetry.setConsent(granted: $0) }
+        )
+    }
+
+    var body: some View {
+        Section("settings.privacy.diagnostics") {
+            SettingsToggle(
+                "settings.toggle.telemetry",
+                detail: "settings.privacy.telemetry.detail",
+                isOn: telemetryOptIn
+            )
+        }
+    }
+}
+
+// MARK: - Advanced
+
+private struct AdvancedSettingsPane: View {
+    @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
+    @AppStorage(ModernUI.defaultsKey) private var modernUI = false
+
+    var body: some View {
+        Section {
+            SettingsToggle(
+                "settings.advanced.showAdvanced",
+                detail: "settings.advanced.showAdvanced.detail",
+                isOn: $showAdvanced
+            )
+            .accessibilityIdentifier("settings.showAdvanced")
+        }
+
+        Section("settings.advanced.interface") {
+            SettingsToggle(
+                "settings.advanced.modernUI",
+                detail: "settings.advanced.modernUI.detail",
+                isOn: $modernUI
+            )
+        }
+
+        Section {
+            Button("settings.advanced.openLogs") {
+                WhiskyApp.openLogsFolder()
+            }
+        } header: {
+            Text("settings.advanced.diagnostics")
+        } footer: {
+            Text("settings.advanced.diagnostics.detail")
+        }
     }
 }
 

@@ -60,8 +60,8 @@ enum ProgramConfigTab: String, CaseIterable, Identifiable, Hashable {
 /// history sat below a thousand-line overrides section, and the page said
 /// nothing about which program it was beyond the window title — two bottles
 /// can hold the same game. This follows the bottle workspace instead:
-/// identity in the title bar, actions in the toolbar, and categories in a tab
-/// bar that switches content in place.
+/// identity in the title bar, actions and categories in the toolbar, and each
+/// category a grouped form that switches in place.
 struct ProgramView: View {
     @Bindable var program: Program
 
@@ -72,12 +72,6 @@ struct ProgramView: View {
     @State private var showTroubleshootingWizard: Bool = false
     @State private var hasActiveSession: Bool = false
     @State private var selectedRunId: UUID?
-
-    /// The sections inside a tab start open, because the tab bar is now what
-    /// chooses between them: a category that opened collapsed would be a tab
-    /// leading to an empty pane.
-    @State private var envArgsSectionExpanded: Bool = true
-    @State private var overridesSectionExpanded: Bool = true
 
     private let sessionStore = TroubleshootingSessionStore()
 
@@ -94,8 +88,6 @@ struct ProgramView: View {
                 .padding(.top, WhiskyDesignSystem.Spacing.small)
             }
 
-            categoryBar
-            Divider()
             content
         }
         .navigationTitle(program.name)
@@ -107,6 +99,25 @@ struct ProgramView: View {
         .toolbar {
             ToolbarItem(id: "ProgramViewIcon", placement: .navigation) {
                 icon
+            }
+
+            // The categories, as a native segmented control in the toolbar,
+            // which macOS draws as glass.
+            ToolbarItem(placement: .principal) {
+                Picker("program.tabs.label", selection: $tab) {
+                    ForEach(ProgramConfigTab.allCases) { option in
+                        Label {
+                            Text(option.label)
+                        } icon: {
+                            Image(systemName: option.icon)
+                        }
+                        .accessibilityIdentifier("program.tab.\(option.id)")
+                        .tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
@@ -145,8 +156,6 @@ struct ProgramView: View {
                 entryContext: .program(programURL: program.url, bottleURL: program.bottle.url)
             )
         }
-        .animation(.whiskyDefault, value: envArgsSectionExpanded)
-        .animation(.whiskyDefault, value: overridesSectionExpanded)
         .task {
             let icon = await IconCache.shared.iconOrFallback(for: program.url, peFile: program.peFile)
             self.cachedIconImage = Image(nsImage: icon)
@@ -182,29 +191,6 @@ struct ProgramView: View {
         .accessibilityHidden(true)
     }
 
-    // MARK: - Categories
-
-    private var categoryBar: some View {
-        HStack {
-            SegmentedPillPicker(
-                items: ProgramConfigTab.allCases,
-                selection: $tab,
-                accessibilityTitle: "program.tabs.label"
-            ) { option in
-                Label {
-                    Text(option.label)
-                } icon: {
-                    Image(systemName: option.icon)
-                }
-                .labelStyle(.titleAndIcon)
-                .accessibilityIdentifier("program.tab.\(option.id)")
-            }
-            Spacer()
-        }
-        .padding(.horizontal, WhiskyDesignSystem.Spacing.medium)
-        .padding(.vertical, WhiskyDesignSystem.Spacing.small)
-    }
-
     // MARK: - Content
 
     @ViewBuilder
@@ -213,41 +199,32 @@ struct ProgramView: View {
         case .general:
             generalTab
         case .environment:
-            Form {
-                EnvironmentArgView(program: program, isExpanded: $envArgsSectionExpanded)
+            SettingsPane {
+                EnvironmentArgView(program: program)
             }
-            .formStyle(.grouped)
         case .overrides:
-            Form {
-                ProgramOverrideSettingsView(
-                    bottle: program.bottle,
-                    program: program,
-                    isExpanded: $overridesSectionExpanded
-                )
+            SettingsPane {
+                ProgramOverrideSettingsView(bottle: program.bottle, program: program)
             }
-            .formStyle(.grouped)
         case .console:
             consoleTab
         }
     }
 
     private var generalTab: some View {
-        Form {
+        SettingsPane {
             Section("program.config") {
-                Picker("locale.title", selection: $program.settings.locale) {
+                SettingsPicker("locale.title", selection: $program.settings.locale) {
                     ForEach(Locales.allCases, id: \.self) { locale in
-                        Text(locale.pretty()).id(locale)
+                        Text(locale.pretty()).tag(locale)
                     }
                 }
 
-                // A labelled field, rather than a label stacked above an
-                // unlabelled one: a Form already puts the name on the leading
-                // edge, and the old pair left the field itself nameless.
-                TextField("program.args", text: $program.settings.arguments)
-                    .font(.system(.body, design: .monospaced))
-                Text("program.args.help")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                TextField(text: $program.settings.arguments, prompt: Text("program.args.prompt")) {
+                    Text("program.args")
+                    Text("program.args.help")
+                }
+                .font(.body.monospaced())
             }
 
             Section("program.location") {
@@ -256,26 +233,31 @@ struct ProgramView: View {
                 }
                 LabeledContent("program.location.path") {
                     Text(windowsPath)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.caption.monospaced())
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .textSelection(.enabled)
                         .help(windowsPath)
                 }
-                Button("button.showInFinder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([program.url])
-                }
-                Button("program.copyPath") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(windowsPath, forType: .string)
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        Button("button.showInFinder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([program.url])
+                        }
+                        Button("program.copyPath") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(windowsPath, forType: .string)
+                        }
+                    }
+                } label: {
+                    EmptyView()
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     private var consoleTab: some View {
-        Form {
+        SettingsPane {
             Section("console.title") {
                 ConsoleRunHistoryView(
                     program: program,
@@ -288,7 +270,6 @@ struct ProgramView: View {
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     // MARK: - Derived

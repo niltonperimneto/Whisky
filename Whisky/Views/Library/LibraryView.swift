@@ -32,6 +32,7 @@ import WhiskyKit
 /// programs and a future launcher needs no change here.
 struct LibraryView: View {
     @Environment(BottleVM.self) var bottleVM: BottleVM
+    @Environment(\.openWindow) private var openWindow
     @Binding var selectedBottle: URL?
     /// Toggled by the toolbar's refresh button. Folded into the reload trigger
     /// because the bottle list is unchanged by a refresh, so watching only that
@@ -219,7 +220,7 @@ struct LibraryView: View {
             openSettings(for: row)
         }
         Button("library.card.configure") {
-            selectedBottle = row.item.bottleURL
+            openWindow(id: BottleSettingsWindow.windowID, value: row.item.bottleURL)
         }
     }
 
@@ -339,20 +340,16 @@ private struct LibraryProgramSettingsSheet: View {
     @Bindable var bottle: Bottle
     @Bindable var program: Program
     @Environment(\.dismiss) private var dismiss
-    @State private var overridesExpanded = true
 
     var body: some View {
         NavigationStack {
-            Form {
-                ProgramOverrideSettingsView(
-                    bottle: bottle, program: program, isExpanded: $overridesExpanded
-                )
+            SettingsPane {
+                ProgramOverrideSettingsView(bottle: bottle, program: program)
             }
-            .formStyle(.grouped)
             .navigationTitle(program.name)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("button.done") { dismiss() }
                 }
             }
         }

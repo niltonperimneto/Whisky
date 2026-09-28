@@ -22,19 +22,16 @@ import WhiskyKit
 /// The tabs of the bottle workspace.
 enum ModernBottleTab: String, CaseIterable, Identifiable, Hashable {
     case applications
-    case configuration
     case processes
     case tools
 
     var id: String { rawValue }
 
-    /// Short on purpose: these sit side by side in one bar, so the
-    /// configuration tab is "Configuration" rather than the navigation row's
-    /// "Bottle Configuration", which is already qualified by the window title.
+    /// Short on purpose: these sit side by side in one bar. Configuration is
+    /// not among them: it is a window of its own, opened from the toolbar.
     var label: LocalizedStringResource {
         switch self {
         case .applications: "tab.applications"
-        case .configuration: "tab.configuration"
         case .processes: "tab.processes"
         case .tools: "tab.tools"
         }
@@ -43,7 +40,6 @@ enum ModernBottleTab: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .applications: "square.grid.2x2"
-        case .configuration: "gearshape"
         case .processes: "hockey.puck.circle"
         case .tools: "wrench.and.screwdriver"
         }
@@ -69,6 +65,7 @@ struct ModernBottleDetailView: View {
     @State private var isRunningProgram = false
     @State private var showDuplicate = false
     @State private var showRename = false
+    @Environment(\.openWindow) private var openWindow
     @Binding var selected: URL?
 
     private var status: BottleShelfStatus { shelf.status(for: bottle) }
@@ -124,6 +121,12 @@ struct ModernBottleDetailView: View {
                         Task { await shelf.stop(bottle, force: force) }
                     }
 
+                    Button("bottleSettings.open", systemImage: "gearshape") {
+                        openWindow.bottleSettings(bottle)
+                    }
+                    .help("bottleSettings.open")
+                    .accessibilityIdentifier("nav.bottleConfiguration")
+
                     Menu {
                         BottleActionsMenu(
                             bottle: bottle,
@@ -173,8 +176,6 @@ struct ModernBottleDetailView: View {
             // Settings pushes the same ProgramView the list does.
             .navigationDestination(for: BottleStage.self) { stage in
                 switch stage {
-                case .config:
-                    ConfigView(bottle: bottle)
                 case .programs:
                     ProgramsView(bottle: bottle, path: $path)
                 case .processes:
@@ -259,7 +260,7 @@ struct ModernBottleDetailView: View {
                 } icon: {
                     Image(systemName: option.icon)
                 }
-                // Both, always: a glyph alone is a guess, and these four are
+                // Both, always: a glyph alone is a guess, and these three are
                 // the only navigation the workspace has.
                 .labelStyle(.titleAndIcon)
                 // Identifiers match the legacy navigation rows so the existing
@@ -275,7 +276,6 @@ struct ModernBottleDetailView: View {
     private func identifier(for tab: ModernBottleTab) -> String {
         switch tab {
         case .applications: "nav.applications"
-        case .configuration: "nav.bottleConfiguration"
         case .processes: "nav.runningProcesses"
         case .tools: "nav.tools"
         }
@@ -288,8 +288,6 @@ struct ModernBottleDetailView: View {
         switch tab {
         case .applications:
             AppGridView(bottle: bottle, path: $path)
-        case .configuration:
-            ConfigView(bottle: bottle)
         case .processes:
             // The hero owns the lifecycle control here, so the pane's own stop
             // menu stands down rather than offering a second one.

@@ -19,7 +19,7 @@
 import SwiftUI
 import WhiskyKit
 
-/// Bottle-level DLL override configuration section for ``ConfigView``.
+/// Bottle-level DLL overrides, on the Advanced tab of the bottle settings window.
 ///
 /// Displays managed overrides from DXVK toggle and launcher presets as read-only entries,
 /// and provides the ``DLLOverrideEditor`` for editing custom bottle-level overrides.

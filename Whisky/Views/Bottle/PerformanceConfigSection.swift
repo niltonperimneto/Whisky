@@ -24,48 +24,35 @@ struct PerformanceConfigSection: View {
 
     var body: some View {
         Section("config.title.performance") {
-            Toggle(isOn: $bottle.settings.shaderCacheEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("config.shaderCache")
-                    Text("config.shaderCache.info")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            // Force DX11 lives in the Graphics section, next to the backend it
+            SettingsToggle(
+                "config.shaderCache",
+                detail: "config.shaderCache.info",
+                isOn: $bottle.settings.shaderCacheEnabled
+            )
+            // Force DX11 lives in the Graphics tab, next to the backend it
             // affects. It was in both, bound to the same setting.
-            Toggle(isOn: $bottle.settings.disableAppNap) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("config.disableAppNap")
-                    Text("config.disableAppNap.info")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-            // Install VC++ Runtime button (needed for Unity IL2CPP and other C++ games)
-            if !bottle.settings.vcRedistInstalled {
-                Button {
-                    Task {
-                        await Winetricks.runCommand(command: "vcrun2022", bottle: bottle)
-                        await confirmVcRedist()
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "wrench.and.screwdriver")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("config.installVcRedist")
-                            Text("config.installVcRedist.info")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+            SettingsToggle(
+                "config.disableAppNap",
+                detail: "config.disableAppNap.info",
+                isOn: $bottle.settings.disableAppNap
+            )
+            // Needed for Unity IL2CPP and other C++ games.
+            LabeledContent {
+                if bottle.settings.vcRedistInstalled {
+                    Label("config.vcRedistInstalled", systemImage: "checkmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.green)
+                } else {
+                    Button("config.installVcRedist.button") {
+                        Task {
+                            await Winetricks.runCommand(command: "vcrun2022", bottle: bottle)
+                            await confirmVcRedist()
                         }
                     }
                 }
-            } else {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("config.vcRedistInstalled")
-                }
+            } label: {
+                Text(bottle.settings.vcRedistInstalled ? "config.vcRedistInstalled" : "config.installVcRedist")
+                Text("config.installVcRedist.info")
             }
         }
         .task { await confirmVcRedist() }

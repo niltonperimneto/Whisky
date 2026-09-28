@@ -20,6 +20,8 @@ import AppKit
 import SwiftUI
 import WhiskyKit
 
+/// DXVK's switches and its `dxvk.conf`, shown with advanced settings. Greyed
+/// out, with the reason in the footer, while the bottle runs another backend.
 struct DXVKSettingsView: View {
     @Bindable var bottle: Bottle
     let resolvedBackend: GraphicsBackend
@@ -36,86 +38,44 @@ struct DXVKSettingsView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("config.dxvk.title")
-                    .font(.headline)
-                if !isDXVKActive {
-                    Text("config.dxvk.inactive")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.secondary.opacity(0.15), in: Capsule())
-                }
+        Section {
+            SettingsToggle("config.dxvk.async", detail: "config.dxvk.async.info", isOn: $bottle.settings.dxvkAsync)
+
+            SettingsPicker("config.dxvkHud", detail: "config.dxvkHud.info", selection: $bottle.settings.dxvkHud) {
+                Text("config.dxvkHud.off").tag(DXVKHUD.off)
+                Text("config.dxvkHud.fps").tag(DXVKHUD.fps)
+                Text("config.dxvkHud.partial").tag(DXVKHUD.partial)
+                Text("config.dxvkHud.full").tag(DXVKHUD.full)
             }
 
-            // DXVK Async toggle
-            Toggle(isOn: $bottle.settings.dxvkAsync) {
-                VStack(alignment: .leading) {
-                    Text("config.dxvk.async")
-                    Text("config.dxvk.async.info")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .disabled(!isDXVKActive)
-
-            // DXVK HUD preset picker
-            VStack(alignment: .leading, spacing: 2) {
-                Picker("config.dxvkHud", selection: $bottle.settings.dxvkHud) {
-                    Text("config.dxvkHud.off").tag(DXVKHUD.off)
-                    Text("config.dxvkHud.fps").tag(DXVKHUD.fps)
-                    Text("config.dxvkHud.partial").tag(DXVKHUD.partial)
-                    Text("config.dxvkHud.full").tag(DXVKHUD.full)
-                }
-                Text("config.dxvkHud.info")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .disabled(!isDXVKActive)
-
-            // dxvk.conf management
-            dxvkConfManagement
-        }
-    }
-
-    // MARK: - dxvk.conf Management
-
-    private var dxvkConfManagement: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider()
-            HStack {
-                Text("config.dxvk.confFile")
-                    .font(.subheadline)
-                Spacer()
-                Text(
-                    confExists
-                        ? confURL.lastPathComponent
-                        : String(localized: "config.dxvk.confNotFound")
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            HStack(spacing: 8) {
-                Button("config.dxvk.openInEditor") {
-                    if !confExists {
-                        createDefaultConf()
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Button("config.dxvk.openInEditor") {
+                        if !confExists {
+                            createDefaultConf()
+                        }
+                        NSWorkspace.shared.open(confURL)
                     }
-                    NSWorkspace.shared.open(confURL)
+                    Button("config.dxvk.revealInFinder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([confURL])
+                    }
+                    .disabled(!confExists)
+                    Button("config.dxvk.reset", role: .destructive) {
+                        try? FileManager.default.removeItem(at: confURL)
+                        confExists = false
+                    }
+                    .disabled(!confExists)
                 }
-                Button("config.dxvk.revealInFinder") {
-                    NSWorkspace.shared.activateFileViewerSelecting([confURL])
-                }
-                .disabled(!confExists)
-                Button("config.dxvk.reset", role: .destructive) {
-                    try? FileManager.default.removeItem(at: confURL)
-                    confExists = false
-                }
-                .disabled(!confExists)
+            } label: {
+                Text("config.dxvk.confFile")
+                Text(confExists ? confURL.lastPathComponent : String(localized: "config.dxvk.confNotFound"))
             }
-            .font(.caption)
+        } header: {
+            Text("config.dxvk.title")
+        } footer: {
+            if !isDXVKActive {
+                Text("config.dxvk.inactive")
+            }
         }
         .disabled(!isDXVKActive)
         .onAppear {

@@ -80,11 +80,16 @@ public final class RuntimeCoordinator {
                 try Task.checkCancellation()
                 operation = .installing
                 try await Task.detached(priority: .userInitiated) {
+                    let identifier: String?
                     if runtime.channel == .stable {
                         try WhiskyWineInstaller.install(from: archive)
+                        identifier = nil
                     } else {
-                        try WhiskyWineInstaller.installRuntime(from: archive)
+                        identifier = try WhiskyWineInstaller.installRuntime(from: archive)
                     }
+                    // A GPTK-capable runtime arriving after the payload was
+                    // imported still needs it, and the store outlives every runtime.
+                    _ = GPTKImporter.deployStoredPayloadIfCapable(for: identifier)
                 }.value
                 try? FileManager.default.removeItem(at: archive)
                 finishSuccessfully()
@@ -104,6 +109,10 @@ public final class RuntimeCoordinator {
         task = Task {
             do {
                 try await Task.detached(priority: .userInitiated) {
+                    // Restore its Wine originals first, or the backups outlive the
+                    // tree they belong to and the store keeps a set it can never
+                    // replace.
+                    try? GPTKImporter.removeDeployedPayload(for: identifier)
                     try WhiskyWineInstaller.removeRuntime(identifier)
                 }.value
                 finishSuccessfully()
@@ -162,7 +171,8 @@ public final class RuntimeCoordinator {
                     defer {
                         if accessing { url.stopAccessingSecurityScopedResource() }
                     }
-                    try WhiskyWineInstaller.installRuntime(from: url)
+                    let identifier = try WhiskyWineInstaller.installRuntime(from: url)
+                    _ = GPTKImporter.deployStoredPayloadIfCapable(for: identifier)
                 }.value
                 finishSuccessfully()
             } catch is CancellationError {

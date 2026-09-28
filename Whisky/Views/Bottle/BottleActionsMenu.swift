@@ -21,8 +21,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WhiskyKit
 
-/// Everything you can do to a bottle as a whole: rename, remove, move,
-/// duplicate, export, reveal.
+/// Everything you can do to a bottle as a whole: open its settings, rename,
+/// remove, move, duplicate, export, reveal.
 ///
 /// One definition shared by the sidebar row's context menu and the shelf card's,
 /// because these actions destroy or relocate a prefix and two copies of that
@@ -34,12 +34,21 @@ struct BottleActionsMenu: View {
     /// Presented by the host, which owns the sheet.
     @Binding var showRename: Bool
     @Binding var showDuplicate: Bool
+    @Environment(\.openWindow) private var openWindow
 
     /// An unavailable bottle is on a disconnected volume: it can be forgotten,
     /// but nothing that touches its files can run.
     private var canModify: Bool { bottle.isAvailable && !bottle.inFlight }
 
     var body: some View {
+        Button("bottleSettings.menu", systemImage: "gearshape") {
+            openWindow.bottleSettings(bottle)
+        }
+        .disabled(!bottle.isAvailable)
+        .labelStyle(.titleAndIcon)
+
+        Divider()
+
         Button("button.rename", systemImage: "pencil.line") {
             showRename = true
         }

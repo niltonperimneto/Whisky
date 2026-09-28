@@ -26,52 +26,34 @@ private let launcherConfigLogger = Logger(
     category: "LauncherConfig"
 )
 
+/// Launcher compatibility: the fixes Whisky applies for Steam, EA App, Epic
+/// and Rockstar, and the diagnostics for them. Shown on the Integrations tab.
 struct LauncherConfigSection: View {
     @Bindable var bottle: Bottle
 
     let bottleIsRunning: Bool
-    /// Opens the latest diagnosis; supplied by ConfigView, which owns that sheet.
+    /// Opens the latest diagnosis; the window owns that sheet.
     var onViewDiagnostics: () -> Void = {}
     @State private var overridesExpanded: Bool = false
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 12) {
-                // Enable launcher compatibility mode
-                Toggle("Launcher Compatibility Mode", isOn: $bottle.settings.launcherCompatibilityMode)
-                    .help("""
-                    Enables automatic fixes for Steam, Rockstar, EA App, Epic Games, \
-                    and other game launchers (frankea/Whisky#41)
-                    """)
-
-                if bottle.settings.launcherCompatibilityMode {
-                    launcherCompatibilityControls
-                }
-            }
-            .padding(.vertical, 8)
-        } header: {
-            launcherSectionLabel
-        }
-    }
-
-    // MARK: - Section Label
-
-    private var launcherSectionLabel: some View {
-        HStack {
-            Label("Launcher Compatibility", systemImage: "gamecontroller.fill")
-                .font(.headline)
+            SettingsToggle(
+                "config.launcher.mode",
+                detail: "config.launcher.mode.detail",
+                isOn: $bottle.settings.launcherCompatibilityMode
+            )
 
             if bottle.settings.launcherCompatibilityMode {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-                    .font(.caption)
+                SettingsNotice(.warning, "config.launcher.cefNotice")
+                detectionModeControls
             }
+        } header: {
+            Text("config.launcher.title")
+        }
 
-            if let launcher = bottle.settings.detectedLauncher {
-                Text("(\(launcher.rawValue))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+        if bottle.settings.launcherCompatibilityMode {
+            launcherCompatibilityControls
         }
     }
 }
@@ -81,187 +63,102 @@ struct LauncherConfigSection: View {
 extension LauncherConfigSection {
     @ViewBuilder
     private var launcherCompatibilityControls: some View {
-        // Security notice about CEF sandbox
-        cefSecurityNotice
+        Section("config.launcher.fixes") {
+            localeControls
+            gpuSpoofingControls
+            SettingsToggle(
+                "config.launcher.autoEnableDXVK",
+                detail: "config.launcher.autoEnableDXVK.detail",
+                isOn: $bottle.settings.autoEnableDXVK
+            )
+        }
 
-        Divider()
+        Section("config.launcher.network") {
+            networkControls
+            crossLayerCompatibilityControls
+        }
 
-        // Detection mode selection
-        detectionModeControls
-
-        Divider()
-
-        // Locale override
-        localeControls
-
-        // GPU spoofing
-        gpuSpoofingControls
-
-        Divider()
-
-        // Network configuration
-        networkControls
-
-        Divider()
-
-        crossLayerCompatibilityControls
-
-        // Auto-enable DXVK
-        Toggle("Auto-Enable DXVK for Launchers", isOn: $bottle.settings.autoEnableDXVK)
-            .help("""
-            Automatically enables DXVK when launcher requires it \
-            (e.g., Rockstar Games Launcher)
-            """)
-
-        Divider()
-
-        // Active Environment Overrides provenance display
-        ActiveEnvironmentOverrides(
-            launcher: bottle.settings.detectedLauncher,
-            isExpanded: $overridesExpanded
-        )
-
-        Divider()
-
-        HStack {
-            Spacer()
-            Button {
+        Section {
+            ActiveEnvironmentOverrides(
+                launcher: bottle.settings.detectedLauncher,
+                isExpanded: $overridesExpanded
+            )
+            Button("config.launcher.viewDiagnostics", systemImage: "stethoscope") {
                 onViewDiagnostics()
-            } label: {
-                Label("View Diagnostics", systemImage: "stethoscope")
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            Spacer()
+            configurationWarnings
+        } header: {
+            Text("config.launcher.diagnostics")
         }
-
-        // Configuration warnings
-        configurationWarnings
-    }
-
-    private var cefSecurityNotice: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.shield.fill")
-                .foregroundColor(.orange)
-                .font(.title3)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Security Note")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.orange)
-
-                Text("""
-                Launcher compatibility disables the Chromium sandbox (required for Wine). \
-                This allows Steam, Epic, EA App, and Rockstar launchers to function, but \
-                embedded browser content runs with full process privileges. Only use with \
-                trusted launchers from reputable companies.
-                """)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color.orange.opacity(0.1))
-        .cornerRadius(8)
     }
 
     @ViewBuilder
     private var detectionModeControls: some View {
-        Picker("Detection Mode:", selection: $bottle.settings.launcherMode) {
-            Text("Automatic").tag(LauncherMode.auto)
-            Text("Manual").tag(LauncherMode.manual)
+        SettingsPicker(
+            "config.launcher.detection",
+            detail: "config.launcher.detection.detail",
+            selection: $bottle.settings.launcherMode
+        ) {
+            Text("config.launcher.detection.auto").tag(LauncherMode.auto)
+            Text("config.launcher.detection.manual").tag(LauncherMode.manual)
         }
-        .pickerStyle(.segmented)
-        .help("""
-        Automatic: Detects launcher from executable path\n\
-        Manual: Use explicitly selected launcher type
-        """)
 
         if bottle.settings.launcherMode == .manual {
-            Picker("Launcher Type:", selection: $bottle.settings.detectedLauncher) {
-                Text("None").tag(nil as LauncherType?)
+            SettingsPicker("config.launcher.type", selection: $bottle.settings.detectedLauncher) {
+                Text("config.launcher.type.none").tag(nil as LauncherType?)
                 ForEach(LauncherType.allCases) { launcher in
                     Text(launcher.rawValue).tag(launcher as LauncherType?)
                 }
             }
-            .help("Manually select the launcher type for this bottle")
 
             if let launcher = bottle.settings.detectedLauncher {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "info.circle.fill")
-                        .foregroundColor(.blue)
-                    Text(launcher.fixesDescription)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.vertical, 4)
+                SettingsNotice(.info, text: Text(launcher.fixesDescription))
             }
-        } else {
-            if let launcher = bottle.settings.detectedLauncher {
-                HStack {
-                    Text("Detected:")
-                        .foregroundColor(.secondary)
-                    Text(launcher.rawValue)
-                        .fontWeight(.medium)
-                }
-                .font(.caption)
+        } else if let launcher = bottle.settings.detectedLauncher {
+            LabeledContent("config.launcher.detected") {
+                Text(launcher.rawValue)
             }
         }
     }
 
     private var localeControls: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Picker("Locale Override:", selection: $bottle.settings.launcherLocale) {
-                ForEach(Locales.allCases, id: \.self) { locale in
-                    Text(locale.pretty()).tag(locale)
-                }
+        Picker(selection: $bottle.settings.launcherLocale) {
+            ForEach(Locales.allCases, id: \.self) { locale in
+                Text(locale.pretty()).tag(locale)
             }
-            .help("""
-            Steam and Chromium-based launchers require en_US locale \
-            to avoid steamwebhelper crashes
-            """)
-
-            if bottle.settings.launcherLocale != .auto {
-                Text("""
-                Forces \(bottle.settings.launcherLocale.pretty()) locale \
-                to fix steamwebhelper crashes
-                """)
-                .font(.caption)
-                .foregroundColor(.secondary)
+        } label: {
+            Text("config.launcher.locale")
+            if bottle.settings.launcherLocale == .auto {
+                Text("config.launcher.locale.detail")
+            } else {
+                Text("config.launcher.locale.forced \(bottle.settings.launcherLocale.pretty())")
             }
         }
     }
 
     @ViewBuilder
     private var gpuSpoofingControls: some View {
-        Toggle("GPU Spoofing", isOn: $bottle.settings.gpuSpoofing)
-            .help("""
-            Reports high-end GPU to pass launcher compatibility checks. \
-            Fixes EA App black screen and "GPU not supported" errors.
-            """)
+        SettingsToggle(
+            "config.launcher.gpuSpoofing",
+            detail: "config.launcher.gpuSpoofing.detail",
+            isOn: $bottle.settings.gpuSpoofing
+        )
 
         if bottle.settings.gpuSpoofing {
-            Picker("GPU Vendor:", selection: $bottle.settings.gpuVendor) {
+            SettingsPicker(
+                "config.launcher.gpuVendor",
+                detail: "config.launcher.gpuVendor.detail",
+                selection: $bottle.settings.gpuVendor
+            ) {
                 ForEach(GPUVendor.allCases, id: \.self) { vendor in
                     Text(vendor.modelName).tag(vendor)
                 }
             }
-            .help("NVIDIA (recommended) provides best compatibility across launchers")
         }
     }
 
     private var networkControls: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Network Timeout:")
-                Spacer()
-                Text("\(bottle.settings.networkTimeout / 1_000)s")
-                    .foregroundColor(.secondary)
-            }
-
+        LabeledContent {
             Slider(
                 value: Binding(
                     get: { Double(bottle.settings.networkTimeout) },
@@ -270,42 +167,38 @@ extension LauncherConfigSection {
                 in: 30_000 ... 180_000,
                 step: 15_000
             )
-
-            Text("Fixes Steam download stalls and connection timeouts")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            .labelsHidden()
+            .frame(width: 180)
+        } label: {
+            Text("config.launcher.networkTimeout")
+            Text("config.launcher.networkTimeout.detail \(bottle.settings.networkTimeout / 1_000)")
         }
     }
 
+    @ViewBuilder
     private var crossLayerCompatibilityControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker("Network Compatibility Layer", selection: $bottle.settings.networkCompatibilityMode) {
-                Text("Off").tag(NetworkCompatibilityMode.off)
-                Text("Automatic").tag(NetworkCompatibilityMode.automatic)
-                Text("Strict").tag(NetworkCompatibilityMode.strict)
-            }
-            .disabled(bottleIsRunning)
-            .help("Applies to Steam and EOS independently of the selected graphics backend.")
+        SettingsPicker(
+            "config.launcher.networkCompat",
+            detail: "config.launcher.networkCompat.detail",
+            selection: $bottle.settings.networkCompatibilityMode
+        ) {
+            Text("config.launcher.networkCompat.off").tag(NetworkCompatibilityMode.off)
+            Text("config.launcher.networkCompat.automatic").tag(NetworkCompatibilityMode.automatic)
+            Text("config.launcher.networkCompat.strict").tag(NetworkCompatibilityMode.strict)
+        }
+        .disabled(bottleIsRunning)
 
-            Toggle("Block Injected Overlays", isOn: $bottle.settings.blockInjectedOverlays)
-                .disabled(bottleIsRunning)
-                .help("Requests launchers to suppress supported overlays for newly started processes.")
+        SettingsToggle(
+            "config.launcher.blockOverlays",
+            detail: "config.launcher.blockOverlays.detail",
+            isOn: $bottle.settings.blockInjectedOverlays
+        )
+        .disabled(bottleIsRunning)
 
-            if bottleIsRunning {
-                Label(
-                    "These settings can be changed after all bottle processes exit.",
-                    systemImage: "hourglass"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            } else if bottle.settings.networkCompatibilityMode != .off {
-                Label(
-                    "Runtime capability probing will be added in the next compatibility-runtime iteration.",
-                    systemImage: "network.badge.shield.half.filled"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+        if bottleIsRunning {
+            SettingsNotice(.info, "config.launcher.runningNotice")
+        } else if bottle.settings.networkCompatibilityMode != .off {
+            SettingsNotice(.info, "config.launcher.networkCompat.probingNotice")
         }
     }
 
@@ -316,22 +209,8 @@ extension LauncherConfigSection {
                 bottle,
                 launcher: launcher
             )
-
-            if !warnings.isEmpty {
-                Divider()
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Label("Configuration Warnings", systemImage: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .fontWeight(.medium)
-
-                    ForEach(warnings, id: \.self) { warning in
-                        Text(warning)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.leading, 24)
-                    }
-                }
+            ForEach(warnings, id: \.self) { warning in
+                SettingsNotice(.warning, text: Text(warning))
             }
         }
     }
@@ -349,7 +228,7 @@ private struct ActiveEnvironmentOverrides: View {
     @Binding var isExpanded: Bool
 
     var body: some View {
-        DisclosureGroup("Active Environment Overrides") {
+        DisclosureGroup("config.launcher.activeOverrides") {
             VStack(alignment: .leading, spacing: 12) {
                 if let launcher {
                     launcherFixesSection(launcher)
@@ -360,7 +239,7 @@ private struct ActiveEnvironmentOverrides: View {
             .padding(.top, 4)
         }
         .font(.caption)
-        .foregroundColor(.secondary)
+        .foregroundStyle(.secondary)
     }
 
     // MARK: - Launcher Fixes
@@ -372,10 +251,10 @@ private struct ActiveEnvironmentOverrides: View {
         let sortedCategories = grouped.keys.sorted { $0.rawValue < $1.rawValue }
 
         VStack(alignment: .leading, spacing: 8) {
-            Label("\(launcher.displayName) Fixes", systemImage: "gamecontroller")
+            Label("config.launcher.launcherFixes \(launcher.displayName)", systemImage: "gamecontroller")
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
 
             ForEach(sortedCategories, id: \.self) { category in
                 if let fixes = grouped[category] {
@@ -395,10 +274,10 @@ private struct ActiveEnvironmentOverrides: View {
 
         if !activeFixes.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Platform Fixes", systemImage: "desktopcomputer")
+                Label("config.launcher.platformFixes", systemImage: "desktopcomputer")
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundColor(.primary)
+                    .foregroundStyle(.primary)
 
                 ForEach(sortedCategories, id: \.self) { category in
                     if let fixes = grouped[category] {
@@ -420,7 +299,7 @@ private struct ActiveEnvironmentOverrides: View {
             Text(categoryDisplayName(category))
                 .font(.caption2)
                 .fontWeight(.medium)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
             ForEach(fixes, id: \.key) { fix in
@@ -437,14 +316,14 @@ private struct ActiveEnvironmentOverrides: View {
             Text(categoryDisplayName(category))
                 .font(.caption2)
                 .fontWeight(.medium)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
             ForEach(fixes, id: \.key) { fix in
                 fixRow(
                     key: fix.key,
                     value: fix.value,
-                    reason: "Applied because macOS >= \(fix.appliesFrom.description): \(fix.reason)"
+                    reason: String(localized: "config.launcher.platformFix.reason \(fix.appliesFrom.description) \(fix.reason)")
                 )
             }
         }
@@ -456,12 +335,12 @@ private struct ActiveEnvironmentOverrides: View {
         HStack(alignment: .top, spacing: 6) {
             Image(systemName: "lock.fill")
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 1) {
-                let textKey = Text(key).foregroundColor(.primary)
-                let textEq = Text("=").foregroundColor(.secondary)
-                let textVal = Text(value).foregroundColor(.primary)
+                let textKey = Text(key).foregroundStyle(.primary)
+                let textEq = Text("=").foregroundStyle(.secondary)
+                let textVal = Text(value).foregroundStyle(.primary)
                 Text("\(textKey)\(textEq)\(textVal)")
                     .font(.system(.caption, design: .monospaced))
 
@@ -478,12 +357,12 @@ private struct ActiveEnvironmentOverrides: View {
 
     private func categoryDisplayName(_ category: FixCategory) -> String {
         switch category {
-        case .locale: "Locale"
-        case .sandbox: "Sandbox"
-        case .graphics: "Graphics"
-        case .network: "Network"
-        case .threading: "Threading"
-        case .compatibility: "Compatibility"
+        case .locale: String(localized: "config.launcher.category.locale")
+        case .sandbox: String(localized: "config.launcher.category.sandbox")
+        case .graphics: String(localized: "config.launcher.category.graphics")
+        case .network: String(localized: "config.launcher.category.network")
+        case .threading: String(localized: "config.launcher.category.threading")
+        case .compatibility: String(localized: "config.launcher.category.compatibility")
         }
     }
 }
@@ -507,7 +386,7 @@ struct DiagnosticsReportView: View {
 
                 Spacer()
 
-                Button("Done") {
+                Button("button.done") {
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -522,19 +401,19 @@ struct DiagnosticsReportView: View {
                     .padding()
             }
             .background(Color(NSColor.textBackgroundColor))
-            .cornerRadius(8)
+            .clipShape(.rect(cornerRadius: 8))
             .padding(.horizontal)
 
             HStack {
                 Spacer()
 
-                Button("Copy to Clipboard") {
+                Button("diagnostics.report.copy") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report, forType: .string)
                 }
                 .buttonStyle(.bordered)
 
-                Button("Export to File") {
+                Button("diagnostics.report.export") {
                     exportReport()
                 }
                 .buttonStyle(.bordered)

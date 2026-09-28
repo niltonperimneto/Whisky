@@ -33,6 +33,7 @@ struct BottleListEntry: View {
     @State private var hasOrphanProcesses: Bool = false
     @State private var probeTask: Task<Void, Never>?
     @State private var duplicationPhase: DuplicationPhase?
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -147,6 +148,12 @@ struct BottleListEntry: View {
             }
         }
         .contextMenu {
+            Button("bottleSettings.menu", systemImage: "gearshape") {
+                openWindow.bottleSettings(bottle)
+            }
+            .disabled(!bottle.isAvailable)
+            .labelStyle(.titleAndIcon)
+            Divider()
             Button("button.rename", systemImage: "pencil.line") {
                 showBottleRename.toggle()
             }

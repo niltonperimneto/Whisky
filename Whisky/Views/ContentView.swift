@@ -52,6 +52,7 @@ struct ContentView: View {
     // chain as a single expression, and this one outgrew the compiler's budget.
     var body: some View {
         eventLayer
+            .focusedSceneValue(\.selectedBottleURL, selected)
     }
 
     private var splitView: some View {

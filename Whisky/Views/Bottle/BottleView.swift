@@ -21,7 +21,6 @@ import UniformTypeIdentifiers
 import WhiskyKit
 
 enum BottleStage {
-    case config
     case programs
     case processes
     case gameConfigs
@@ -34,6 +33,7 @@ struct BottleView: View {
     @State private var showWinetricksSheet: Bool = false
     @State private var showDuplicate: Bool = false
     @State private var toast: ToastData?
+    @Environment(\.openWindow) private var openWindow
 
     private let gridLayout = [GridItem(.adaptive(minimum: 100, maximum: .infinity))]
 
@@ -58,9 +58,20 @@ struct BottleView: View {
                         Label("tab.programs", systemImage: "list.bullet")
                     }
                     .accessibilityIdentifier("nav.installedPrograms")
-                    NavigationLink(value: BottleStage.config) {
-                        Label("tab.config", systemImage: "gearshape")
+                    // A window of its own rather than a push, so the settings
+                    // stay open beside the bottle they configure.
+                    Button {
+                        openWindow.bottleSettings(bottle)
+                    } label: {
+                        LabeledContent {
+                            Image(systemName: "macwindow.badge.plus")
+                                .foregroundStyle(.secondary)
+                        } label: {
+                            Label("tab.config", systemImage: "gearshape")
+                        }
+                        .contentShape(.rect)
                     }
+                    .buttonStyle(.plain)
                     .accessibilityIdentifier("nav.bottleConfiguration")
                     NavigationLink(value: BottleStage.processes) {
                         HStack {
@@ -263,8 +274,6 @@ struct BottleView: View {
             }
             .navigationDestination(for: BottleStage.self) { stage in
                 switch stage {
-                case .config:
-                    ConfigView(bottle: bottle)
                 case .programs:
                     ProgramsView(
                         bottle: bottle, path: $path

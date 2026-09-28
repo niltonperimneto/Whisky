@@ -286,6 +286,16 @@ struct WhiskyApp: App {
         }
         .defaultSize(width: 900, height: 620)
 
+        WindowGroup("bottleSettings.window.name", id: BottleSettingsWindow.windowID, for: URL.self) { $bottleURL in
+            BottleSettingsWindow(bottleURL: bottleURL)
+                .environment(BottleVM.shared)
+        }
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .commands {
+            BottleSettingsCommands()
+        }
+
         Settings {
             SettingsView()
         }

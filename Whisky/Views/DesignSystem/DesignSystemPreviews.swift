@@ -22,8 +22,8 @@ import SwiftUI
 struct DesignSystemGalleryView: View {
     @State private var sampleSelection: String = "Apps"
     @State private var metalHudOn: Bool = true
-    @State private var gameModeOn: Bool = true
-    @State private var dxvkOn: Bool = false
+    @State private var dxvkOverride: Bool? = false
+    @State private var shaderCacheOverride: Bool?
 
     var body: some View {
         ScrollView {
@@ -63,44 +63,22 @@ struct DesignSystemGalleryView: View {
                     }
                 }
 
-                // 3. Glass Cards with Unified Toggle Rows (Bottle & Per-App Parity)
-                GlassCard(isInteractive: false) {
-                    VStack(alignment: .leading, spacing: WhiskyDesignSystem.Spacing.medium) {
-                        Text("Graphics & Optimization (Liquid Glass Card)")
-                            .font(.headline)
-
-                        UnifiedToggleRow(
-                            title: "Metal HUD",
-                            subtitle: "Display real-time frame rates, frame time graphs, and GPU memory metrics",
-                            icon: "gauge.with.dots.needle.50percent",
-                            iconTint: .blue,
-                            isOn: $metalHudOn,
-                            overrideState: .overridden
+                // 3. Settings rows: a bottle's switch, and a program's
+                // per-setting override of it (Safari's per-website pattern).
+                Form {
+                    Section {
+                        SettingsToggle(
+                            "config.metalHud",
+                            detail: "config.metalHud.info",
+                            isOn: $metalHudOn
                         )
-
-                        Divider()
-
-                        UnifiedToggleRow(
-                            title: "macOS Game Mode",
-                            subtitle: "Directs system CPU/GPU priority to Wine processes and cuts Bluetooth latency",
-                            icon: "bolt.fill",
-                            iconTint: .purple,
-                            isOn: $gameModeOn,
-                            overrideState: .inherited("ON")
-                        )
-
-                        Divider()
-
-                        UnifiedToggleRow(
-                            title: "DXVK Async",
-                            subtitle: "Asynchronously compile DirectX shaders to eliminate in-game stuttering",
-                            icon: "bolt.horizontal.fill",
-                            iconTint: .orange,
-                            isOn: $dxvkOn,
-                            overrideState: .none
-                        )
+                        InheritableToggle("config.dxvk.async", value: $dxvkOverride, inherited: true)
+                        InheritableToggle("config.shaderCache", value: $shaderCacheOverride, inherited: true)
+                        SettingsNotice(.info, "settings.advanced.inEffect")
                     }
                 }
+                .formStyle(.grouped)
+                .frame(height: 280)
             }
             .padding(WhiskyDesignSystem.Spacing.extraLarge)
         }

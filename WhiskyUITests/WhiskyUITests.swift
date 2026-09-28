@@ -50,32 +50,26 @@ final class WhiskyUITests: WhiskyUITestCase {
     func testBottleConfigurationSectionsRender() throws {
         try requireBottleFixture()
         openBottleConfiguration()
-        // Wine section is the first one expanded by default
+        // General is the tab the window opens on, and Wine is its first section.
         XCTAssertTrue(app.staticTexts["Wine"].exists)
-        // Other section headers render as DisclosureTriangles, not StaticTexts
-        // (see testControllerAndInputSectionExists), so query them the same way.
-        let sectionHeader = app.descendants(matching: .disclosureTriangle)
-            .matching(NSPredicate(format: "label CONTAINS 'Launcher Compatibility' OR label CONTAINS 'Controller'"))
-            .firstMatch
-        XCTAssertTrue(sectionHeader.waitForExistence(timeout: 5), "Expected a collapsible config section header")
+        // Every other tab is one toolbar button away.
+        openBottleSettingsTab("integrations")
+        XCTAssertTrue(
+            app.staticTexts["Launcher Compatibility"].waitForExistence(timeout: 5),
+            "Integrations tab did not show Launcher Compatibility"
+        )
     }
 
-    /// Verifies the Controller & Input section exists as a collapsed DisclosureGroup
-    /// in Bottle Configuration. The Cmd→Ctrl toggle inside it is verified by source
-    /// inspection - SwiftUI doesn't expose collapsed DisclosureGroup contents in
-    /// the AX tree, so we can't drive the toggle via XCUITest without expanding it,
-    /// which itself requires clicking the chevron at a fragile coordinate.
-    func testControllerAndInputSectionExists() throws {
+    /// The Cmd→Ctrl mapping sits in its own Keyboard section on the Input tab,
+    /// reachable without controller compatibility mode, which used to hide it.
+    func testCommandKeyMappingIsReachableOnInputTab() throws {
         try requireBottleFixture()
         openBottleConfiguration()
-        // The header renders as a DisclosureTriangle with label "Controller & Input",
-        // not as a StaticText. Disclosure triangles report as descendant of a window.
-        let predicate = NSPredicate(format: "label CONTAINS 'Controller'")
-        let disclosure = app.descendants(matching: .disclosureTriangle).matching(predicate)
-            .firstMatch
-        XCTAssertTrue(
-            disclosure.waitForExistence(timeout: 5),
-            "Controller & Input section header missing"
+        openBottleSettingsTab("input")
+        require(
+            app.descendants(matching: .any).matching(identifier: "input.commandActsAsControl").firstMatch,
+            "Cmd→Ctrl toggle on the Input tab",
+            timeout: 5
         )
     }
 

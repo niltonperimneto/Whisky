@@ -19,52 +19,33 @@
 import SwiftUI
 import WhiskyKit
 
+/// The virtual desktop: a summary while advanced settings are hidden, and the
+/// switch, the size and the custom width and height once they are shown.
+///
+/// The setting lives in the prefix's registry as much as in the bottle, so it
+/// is read back from there when the tab opens and written there on change.
 struct ResolutionConfigSection: View {
     @Bindable var bottle: Bottle
-    @AppStorage("displayAdvancedMode") private var advancedMode: Bool = false
-    @State private var hasRunningProcesses: Bool = false
+    @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
+    @State private var isRunning: Bool = false
     @State private var widthText: String = ""
     @State private var heightText: String = ""
     @State private var isLoadingRegistryState: Bool = true
 
     var body: some View {
-        Section("config.title.display") {
-            // Simple/Advanced segmented control
-            Picker("", selection: $advancedMode) {
-                Text("config.display.simple").tag(false)
-                Text("config.display.advanced").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            // Simple mode: read-only summary
-            if !advancedMode {
-                virtualDesktopSummary
-            }
-
-            // Advanced mode: full controls
-            if advancedMode {
-                Toggle(isOn: $bottle.settings.virtualDesktopEnabled) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("config.virtualDesktop")
-                        Text("config.virtualDesktop.info")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .onChange(of: bottle.settings.virtualDesktopEnabled) { _, enabled in
-                    persistVirtualDesktop(enabled: enabled)
-                }
+        Section {
+            if showAdvanced {
+                SettingsToggle(
+                    "config.virtualDesktop",
+                    detail: "config.virtualDesktop.info",
+                    isOn: virtualDesktopBinding
+                )
 
                 if bottle.settings.virtualDesktopEnabled {
-                    Picker("config.virtualDesktop.resolution", selection: $bottle.settings.resolutionPreset) {
+                    SettingsPicker("config.virtualDesktop.resolution", selection: presetBinding) {
                         ForEach(ResolutionPreset.allCases, id: \.self) { preset in
                             Text(presetLabel(preset)).tag(preset)
                         }
-                    }
-                    .onChange(of: bottle.settings.resolutionPreset) { _, _ in
-                        syncCustomFields()
-                        persistResolution()
                     }
 
                     if bottle.settings.resolutionPreset == .matchDisplay {
@@ -74,60 +55,74 @@ struct ResolutionConfigSection: View {
                     if bottle.settings.resolutionPreset == .custom {
                         customResolutionFields
                     }
-
-                    Text("config.virtualDesktop.nextLaunch")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-
-                if hasRunningProcesses {
-                    runningProcessWarning
+            } else {
+                LabeledContent("config.virtualDesktop") {
+                    if bottle.settings.virtualDesktopEnabled {
+                        Text(currentResolutionSummary())
+                    } else {
+                        Text("config.virtualDesktop.off")
+                    }
                 }
             }
+
+            RunningBottleNotice(
+                bottle: bottle,
+                isRunning: $isRunning,
+                message: "config.virtualDesktop.processesRunning"
+            )
+        } header: {
+            Text("config.virtualDesktop")
+        } footer: {
+            if showAdvanced, bottle.settings.virtualDesktopEnabled {
+                Text("config.virtualDesktop.nextLaunch")
+            }
         }
-        .animation(.default, value: advancedMode)
+        .animation(.default, value: showAdvanced)
         .animation(.default, value: bottle.settings.virtualDesktopEnabled)
         .task {
             await loadRegistryState()
             syncCustomFields()
-            await checkRunningProcesses()
+            isRunning = await RunningBottleNotice.isRunning(bottle)
         }
     }
 
-    // MARK: - Simple Mode Summary
+    // MARK: - Bindings
 
-    private var virtualDesktopSummary: some View {
-        HStack {
-            Text("config.virtualDesktop")
-                .foregroundStyle(.secondary)
-            Spacer()
-            if bottle.settings.virtualDesktopEnabled {
-                let res = currentResolutionSummary()
-                Text(res)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("config.virtualDesktop.off")
-                    .foregroundStyle(.secondary)
+    /// Writes the registry only on a change the user made: reading the prefix
+    /// back sets the setting directly, and an `onChange` would echo that read
+    /// straight back into the registry.
+    private var virtualDesktopBinding: Binding<Bool> {
+        Binding(
+            get: { bottle.settings.virtualDesktopEnabled },
+            set: { enabled in
+                bottle.settings.virtualDesktopEnabled = enabled
+                persistVirtualDesktop(enabled: enabled)
             }
-        }
+        )
+    }
+
+    private var presetBinding: Binding<ResolutionPreset> {
+        Binding(
+            get: { bottle.settings.resolutionPreset },
+            set: { preset in
+                bottle.settings.resolutionPreset = preset
+                syncCustomFields()
+                persistResolution()
+            }
+        )
     }
 
     // MARK: - Match Display Hint
 
     private var matchDisplayHint: some View {
-        HStack {
-            Image(systemName: "display")
-                .foregroundStyle(.secondary)
+        LabeledContent("config.virtualDesktop.matchDisplay.label") {
             if let screen = NSScreen.main {
                 let pixelWidth = Int(screen.frame.width * screen.backingScaleFactor)
                 let pixelHeight = Int(screen.frame.height * screen.backingScaleFactor)
                 Text("config.virtualDesktop.matchDisplay \(pixelWidth) \(pixelHeight)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             } else {
                 Text("config.virtualDesktop.matchDisplay.fallback")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -135,57 +130,32 @@ struct ResolutionConfigSection: View {
     // MARK: - Custom Resolution Fields
 
     private var customResolutionFields: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("config.virtualDesktop.width")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("1920", text: $widthText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
+        LabeledContent("config.virtualDesktop.custom") {
+            HStack(spacing: 6) {
+                TextField("config.virtualDesktop.width", text: $widthText, prompt: Text(verbatim: "1920"))
+                    .labelsHidden()
+                    .frame(width: 70)
+                    .multilineTextAlignment(.trailing)
                     .onChange(of: widthText) { _, newValue in
                         if let val = Int(newValue) {
                             bottle.settings.customResolutionWidth = min(max(val, 640), 7_680)
                         }
                     }
-                    .onSubmit {
-                        validateAndPersistCustom()
-                    }
-            }
-            Text("\u{00D7}")
-                .foregroundStyle(.secondary)
-                .padding(.top, 12)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("config.virtualDesktop.height")
-                    .font(.caption)
+                    .onSubmit { validateAndPersistCustom() }
+                Text(verbatim: "\u{00D7}")
                     .foregroundStyle(.secondary)
-                TextField("1080", text: $heightText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 80)
+                TextField("config.virtualDesktop.height", text: $heightText, prompt: Text(verbatim: "1080"))
+                    .labelsHidden()
+                    .frame(width: 70)
+                    .multilineTextAlignment(.trailing)
                     .onChange(of: heightText) { _, newValue in
                         if let val = Int(newValue) {
                             bottle.settings.customResolutionHeight = min(max(val, 480), 4_320)
                         }
                     }
-                    .onSubmit {
-                        validateAndPersistCustom()
-                    }
+                    .onSubmit { validateAndPersistCustom() }
             }
         }
-    }
-
-    // MARK: - Running Process Warning
-
-    private var runningProcessWarning: some View {
-        HStack {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.blue)
-            Text("config.virtualDesktop.processesRunning")
-                .font(.caption)
-            Spacer()
-        }
-        .padding(8)
-        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 
     // MARK: - Helpers
@@ -215,12 +185,6 @@ struct ResolutionConfigSection: View {
     func syncCustomFields() {
         widthText = "\(bottle.settings.customResolutionWidth)"
         heightText = "\(bottle.settings.customResolutionHeight)"
-    }
-
-    func checkRunningProcesses() async {
-        let wineserverActive = await Wine.isWineserverRunning(for: bottle)
-        let trackedCount = ProcessRegistry.shared.getProcessCount(for: bottle)
-        hasRunningProcesses = wineserverActive || trackedCount > 0
     }
 }
 

@@ -19,11 +19,12 @@
 import SwiftUI
 import WhiskyKit
 
-/// Audio settings controls with Simple/Advanced mode toggle.
+/// The audio driver and latency, and, with advanced settings shown, the
+/// output device and the reset.
 ///
-/// Simple mode shows at most 2 controls (Audio Driver and Latency Preset).
-/// Advanced mode adds all controls including output device pinning and
-/// a destructive Reset Audio State button.
+/// With advanced settings hidden, the driver and latency offer only the two
+/// choices most people need; a value outside those still shows, so the picker
+/// never draws blank for a bottle set up while they were shown.
 struct AudioSettingsView: View {
     @Bindable var bottle: Bottle
     let advancedMode: Bool
@@ -34,33 +35,40 @@ struct AudioSettingsView: View {
     @State private var showResetConfirmation: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            audioDriverPicker
-            latencyPresetPicker
-            if advancedMode {
-                advancedControls
-            }
+        audioDriverPicker
+        latencyPresetPicker
+        if advancedMode {
+            outputDeviceModePicker
+            resetAudioStateButton
         }
     }
 
     // MARK: - Audio Driver Picker
 
+    private var driverOptions: [AudioDriverMode] {
+        let simple: [AudioDriverMode] = [.auto, .disabled]
+        if advancedMode { return AudioDriverMode.allCases }
+        return simple.contains(bottle.settings.audioDriver) ? simple : simple + [bottle.settings.audioDriver]
+    }
+
     private var audioDriverPicker: some View {
-        HStack {
-            Picker("Audio Driver", selection: $bottle.settings.audioDriver) {
-                if advancedMode {
-                    ForEach(AudioDriverMode.allCases, id: \.self) { mode in
+        LabeledContent {
+            HStack {
+                if isWritingDriver {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Picker("config.audio.driver", selection: $bottle.settings.audioDriver) {
+                    ForEach(driverOptions, id: \.self) { mode in
                         Text(mode.displayName).tag(mode)
                     }
-                } else {
-                    Text(AudioDriverMode.auto.displayName).tag(AudioDriverMode.auto)
-                    Text(AudioDriverMode.disabled.displayName).tag(AudioDriverMode.disabled)
                 }
+                .labelsHidden()
+                .fixedSize()
             }
-            if isWritingDriver {
-                ProgressView()
-                    .controlSize(.small)
-            }
+        } label: {
+            Text("config.audio.driver")
+            Text("config.audio.driver.detail")
         }
         .onChange(of: bottle.settings.audioDriver) { _, newValue in
             isWritingDriver = true
@@ -73,24 +81,31 @@ struct AudioSettingsView: View {
 
     // MARK: - Latency Preset Picker
 
+    private var latencyOptions: [AudioLatencyPreset] {
+        let simple: [AudioLatencyPreset] = [.defaultPreset, .stable]
+        if advancedMode { return AudioLatencyPreset.allCases }
+        let current = bottle.settings.audioLatencyPreset
+        return simple.contains(current) ? simple : simple + [current]
+    }
+
     private var latencyPresetPicker: some View {
-        HStack {
-            Picker("Latency", selection: $bottle.settings.audioLatencyPreset) {
-                if advancedMode {
-                    ForEach(AudioLatencyPreset.allCases, id: \.self) { preset in
+        LabeledContent {
+            HStack {
+                if isWritingLatency {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                Picker("config.audio.latency", selection: $bottle.settings.audioLatencyPreset) {
+                    ForEach(latencyOptions, id: \.self) { preset in
                         Text(preset.displayName).tag(preset)
                     }
-                } else {
-                    Text(AudioLatencyPreset.defaultPreset.displayName)
-                        .tag(AudioLatencyPreset.defaultPreset)
-                    Text(AudioLatencyPreset.stable.displayName)
-                        .tag(AudioLatencyPreset.stable)
                 }
+                .labelsHidden()
+                .fixedSize()
             }
-            if isWritingLatency {
-                ProgressView()
-                    .controlSize(.small)
-            }
+        } label: {
+            Text("config.audio.latency")
+            Text("config.audio.latency.detail")
         }
         .onChange(of: bottle.settings.audioLatencyPreset) { _, newValue in
             isWritingLatency = true
@@ -101,32 +116,21 @@ struct AudioSettingsView: View {
         }
     }
 
-    // MARK: - Advanced Controls
-
-    private var advancedControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            outputDeviceModePicker
-            resetAudioStateButton
-        }
-    }
-
     // MARK: - Output Device Mode Picker
 
+    @ViewBuilder
     private var outputDeviceModePicker: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Picker("Output Device", selection: $bottle.settings.outputDeviceMode) {
-                ForEach(OutputDeviceMode.allCases, id: \.self) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
+        SettingsPicker("config.audio.outputDevice", selection: $bottle.settings.outputDeviceMode) {
+            ForEach(OutputDeviceMode.allCases, id: \.self) { mode in
+                Text(mode.displayName).tag(mode)
             }
-            if bottle.settings.outputDeviceMode == .pinned {
-                HStack {
-                    Text("Pinned device:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(bottle.settings.pinnedDeviceName ?? "Not set")
-                        .font(.caption)
-                        .foregroundStyle(bottle.settings.pinnedDeviceName != nil ? .primary : .tertiary)
+        }
+        if bottle.settings.outputDeviceMode == .pinned {
+            LabeledContent("config.audio.pinnedDevice") {
+                if let name = bottle.settings.pinnedDeviceName {
+                    Text(name)
+                } else {
+                    Text("config.audio.pinnedDevice.none")
                 }
             }
         }
@@ -135,26 +139,28 @@ struct AudioSettingsView: View {
     // MARK: - Reset Audio State
 
     private var resetAudioStateButton: some View {
-        HStack {
-            Button("Reset Audio State") {
-                showResetConfirmation = true
-            }
-            .buttonStyle(.bordered)
-            .tint(.red)
-            .controlSize(.small)
-            .disabled(isResettingAudioState)
-            .alert("Reset Audio State?", isPresented: $showResetConfirmation) {
-                Button("Cancel", role: .cancel) {}
-                Button("Reset", role: .destructive) {
-                    performReset()
+        LabeledContent {
+            HStack {
+                if isResettingAudioState {
+                    ProgressView()
+                        .controlSize(.small)
                 }
-            } message: {
-                Text("This will clear Wine cached audio device mappings and restart the Wine server.")
+                Button("config.audio.reset", role: .destructive) {
+                    showResetConfirmation = true
+                }
+                .disabled(isResettingAudioState)
             }
-            if isResettingAudioState {
-                ProgressView()
-                    .controlSize(.small)
+        } label: {
+            Text("config.audio.reset")
+            Text("config.audio.reset.detail")
+        }
+        .alert("config.audio.reset.confirm.title", isPresented: $showResetConfirmation) {
+            Button("button.cancel", role: .cancel) {}
+            Button("config.audio.reset.confirm.reset", role: .destructive) {
+                performReset()
             }
+        } message: {
+            Text("config.audio.reset.detail")
         }
     }
 

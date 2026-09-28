@@ -16,200 +16,58 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-import os
 import SwiftUI
 import WhiskyKit
 
-enum RetinaModeState: Equatable {
-    case enabled, disabled, unknown
-}
-
+/// The Wine section of the General tab: what Windows the prefix claims to be,
+/// and the process-level switches that go with it.
 struct WineConfigSection: View {
-    private static let logger = Logger(subsystem: Bundle.whiskyBundleIdentifier, category: "ConfigView")
     @Bindable var bottle: Bottle
-
-    @Binding var buildVersion: String
-    @Binding var windowsVersion: WinVersion
-    @Binding var retinaModeState: RetinaModeState
-    @Binding var dpiConfig: Int
-    @Binding var winVersionLoadingState: LoadingState
-    @Binding var buildVersionLoadingState: LoadingState
-    @Binding var retinaModeLoadingState: LoadingState
-    @Binding var dpiConfigLoadingState: LoadingState
-    @Binding var dpiSheetPresented: Bool
-    /// True when a read timed out rather than failed, which means the prefix is
-    /// busy rather than broken.
-    var prefixBusy = false
-    var onRetryWindowsVersion: (() -> Void)?
-    var onRetryBuildVersion: (() -> Void)?
-    /// Set when a typed build belongs to a different Windows version. Shown
-    /// under the field rather than written to the prefix.
-    @State private var buildVersionMismatch: String?
-    var onRetryRetinaMode: (() -> Void)?
-    var onRetryDpi: (() -> Void)?
+    @Bindable var prefix: BottlePrefixState
 
     var body: some View {
         Section("config.title.wine") {
-            RuntimePickerView(bottle: bottle)
-            if prefixBusy {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Image(systemName: "clock.badge.exclamationmark")
-                        .foregroundStyle(.orange)
-                    Text("config.prefixBusy")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            if prefix.prefixBusy {
+                SettingsNotice(.warning, "config.prefixBusy")
             }
-            SettingItemView(
+            SettingsLoadingRow(
                 title: "config.winVersion",
-                description: "config.winVersion.info",
-                loadingState: winVersionLoadingState,
-                onRetry: onRetryWindowsVersion
+                detail: "config.winVersion.info",
+                state: prefix.winVersionLoadingState,
+                onRetry: prefix.loadWindowsVersion
             ) {
-                Picker("config.winVersion", selection: $windowsVersion) {
+                Picker("config.winVersion", selection: prefix.windowsVersionBinding) {
                     ForEach(WinVersion.allCases.reversed(), id: \.self) {
                         Text($0.pretty())
                     }
                 }
             }
-            SettingItemView(
+            SettingsLoadingRow(
                 title: "config.buildVersion",
-                description: "config.buildVersion.info",
-                loadingState: buildVersionLoadingState,
-                onRetry: onRetryBuildVersion
+                detail: "config.buildVersion.info",
+                state: prefix.buildVersionLoadingState,
+                onRetry: prefix.loadBuildName
             ) {
-                VStack(alignment: .trailing, spacing: 4) {
-                    TextField(
-                        "config.buildVersion.notSet",
-                        text: $buildVersion
-                    )
+                TextField("config.buildVersion.notSet", text: $prefix.buildVersion)
                     .multilineTextAlignment(.trailing)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .onSubmit { submitBuildVersion() }
-
-                    if let buildVersionMismatch {
-                        Text(buildVersionMismatch)
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .multilineTextAlignment(.trailing)
-                    }
-                }
+                    .frame(maxWidth: 140)
+                    .onSubmit { prefix.submitBuildVersion() }
             }
-            SettingItemView(
-                title: "config.retinaMode",
-                description: "config.retinaMode.info",
-                loadingState: retinaModeLoadingState,
-                onRetry: onRetryRetinaMode
+            if let mismatch = prefix.buildVersionMismatch {
+                SettingsNotice(.warning, text: Text(mismatch))
+            }
+            SettingsPicker(
+                "config.enhancedSync",
+                detail: "config.enhancedSync.info",
+                selection: $bottle.settings.enhancedSync
             ) {
-                VStack(alignment: .trailing, spacing: 4) {
-                    Picker("config.retinaMode", selection: $retinaModeState) {
-                        Text("config.retinaMode.on").tag(RetinaModeState.enabled)
-                        Text("config.retinaMode.off").tag(RetinaModeState.disabled)
-                        Text("config.retinaMode.unknown").tag(RetinaModeState.unknown)
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: retinaModeState) { oldValue, newValue in
-                        guard newValue != .unknown, newValue != oldValue else { return }
-                        let boolValue = newValue == .enabled
-                        Task(priority: .userInitiated) {
-                            retinaModeLoadingState = .modifying
-                            do {
-                                try await Wine.changeRetinaMode(
-                                    bottle: bottle, retinaMode: boolValue
-                                )
-                                retinaModeLoadingState = .success
-                            } catch {
-                                Self.logger.error(
-                                    "Failed to change retina mode: \(error.localizedDescription)"
-                                )
-                                retinaModeLoadingState = .failed
-                            }
-                        }
-                    }
-                    if retinaModeState == .unknown {
-                        Text("config.retinaMode.unknownHint")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                Text("config.enhancedSync.none").tag(EnhancedSync.none)
+                Text("config.enhancedSync.esync").tag(EnhancedSync.esync)
+                Text("config.enhancedSync.msync").tag(EnhancedSync.msync)
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Picker("config.enhancedSync", selection: $bottle.settings.enhancedSync) {
-                    Text("config.enhancedSync.none").tag(EnhancedSync.none)
-                    Text("config.enhancedSync.esync").tag(EnhancedSync.esync)
-                    Text("config.enhancedSync.msync").tag(EnhancedSync.msync)
-                }
-                Text("config.enhancedSync.info")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            SettingItemView(
-                title: "config.dpi",
-                description: "config.dpi.info",
-                loadingState: dpiConfigLoadingState,
-                onRetry: onRetryDpi
-            ) {
-                Button("config.inspect") {
-                    dpiSheetPresented = true
-                }
-                .sheet(isPresented: $dpiSheetPresented) {
-                    DPIConfigSheetView(
-                        dpiConfig: $dpiConfig,
-                        isRetinaMode: Binding(
-                            get: { retinaModeState == .enabled },
-                            set: { _ in }
-                        ),
-                        presented: $dpiSheetPresented
-                    )
-                }
-            }
-            Toggle(isOn: $bottle.settings.avxEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("config.avx")
-                    if bottle.settings.avxEnabled {
-                        HStack(alignment: .firstTextBaseline) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .symbolRenderingMode(.multicolor)
-                                .font(.subheadline)
-                            Text("config.avx.warning")
-                                .fontWeight(.light)
-                                .font(.subheadline)
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-extension WineConfigSection {
-    /// Writes the typed build number, or explains why it was not written.
-    ///
-    /// The version and the build are read together by everything that asks what
-    /// Windows this is, so a build from another version is refused here rather
-    /// than left for a program to trip over.
-    private func submitBuildVersion() {
-        buildVersionMismatch = nil
-        guard let version = Int(buildVersion) else { return }
-
-        let windowsVersion = bottle.settings.windowsVersion
-        guard windowsVersion.accepts(build: version) else {
-            buildVersionMismatch = String(
-                localized: "config.buildVersion.mismatch \(windowsVersion.pretty()) \(windowsVersion.defaultBuild)"
-            )
-            onRetryBuildVersion?()
-            return
-        }
-
-        buildVersionLoadingState = .modifying
-        Task(priority: .userInitiated) {
-            do {
-                try await Wine.changeBuildVersion(bottle: bottle, version: version)
-                buildVersionLoadingState = .success
-            } catch {
-                Self.logger.error("Failed to change build version: \(error.localizedDescription)")
-                buildVersionLoadingState = .failed
+            SettingsToggle("config.avx", detail: "config.avx.info", isOn: $bottle.settings.avxEnabled)
+            if bottle.settings.avxEnabled {
+                SettingsNotice(.warning, "config.avx.warning")
             }
         }
     }

@@ -20,10 +20,16 @@ import Metal
 import SwiftUI
 import WhiskyKit
 
+/// The Graphics tab: the backend, what the backend offers, and, with advanced
+/// settings shown, the DXVK and Metal switches and the programs that override
+/// the backend.
 struct GraphicsConfigSection: View {
     @Bindable var bottle: Bottle
-    @AppStorage("graphicsAdvancedMode") private var advancedMode: Bool = false
-    @State private var hasRunningProcesses: Bool = false
+    @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
+    @State private var isRunning = false
+
+    /// Read once: the GPU does not change while Whisky runs.
+    private static let supportsRaytracing = MTLCreateSystemDefaultDevice()?.supportsFamily(.apple9) ?? false
 
     private var resolvedBackend: GraphicsBackend {
         if bottle.settings.graphicsBackend == .recommended {
@@ -40,38 +46,8 @@ struct GraphicsConfigSection: View {
         WhiskyWineInstaller.isRelay12Available(for: bottle.settings.runtime)
     }
 
-    private var relay12Toggle: some View {
-        Toggle(isOn: $bottle.settings.relay12) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("config.relay12")
-                    Text("config.graphics.tag.experimental")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(.purple.opacity(0.18), in: Capsule())
-                        .foregroundStyle(.purple)
-                }
-                Text(relay12Available ? "config.relay12.info" : "config.relay12.unavailable")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .disabled(!relay12Available)
-        .accessibilityIdentifier("relay12Toggle")
-    }
-
     var body: some View {
-        Section("config.title.graphics") {
-            // Simple/Advanced segmented control
-            Picker("", selection: $advancedMode) {
-                Text("config.graphics.simple").tag(false)
-                Text("config.graphics.advanced").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            // Backend picker -- always visible
+        Section {
             BackendPickerView(
                 selection: $bottle.settings.graphicsBackend,
                 resolvedBackend: resolvedBackend,
@@ -84,44 +60,35 @@ struct GraphicsConfigSection: View {
             // degrades to WineD3D at launch — say so instead (issue #146).
             if bottle.settings.graphicsBackend == .d3dMetal,
                !WhiskyWineInstaller.isBackendAvailable(.d3dMetal, for: bottle.settings.runtime) {
-                d3dMetalMissingWarning
+                SettingsNotice(.warning, "config.graphics.backend.d3dMetal.missingWarning")
             }
 
-            // Running process warning banner
-            if hasRunningProcesses {
-                runningProcessWarning
+            RunningBottleNotice(bottle: bottle, isRunning: $isRunning)
+        } header: {
+            Text("config.graphics.backend")
+        } footer: {
+            if bottle.settings.graphicsBackend == .recommended {
+                Text("config.graphics.helperCurrently \(resolvedBackend.displayName)")
+            } else {
+                Text("config.graphics.helperNextLaunch")
             }
+        }
+        .task { isRunning = await RunningBottleNotice.isRunning(bottle) }
 
+        Section("config.title.graphics") {
             // MetalFX rides on D3DMetal's DLSS bridge and Metal 4 is D3DMetal's
             // own command-encoding backend, so both are meaningless under any
             // other backend rather than merely inactive.
             if resolvedBackend == .d3dMetal {
-                Toggle(isOn: $bottle.settings.metalFX) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("config.metalFX")
-                        Text("config.metalFX.info")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                Toggle(isOn: $bottle.settings.metal4Enabled) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("config.metal4")
-                        Text("config.metal4.info")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                SettingsToggle("config.metalFX", detail: "config.metalFX.info", isOn: $bottle.settings.metalFX)
+                SettingsToggle("config.metal4", detail: "config.metal4.info", isOn: $bottle.settings.metal4Enabled)
                 // Frame generation reaches MetalFX through the same DLSS bridge
                 // as upscaling, so it has nothing to switch on without it.
-                Toggle(isOn: $bottle.settings.frameGeneration) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("config.frameGeneration")
-                        Text("config.frameGeneration.info")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                SettingsToggle(
+                    "config.frameGeneration",
+                    detail: "config.frameGeneration.info",
+                    isOn: $bottle.settings.frameGeneration
+                )
                 .disabled(!bottle.settings.metalFX)
             }
 
@@ -134,118 +101,58 @@ struct GraphicsConfigSection: View {
                 relay12Toggle
             }
 
-            // Force DX11 toggle -- always visible (Simple + Advanced)
-            Toggle(isOn: $bottle.settings.forceD3D11) {
-                Text("config.forceD3D11")
-            }
+            SettingsToggle("config.forceD3D11", detail: "config.forceD3D11.info", isOn: $bottle.settings.forceD3D11)
 
             // The Sequoia compatibility toggle is gone: everything it set is a
             // platform-layer fix applied on every supported macOS, so the
             // switch changed nothing in either position.
 
-            // "Advanced settings active" badge in Simple mode
-            if !advancedMode, hasAdvancedSettingsConfigured {
-                advancedSettingsBadge
-            }
+            AdvancedSettingsNotice(
+                isActive: hasAdvancedSettingsConfigured || !programsWithGraphicsOverrides.isEmpty
+            )
+        }
 
-            // Per-program override note in Simple mode
-            if !advancedMode, !programsWithGraphicsOverrides.isEmpty {
-                programOverridesBadge
-            }
+        if showAdvanced {
+            DXVKSettingsView(bottle: bottle, resolvedBackend: resolvedBackend, bottleURL: bottle.url)
 
-            // Advanced mode content
-            if advancedMode {
-                // DXVK settings subsection
-                DXVKSettingsView(
-                    bottle: bottle,
-                    resolvedBackend: resolvedBackend,
-                    bottleURL: bottle.url
+            Section("config.metal.title") {
+                SettingsToggle("config.metalHud", detail: "config.metalHud.info", isOn: $bottle.settings.metalHud)
+                SettingsToggle("config.metalTrace", detail: "config.metalTrace.info", isOn: $bottle.settings.metalTrace)
+                if Self.supportsRaytracing {
+                    SettingsToggle("config.dxr", detail: "config.dxr.info", isOn: $bottle.settings.dxrEnabled)
+                }
+                SettingsToggle(
+                    "config.metalValidation",
+                    detail: "config.metalValidation.info",
+                    isOn: $bottle.settings.metalValidation
                 )
+            }
 
-                // Metal settings subsection
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("config.metal.title")
-                        .font(.headline)
-                    Toggle(isOn: $bottle.settings.metalHud) {
-                        Text("config.metalHud")
-                    }
-                    Toggle(isOn: $bottle.settings.metalTrace) {
-                        Text("config.metalTrace")
-                        Text("config.metalTrace.info")
-                    }
-                    if let device = MTLCreateSystemDefaultDevice() {
-                        if device.supportsFamily(.apple9) {
-                            Toggle(isOn: $bottle.settings.dxrEnabled) {
-                                Text("config.dxr")
-                                Text("config.dxr.info")
-                            }
-                        }
-                    }
-                    Toggle(isOn: $bottle.settings.metalValidation) {
-                        Text("config.metalValidation")
-                    }
-                }
-
-                // Per-program override info
-                if !programsWithGraphicsOverrides.isEmpty {
-                    programOverridesInfo
-                }
+            if !programsWithGraphicsOverrides.isEmpty {
+                programOverridesSection
             }
         }
-        .animation(.default, value: advancedMode)
-        .task {
-            await checkRunningProcesses()
-        }
     }
 
-    // MARK: - D3DMetal Missing Warning
-
-    private var d3dMetalMissingWarning: some View {
-        HStack {
-            Image(systemName: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
-            Text("config.graphics.backend.d3dMetal.missingWarning")
-                .font(.caption)
-            Spacer()
-        }
-    }
-
-    // MARK: - Running Process Warning
-
-    private var runningProcessWarning: some View {
-        HStack {
-            Image(systemName: "info.circle")
-                .foregroundStyle(.blue)
-            Text("config.graphics.nextLaunchInfo")
-                .font(.caption)
-            Spacer()
-            Button("config.graphics.stopBottle") {
-                Wine.killBottle(bottle: bottle)
-                Task {
-                    // Brief delay for wineserver to stop
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    await checkRunningProcesses()
-                }
+    private var relay12Toggle: some View {
+        Toggle(isOn: $bottle.settings.relay12) {
+            HStack(spacing: 6) {
+                Text("config.relay12")
+                Text("config.graphics.tag.experimental")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.purple)
             }
-            .font(.caption)
-            .foregroundStyle(.red)
+            Text(relay12Available ? "config.relay12.info" : "config.relay12.unavailable")
         }
-        .padding(8)
-        .background(.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .disabled(!relay12Available)
+        .accessibilityIdentifier("relay12Toggle")
     }
 
-    // MARK: - Running Process Check
+    // MARK: - Advanced
 
-    private func checkRunningProcesses() async {
-        let wineserverActive = await Wine.isWineserverRunning(for: bottle)
-        let trackedCount = ProcessRegistry.shared.getProcessCount(for: bottle)
-        hasRunningProcesses = wineserverActive || trackedCount > 0
-    }
-
-    // MARK: - Advanced Settings Badge
-
+    /// True when a setting that only shows with advanced settings on is not at
+    /// its default, so hiding them would hide something in effect.
     private var hasAdvancedSettingsConfigured: Bool {
-        // Default dxvkAsync is true; check if any advanced-only settings differ from defaults
         !bottle.settings.dxvkAsync
             || bottle.settings.dxvkHud != .off
             || bottle.settings.metalHud
@@ -254,65 +161,26 @@ struct GraphicsConfigSection: View {
             || bottle.settings.dxrEnabled
     }
 
-    private var advancedSettingsBadge: some View {
-        HStack {
-            Image(systemName: "gearshape.2")
-                .foregroundStyle(.secondary)
-            Text("config.graphics.advancedActive")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button("config.graphics.showAdvanced") {
-                advancedMode = true
-            }
-            .font(.caption)
-        }
-    }
-
-    // MARK: - Per-Program Override Info
+    // MARK: - Per-Program Overrides
 
     private var programsWithGraphicsOverrides: [Program] {
         bottle.programs.filter { $0.settings.overrides?.graphicsBackend != nil }
     }
 
-    private var programOverridesBadge: some View {
-        HStack {
-            Image(systemName: "slider.horizontal.3")
-                .foregroundStyle(.secondary)
-            Text("config.graphics.programOverridesActive")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Button("config.graphics.showAdvanced") {
-                advancedMode = true
-            }
-            .font(.caption)
-        }
-    }
-
-    private var programOverridesInfo: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("config.graphics.programOverrides")
-                .font(.headline)
+    private var programOverridesSection: some View {
+        Section {
             ForEach(programsWithGraphicsOverrides) { program in
-                HStack {
-                    Image(systemName: "slider.horizontal.3")
-                        .foregroundStyle(.blue)
-                        .font(.caption)
-                    Text(program.name)
-                        .font(.callout)
-                    Spacer()
+                LabeledContent(program.name) {
                     Text(
                         program.settings.overrides?.graphicsBackend?.displayName
                             ?? String(localized: "config.graphics.inherited")
                     )
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
                 }
             }
+        } header: {
+            Text("config.graphics.programOverrides")
+        } footer: {
             Text("config.graphics.programOverrides.hint")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
     }
 }

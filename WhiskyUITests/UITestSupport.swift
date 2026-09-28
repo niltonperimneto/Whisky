@@ -95,7 +95,9 @@ class WhiskyUITestCase: XCTestCase {
         }
     }
 
-    /// Navigate to Bottle Configuration view of the currently-selected bottle.
+    /// Open the bottle settings window of the currently-selected bottle on
+    /// its General tab, and wait for General's Wine section. The window
+    /// remembers its last tab, so General is chosen rather than assumed.
     func openBottleConfiguration() {
         let configRow = require(
             app.buttons["nav.bottleConfiguration"],
@@ -103,11 +105,23 @@ class WhiskyUITestCase: XCTestCase {
             timeout: 8
         )
         configRow.click()
+        openBottleSettingsTab("general")
         require(
             app.staticTexts["Wine"],
             "Wine section header in Bottle Configuration",
             timeout: 5
         )
+    }
+
+    /// Switch the bottle settings window to one of its toolbar tabs, by the
+    /// tab's raw value ("general", "input", …).
+    func openBottleSettingsTab(_ tab: String) {
+        let button = require(
+            app.buttons["bottleSettings.tab.\(tab)"],
+            "bottle settings \(tab) tab",
+            timeout: 5
+        )
+        button.click()
     }
 
     /// Navigate to Game Configurations view of the currently-selected bottle.
