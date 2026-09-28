@@ -123,3 +123,12 @@ winecx-*/
 tmp_winecx*/
 relay12/
 relay12-*/
+
+# Build and cache artifacts
+CompilationCache.noindex/
+Logs/
+ModuleCache.noindex/
+SDKExplicitPrecompiledModules/
+SDKStatCaches.noindex/
+SourcePackages/
+info.plist
