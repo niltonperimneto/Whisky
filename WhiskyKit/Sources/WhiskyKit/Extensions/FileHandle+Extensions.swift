@@ -132,10 +132,6 @@ private final class WineLogCapRegistry: @unchecked Sendable {
         }
     }
 
-    func removeState(for handle: FileHandle) {
-        flushAndRemoveState(for: handle)
-    }
-
     private func attachDeinitObserverIfNeeded(to handle: FileHandle, key: ObjectIdentifier) {
         // Ensure state is cleared even if `closeWineLog()` isn't called (e.g., early returns / errors).
         if objc_getAssociatedObject(handle, &Self.deinitObserverKey) != nil { return }

@@ -330,13 +330,6 @@ extension WineSubprocessTracker {
 
     // MARK: - Public Queries
 
-    /// Returns currently active subprocesses for a given bottle.
-    public func activeSubprocesses(for bottleURL: URL) -> [TrackedWineSubprocess] {
-        lock.lock()
-        defer { lock.unlock() }
-        return activeChildren.values.map(\.info).filter { $0.bottleURL == bottleURL }
-    }
-
     /// Returns recent subprocesses detected for a bottle.
     public func recentSubprocesses(for bottleURL: URL) -> [TrackedWineSubprocess] {
         lock.lock()

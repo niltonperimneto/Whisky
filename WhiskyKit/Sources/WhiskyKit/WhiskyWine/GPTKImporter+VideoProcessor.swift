@@ -80,14 +80,6 @@ extension GPTKImporter {
     /// Every slot we interpose, in the order they are installed.
     static let interposers = [videoProcessorInterposer, dxgiVersionInterposer]
 
-    /// Where the runtime ships the interposer, if it is new enough to carry one.
-    static let videoProcessorShimPath = ["lib", "gptk-video", "d3d12shim.dll"]
-    /// Apple's D3D12 under its second name. Nine characters, and that is not a
-    /// style choice: the export name is patched in place, so it cannot grow.
-    static let videoDeviceDLLName = "d3dmt.dll"
-    static let videoDeviceUnixName = "d3dmt.so"
-    static let videoProcessorSlotName = "d3d12.dll"
-
     static func shim(for interposer: GPTKInterposer, inLibraryFolder folder: URL) -> URL {
         folder.appending(path: "Wine").appending(path: "lib")
             .appending(path: "gptk-video").appending(path: interposer.shimFileName)
@@ -103,10 +95,6 @@ extension GPTKImporter {
         FileManager.default.fileExists(
             atPath: shim(for: interposer, inLibraryFolder: folder).path(percentEncoded: false)
         )
-    }
-
-    static func hasVideoProcessor(inLibraryFolder folder: URL) -> Bool {
-        has(videoProcessorInterposer, inLibraryFolder: folder)
     }
 
     /// Whether the interposer currently occupies the `d3d12.dll` slot.
