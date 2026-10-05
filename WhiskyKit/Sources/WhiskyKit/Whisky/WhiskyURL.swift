@@ -39,6 +39,9 @@ import Foundation
 /// Parsing does not decide whether the target exists. That is
 /// `QuickLaunch`'s job, and it happens before the user is asked to confirm, so
 /// the confirmation can name what will actually run.
+///
+/// - Important: Work in progress. Nothing in the app or the CLI uses this
+///   type yet; only its own tests exercise it.
 public enum WhiskyURL {
     /// A well-formed request. `bottle` narrows the search when the same app ID
     /// or pin name exists in more than one bottle.
