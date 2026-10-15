@@ -132,3 +132,31 @@ SDKExplicitPrecompiledModules/
 SDKStatCaches.noindex/
 SourcePackages/
 info.plist
+
+# Build logs, scratch files and one-off fix scripts at the repository root
+/build_log.txt
+/build_final*.txt
+/deploy*.log
+/deploy*.sh
+/scratch.*
+/fix_*.py
+/fix_*.reg
+/patch_*.sh
+/patch_*.py
+/test_tabview.py
+/update_configview.py
+/run_peak.sh
+*.dxvk-cache
+*.orig
+*.rej
+
+# Agent and editor configuration
+.agent-backups/
+.agents/
+.codex/
+.cursor/
+.kilo/
+.opencode/
+.fw-context/
+.zed/
+.claude/settings.local.json

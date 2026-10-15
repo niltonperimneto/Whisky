@@ -147,6 +147,9 @@ public enum SteamFrontendScript {
 
 /// Drives the macOS Steam client's interface to do what it will not do for a
 /// Windows title on its own.
+///
+/// - Important: Work in progress. Nothing in the app or the CLI uses this
+///   type yet; only its own tests exercise it.
 public actor SteamFrontend {
     private let devTools: SteamDevTools
 

@@ -151,9 +151,7 @@ extension Whisky {
     struct Export: ParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Export an existing bottle.")
 
-        mutating func run() throws {
-//            print("Create a bottle")
-        }
+        mutating func run() throws {}
     }
 
     struct Delete: AsyncParsableCommand {

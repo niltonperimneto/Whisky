@@ -123,37 +123,6 @@ public enum FlowValidator {
         return issues
     }
 
-    /// Validates flows and asserts on errors in debug builds. Logs warnings in release builds.
-    ///
-    /// Call after loading flows to catch authoring errors early during development.
-    ///
-    /// - Parameters:
-    ///   - flows: Flow definitions keyed by category ID.
-    ///   - fragments: Fragment definitions keyed by fragment name.
-    public static func validateAndReport(
-        flows: [String: FlowDefinition],
-        fragments: [String: FlowDefinition]
-    ) {
-        let issues = validate(flows: flows, fragments: fragments)
-
-        #if DEBUG
-        let errors = issues.filter { $0.severity == .error }
-        if !errors.isEmpty {
-            let descriptions = errors.map { "[\($0.flowId)] \($0.nodeId ?? "?"): \($0.message)" }
-            assertionFailure("Flow validation errors:\n\(descriptions.joined(separator: "\n"))")
-        }
-        #else
-        for issue in issues {
-            switch issue.severity {
-            case .error:
-                logger.error("Flow validation error in \(issue.flowId): \(issue.message)")
-            case .warning:
-                logger.warning("Flow validation warning in \(issue.flowId): \(issue.message)")
-            }
-        }
-        #endif
-    }
-
     // MARK: - Private Validation
 
     // swiftlint:disable:next function_body_length

@@ -41,6 +41,9 @@ import Foundation
 /// This probe is a fallback, scoped to the `vcruntime` definition, and is
 /// only consulted when verb-based detection found the required verbs
 /// missing -- a bottle whose log already says installed is never probed.
+///
+/// - Important: Work in progress. Nothing in the app or the CLI uses this
+///   type yet; only its own tests exercise it.
 public enum VCRuntimeFallback {
     /// The probe file, relative to drive_c: the x64 redist's mfc140.dll on
     /// win64 bottles (where system32 is the 64-bit directory); on win32 the

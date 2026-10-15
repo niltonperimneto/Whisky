@@ -25,10 +25,13 @@ final class TerminalAppTests: XCTestCase {
 
     func testAllCasesExist() {
         let allCases = TerminalApp.allCases
-        XCTAssertEqual(allCases.count, 3)
+        XCTAssertEqual(allCases.count, 6)
         XCTAssertTrue(allCases.contains(.terminal))
         XCTAssertTrue(allCases.contains(.iterm))
         XCTAssertTrue(allCases.contains(.warp))
+        XCTAssertTrue(allCases.contains(.ghostty))
+        XCTAssertTrue(allCases.contains(.kitty))
+        XCTAssertTrue(allCases.contains(.alacritty))
     }
 
     // MARK: - Display Names
@@ -206,5 +209,35 @@ final class TerminalAppTests: XCTestCase {
 
         XCTAssertNotNil(script)
         XCTAssertTrue(script?.contains("do script") ?? false)
+    }
+
+    // MARK: - Command-line terminals
+
+    func testCommandLineTerminalsHaveTheirBundleIdentifiers() {
+        XCTAssertEqual(TerminalApp.ghostty.bundleIdentifier, "com.mitchellh.ghostty")
+        XCTAssertEqual(TerminalApp.kitty.bundleIdentifier, "net.kovidgoyal.kitty")
+        XCTAssertEqual(TerminalApp.alacritty.bundleIdentifier, "org.alacritty")
+    }
+
+    func testCommandLineLaunchSourcesTheScriptThenKeepsAShell() {
+        let path = "/tmp/it's a dir/whisky-env.sh"
+        for terminal in [TerminalApp.ghostty, .alacritty] {
+            XCTAssertEqual(
+                terminal.commandLineLaunch(for: path),
+                "'/usr/bin/open' '-n' '-b' '\(terminal.bundleIdentifier)' '--args' '-e' '/bin/bash' '-c' "
+                    + #"'source "$1"; exec "${SHELL:-/bin/zsh}" -i' 'whisky' '/tmp/it'\''s a dir/whisky-env.sh'"#
+            )
+        }
+        // kitty takes the program as trailing arguments, without `-e`.
+        XCTAssertFalse(TerminalApp.kitty.commandLineLaunch(for: path).contains("'-e'"))
+    }
+
+    /// The command survives AppleScript: running what `do shell script` would
+    /// receive through the shell yields the intended arguments.
+    func testCommandLineAppleScriptEscapesForAppleScript() {
+        let script = TerminalApp.ghostty.generateAppleScript(for: #"/tmp/a "b"/c.sh"#)
+        XCTAssertTrue(script.hasPrefix("do shell script \""))
+        XCTAssertTrue(script.contains(#"'/tmp/a \"b\"/c.sh'"#))
+        XCTAssertTrue(script.contains(#"\"$1\""#))
     }
 }

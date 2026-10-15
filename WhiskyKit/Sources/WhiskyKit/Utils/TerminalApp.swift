@@ -30,10 +30,16 @@ import Foundation
 /// - **iTerm2**: Full AppleScript support via `write text`
 /// - **Warp**: Limited AppleScript support; uses `open -a Warp` to launch script files.
 ///   Warp executes `.sh` files when opened if they have executable permissions.
+/// - **Ghostty**, **kitty**, **Alacritty**: No AppleScript to type into a window,
+///   so a new instance is started with the script as its command. See
+///   ``commandLineLaunch(for:)``.
 public enum TerminalApp: String, CaseIterable, Identifiable {
     case terminal
     case iterm
     case warp
+    case ghostty
+    case kitty
+    case alacritty
 
     public var id: String {
         rawValue
@@ -48,6 +54,12 @@ public enum TerminalApp: String, CaseIterable, Identifiable {
             "iTerm2"
         case .warp:
             "Warp"
+        case .ghostty:
+            "Ghostty"
+        case .kitty:
+            "kitty"
+        case .alacritty:
+            "Alacritty"
         }
     }
 
@@ -60,6 +72,12 @@ public enum TerminalApp: String, CaseIterable, Identifiable {
             "com.googlecode.iterm2"
         case .warp:
             "dev.warp.Warp-Stable"
+        case .ghostty:
+            "com.mitchellh.ghostty"
+        case .kitty:
+            "net.kovidgoyal.kitty"
+        case .alacritty:
+            "org.alacritty"
         }
     }
 
@@ -125,7 +143,31 @@ public enum TerminalApp: String, CaseIterable, Identifiable {
             end tell
             do shell script "open -a Warp \\"\(escapedPath)\\""
             """
+
+        case .ghostty, .kitty, .alacritty:
+            let launch = commandLineLaunch(for: scriptPath)
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return """
+            do shell script "\(launch)"
+            """
         }
+    }
+
+    /// The shell command that opens a new window of a terminal that takes the
+    /// program to run on its command line.
+    ///
+    /// `open -n` starts a new instance, as these terminals do not take a second
+    /// command from an existing one, and `-b` finds the app wherever it is
+    /// installed. The script is Whisky's and is written for bash, so bash
+    /// sources it, then hands the window to the user's own shell, which
+    /// inherits what the script exported. That matches Terminal and iTerm2,
+    /// where the script is sourced into an interactive shell.
+    func commandLineLaunch(for scriptPath: String) -> String {
+        let shell = ["/bin/bash", "-c", #"source "$1"; exec "${SHELL:-/bin/zsh}" -i"#, "whisky", scriptPath]
+        // kitty takes the program as its trailing arguments; the others want `-e`.
+        let program = self == .kitty ? shell : ["-e"] + shell
+        return ShellQuoting.commandLine(["/usr/bin/open", "-n", "-b", bundleIdentifier, "--args"] + program)
     }
 
     /// Generates an AppleScript to run a command directly in a terminal window.
@@ -139,7 +181,8 @@ public enum TerminalApp: String, CaseIterable, Identifiable {
     /// using this method directly.
     ///
     /// - Parameter command: The shell command to execute.
-    /// - Returns: The AppleScript source code, or `nil` if script file creation failed (Warp only).
+    /// - Returns: The AppleScript source code, or `nil` if script file creation failed (Warp), or
+    ///   for Ghostty, kitty and Alacritty, which can only run a script file.
     @available(*, deprecated, message: "Use generateAppleScript(for:) with a temp script file instead")
     public func generateDirectCommandScript(command: String) -> String? {
         switch self {
@@ -188,6 +231,10 @@ public enum TerminalApp: String, CaseIterable, Identifiable {
             end tell
             do shell script "open -a Warp \\"\(escapedPath)\\""
             """
+
+        case .ghostty, .kitty, .alacritty:
+            // No AppleScript to type into; like Warp, only a script file works.
+            return nil
         }
     }
 }

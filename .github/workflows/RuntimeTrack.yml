@@ -33,10 +33,10 @@ env:
   WINE_DEVEL_PINNED: wine-11.17
   DXVK_REPO: doitsujin/dxvk
   DXVK_PINNED: v2.4.0
-  # Pinned to latest upstream commit 7c8dee1 (active runtime packaging carries main-ef11653).
+  # Pinned to latest upstream commit 186a232 (active runtime packaging carries main-ef11653).
   # See docs/DEPENDENCIES.md for payload details.
   DXMT_REPO: 3Shain/dxmt
-  DXMT_PINNED: 7c8dee1
+  DXMT_PINNED: 186a232
 
 jobs:
   track:

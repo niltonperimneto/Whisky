@@ -54,18 +54,6 @@ public struct InstalledRuntime: Identifiable, Equatable {
         return "\(version.major).\(version.minor).\(version.patch)"
     }
 
-    /// Compact provenance shown in runtime pickers without running Wine.
-    public var detailDescription: String {
-        var parts: [String] = []
-        if let wineVersion {
-            parts.append("Wine \(wineVersion)")
-        }
-        if !versionDescription.isEmpty {
-            parts.append("Runtime \(versionDescription)")
-        }
-        return parts.joined(separator: " · ")
-    }
-
     public static func == (lhs: InstalledRuntime, rhs: InstalledRuntime) -> Bool {
         lhs.runtime == rhs.runtime && lhs.versionDescription == rhs.versionDescription
     }

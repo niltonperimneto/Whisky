@@ -79,17 +79,6 @@ public enum HostSteamProcess {
         !runningProcessIdentifiers().isEmpty
     }
 
-    /// Whether the running client was started in a way Whisky can drive.
-    ///
-    /// A client the user opened from the Dock is running without the debugging
-    /// argument, so its interface cannot be reached and its compatibility tools
-    /// were never scanned. Whisky has to offer to restart it rather than
-    /// silently doing nothing.
-    public static func isRunningUnderWhisky() async -> Bool {
-        guard isRunning() else { return false }
-        return await SteamDevTools.isListening()
-    }
-
     /// Where the client is installed, as an app rather than as a binary.
     public static let applicationURL = URL(filePath: "/Applications/Steam.app")
 
