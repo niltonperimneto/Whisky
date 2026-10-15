@@ -32,8 +32,8 @@ extension EnvironmentValues {
 extension View {
     /// Applies the window-level chrome — title, toolbar, search — only when
     /// this pane is not hosted as a workspace tab.
-    func standaloneChrome<Chrome: View>(
-        @ViewBuilder _ chrome: @escaping (Self) -> Chrome
+    func standaloneChrome(
+        @ViewBuilder _ chrome: @escaping (Self) -> some View
     ) -> some View {
         StandaloneChrome(base: self, chrome: chrome)
     }

@@ -283,6 +283,17 @@ final class CrashClassifierPatternTests: XCTestCase {
                 "wine process exit code 1",
             "steam-download-stall":
                 "Steam content_log: download HTTP timed out"
+        ].merging(makeSampleLinesForSessionServices()) { base, _ in base }
+    }
+
+    /// Samples for the Steam networking and Epic Online Services patterns,
+    /// kept apart so neither function outgrows the body-length lint.
+    private func makeSampleLinesForSessionServices() -> [String: String] {
+        [
+            "steam-networking-socket-control-assert":
+                "Assertion Failed: No control data returned even though we asked for TOS?",
+            "eos-external-service-configuration-failure":
+                "LogEOSConnect: Error: Login failed: ConnectExternalServiceConfigurationFailure"
         ]
     }
 

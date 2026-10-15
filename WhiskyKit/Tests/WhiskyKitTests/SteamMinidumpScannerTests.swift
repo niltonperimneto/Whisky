@@ -36,7 +36,9 @@ struct SteamMinidumpScannerTests {
             since: Date().addingTimeInterval(-5)
         )
 
-        #expect(evidence?.dumpURL == dump)
+        // The temporary directory is under /var, a symlink to /private/var, and
+        // the directory listing returns the resolved form.
+        #expect(evidence?.dumpURL.resolvingSymlinksInPath() == dump.resolvingSymlinksInPath())
         #expect(evidence?.signature == SteamMinidumpScanner.socketControlSignature)
     }
 

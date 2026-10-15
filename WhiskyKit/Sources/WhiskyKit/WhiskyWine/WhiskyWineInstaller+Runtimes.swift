@@ -33,10 +33,12 @@ public struct InstalledRuntime: Identifiable, Equatable {
     public var isBleedingEdge: Bool {
         releaseChannel == .bleedingEdge || releaseChannel == .development
     }
+
     public var wineVersion: String? { info?.wineVersion }
     public var hasVerifiedNetworkPath: Bool {
         info?.capabilities?.hasVerifiedReceiveMessagePath == true
     }
+
     public var compatibility: RuntimeCompatibility { WhiskyWineInstaller.compatibility(for: info) }
     public var isCompatible: Bool { compatibility.isCompatible }
 

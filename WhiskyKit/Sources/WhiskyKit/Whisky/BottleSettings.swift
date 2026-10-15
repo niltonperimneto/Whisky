@@ -998,7 +998,6 @@ public struct BottleSettings: Codable, Equatable {
         case .wined3d:
             // Disable D3DMetal, forcing Wine's OpenGL-based wined3d path
             builder.set("WINED3DMETAL", "0", layer: .bottleManaged)
-
         }
 
         // Relay12's D3D11On12 opt-in. The d3d12 interposer reads this and routes

@@ -32,6 +32,8 @@
 #   ./scripts/locale-coverage.py            fill every locale
 #   ./scripts/locale-coverage.py --check    exit 1 if a locale is short
 
+from __future__ import annotations  # `str | None` on the macOS system Python 3.9
+
 import json
 import pathlib
 import sys
@@ -56,48 +58,19 @@ def english(entry: dict) -> str | None:
     return entry.get("localizations", {}).get("en", {}).get("stringUnit", {}).get("value")
 
 
-def entry_bounds(text: str, key: str) -> tuple[int, int]:
-    """Character range of one entry's `localizations` object, braces matched by
-    hand because the values contain braces of their own."""
-    anchor = '    %s : {\n' % json.dumps(key, ensure_ascii=False)
-    start = text.index(anchor)
-    loc = text.index('"localizations" : {', start)
-    depth, index = 0, text.index("{", loc)
-    while True:
-        if text[index] == "{":
-            depth += 1
-        elif text[index] == "}":
-            depth -= 1
-            if depth == 0:
-                return text.index("\n", loc) + 1, index
-        elif text[index] == '"':
-            index += 1
-            while text[index] != '"':
-                index += 2 if text[index] == "\\" else 1
-        index += 1
-
-
-def render(localizations: dict) -> str:
-    """The whole map, in the byte-for-byte shape Xcode writes it, so a run that
-    changes nothing leaves no diff and Xcode never reformats afterwards."""
-    rows = []
-    for code in sorted(localizations):
-        unit = localizations[code]["stringUnit"]
-        rows.append('        %s : {\n'
-                    '          "stringUnit" : {\n'
-                    '            "state" : %s,\n'
-                    '            "value" : %s\n'
-                    '          }\n'
-                    '        }' % (json.dumps(code),
-                                   json.dumps(unit["state"]),
-                                   json.dumps(unit["value"], ensure_ascii=False)))
-    return ",\n".join(rows) + "\n      "
+def write_catalog(catalog: dict) -> None:
+    """Writes the catalog in the shape it is stored in: two-space JSON with
+    non-ASCII escaped and no trailing newline. That round-trips the file byte
+    for byte, so a run that changes nothing leaves no diff and a run that fills
+    rows changes only those entries. Editing the text in place instead broke
+    when the file stopped being in Xcode's `"key" : {` spacing."""
+    CATALOG.write_text(json.dumps(catalog, indent=2, ensure_ascii=True), encoding="utf-8")
 
 
 def main() -> int:
     check_only = "--check" in sys.argv
-    raw = CATALOG.read_text(encoding="utf-8")
-    strings = json.loads(raw)["strings"]
+    catalog = json.loads(CATALOG.read_text(encoding="utf-8"))
+    strings = catalog["strings"]
     locales = target_locales(strings)
 
     gaps: dict[str, list[str]] = {}
@@ -136,12 +109,12 @@ def main() -> int:
     for key in gaps:
         entry = strings[key]
         source = english(entry)
+        localizations = entry["localizations"]
         for code in gaps[key]:
-            entry["localizations"][code] = {"stringUnit": {"state": "needs_review", "value": source}}
-        start, end = entry_bounds(raw, key)
-        raw = raw[:start] + render(entry["localizations"]) + raw[end:]
+            localizations[code] = {"stringUnit": {"state": "needs_review", "value": source}}
+        entry["localizations"] = dict(sorted(localizations.items()))
 
-    CATALOG.write_text(raw, encoding="utf-8")
+    write_catalog(catalog)
     written = sum(len(missing) for missing in gaps.values())
     print("%d locale(s), %d row(s) filled from English across %d string(s)"
           % (len(locales), written, len(gaps)))

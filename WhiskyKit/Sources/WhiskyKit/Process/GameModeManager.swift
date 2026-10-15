@@ -58,6 +58,18 @@ public final class GameModeManager: @unchecked Sendable {
         public var runningProgramCount: Int { 0 }
     }
 
+    /// One program's hold on its bottle's Game Mode activity, returned by
+    /// ``beginSession(bottleURL:programName:requested:)`` and handed back to
+    /// ``endSession(_:)``.
+    ///
+    /// A token rather than a count, so a program that ends its session twice
+    /// cannot release another program's hold: only claims still outstanding
+    /// are released, each once.
+    public struct Claim: Hashable, Sendable {
+        public let bottleURL: URL
+        let id: UUID
+    }
+
     /// Info.plist keys that declare Game Mode support.
     ///
     /// `LSSupportsGameMode` is the documented key; `GCSupportsGameMode` is the
@@ -71,10 +83,10 @@ public final class GameModeManager: @unchecked Sendable {
 
     private init() {}
 
-    /// A bottle's held activity and how many of its programs want it.
+    /// A bottle's held activity and the claims of the programs that want it.
     private struct Activity {
         let token: NSObjectProtocol
-        var claims: Int
+        var claims: Set<UUID>
     }
 
     // MARK: - Preconditions
@@ -99,10 +111,11 @@ public final class GameModeManager: @unchecked Sendable {
     /// `requested: false` and nothing is claimed — so the launch path does not
     /// need to branch.
     ///
-    /// - Returns: Whether the session now holds game-grade scheduling.
+    /// - Returns: The claim to hand back to ``endSession(_:)``, or `nil` when
+    ///   the program did not ask for Game Mode.
     @discardableResult
-    public func beginSession(bottleURL: URL, programName: String, requested: Bool) -> Bool {
-        guard requested else { return false }
+    public func beginSession(bottleURL: URL, programName: String, requested: Bool) -> Claim? {
+        guard requested else { return nil }
 
         let status = eligibility()
         if status != .eligible {
@@ -113,35 +126,39 @@ public final class GameModeManager: @unchecked Sendable {
             )
         }
 
+        let claim = Claim(bottleURL: bottleURL, id: UUID())
         lock.lock()
         defer { lock.unlock() }
 
         if var existing = activities[bottleURL] {
-            existing.claims += 1
+            existing.claims.insert(claim.id)
             activities[bottleURL] = existing
-            logger.debug("Game Mode claim \(existing.claims) for '\(bottleURL.lastPathComponent, privacy: .public)'")
-            return true
+            logger.debug(
+                "Game Mode claim \(existing.claims.count) for '\(bottleURL.lastPathComponent, privacy: .public)'"
+            )
+            return claim
         }
 
         let token = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiated, .latencyCritical, .idleSystemSleepDisabled],
             reason: "Game Mode session for \(programName)"
         )
-        activities[bottleURL] = Activity(token: token, claims: 1)
+        activities[bottleURL] = Activity(token: token, claims: [claim.id])
         logger.info(
             "Game Mode engaged for '\(programName, privacy: .public)' in '\(bottleURL.lastPathComponent, privacy: .public)'"
         )
-        return true
+        return claim
     }
 
-    /// Releases one Game Mode claim on `bottleURL`, ending the activity when
-    /// it was the last.
-    public func endSession(bottleURL: URL) {
+    /// Returns `claim`, ending its bottle's activity when it was the last one
+    /// outstanding. A claim already returned, or dropped by
+    /// ``endAllSessions(bottleURL:)``, is ignored.
+    public func endSession(_ claim: Claim) {
+        let bottleURL = claim.bottleURL
         lock.lock()
         let released: NSObjectProtocol?
-        if var existing = activities[bottleURL] {
-            existing.claims -= 1
-            if existing.claims <= 0 {
+        if var existing = activities[bottleURL], existing.claims.remove(claim.id) != nil {
+            if existing.claims.isEmpty {
                 activities.removeValue(forKey: bottleURL)
                 released = existing.token
             } else {
@@ -181,6 +198,6 @@ public final class GameModeManager: @unchecked Sendable {
     public func claimCount(for bottleURL: URL) -> Int {
         lock.lock()
         defer { lock.unlock() }
-        return activities[bottleURL]?.claims ?? 0
+        return activities[bottleURL]?.claims.count ?? 0
     }
 }

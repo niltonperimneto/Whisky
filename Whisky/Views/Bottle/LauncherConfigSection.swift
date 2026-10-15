@@ -323,7 +323,9 @@ private struct ActiveEnvironmentOverrides: View {
                 fixRow(
                     key: fix.key,
                     value: fix.value,
-                    reason: String(localized: "config.launcher.platformFix.reason \(fix.appliesFrom.description) \(fix.reason)")
+                    reason: String(
+                        localized: "config.launcher.platformFix.reason \(fix.appliesFrom.description) \(fix.reason)"
+                    )
                 )
             }
         }

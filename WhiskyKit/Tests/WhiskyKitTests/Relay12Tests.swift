@@ -63,8 +63,10 @@ struct Relay12Tests {
 
     /// D3D12 runs on D3DMetal under DXVK and DXMT too, and Steam in a DXVK bottle
     /// hands its environment to the D3D12 games it launches.
-    @Test("A bottle with Relay12 on sets it under every backend that has D3DMetal behind D3D12",
-          arguments: [GraphicsBackend.d3dMetal, .dxvk, .dxmt])
+    @Test(
+        "A bottle with Relay12 on sets it under every backend that has D3DMetal behind D3D12",
+        arguments: [GraphicsBackend.d3dMetal, .dxvk, .dxmt]
+    )
     func bottleSetsIt(backend: GraphicsBackend) {
         var settings = BottleSettings()
         settings.relay12 = true

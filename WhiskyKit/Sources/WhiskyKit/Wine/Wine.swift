@@ -484,7 +484,7 @@ public class Wine {
         writeGPTKLaunchDiagnostics(
             to: fileHandle,
             isPEAK: url.lastPathComponent.caseInsensitiveCompare("PEAK.exe") == .orderedSame
-                || steamAppId == 3527290,
+                || steamAppId == 3_527_290,
             backend: effectiveBackend,
             bottle: bottle,
             programOverrides: programOverrides

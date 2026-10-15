@@ -25,6 +25,7 @@ enum WhiskyDesignSystem {
         static let large: CGFloat = 16
         static let pill: CGFloat = .infinity
     }
+
     enum Spacing {
         static let extraExtraSmall: CGFloat = 2
         static let extraSmall: CGFloat = 4
@@ -33,6 +34,7 @@ enum WhiskyDesignSystem {
         static let large: CGFloat = 24
         static let extraLarge: CGFloat = 32
     }
+
     enum StatusColor {
         static let running = Color.green
         static let idle = Color.gray
@@ -41,10 +43,12 @@ enum WhiskyDesignSystem {
         static let offline = Color.secondary
         static let error = Color.red
     }
+
     enum Motion {
         static let pulse = Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true)
         static let smooth = Animation.smooth
     }
+
     enum GlassBlend {
         static let separate: CGFloat = 16
     }

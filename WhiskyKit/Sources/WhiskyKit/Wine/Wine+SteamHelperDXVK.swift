@@ -61,7 +61,8 @@ extension Wine {
         let payload = ["d3d10core.dll", "d3d11.dll"]
         guard !directories.isEmpty, payload.allSatisfy({
             FileManager.default.fileExists(atPath: lane.appending(path: $0).path(percentEncoded: false))
-        }) else { return nil }
+        })
+        else { return nil }
 
         do {
             for directory in directories {
