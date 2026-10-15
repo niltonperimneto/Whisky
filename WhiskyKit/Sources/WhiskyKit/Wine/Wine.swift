@@ -1702,6 +1702,8 @@ extension Wine {
             throw WhiskyWineInstallError.runtimeBusy
         }
         guard !switchingPrefixes.contains(bottle.url) else { throw WhiskyWineInstallError.runtimeBusy }
+        let runtimeUseToken = try beginRuntimeUse()
+        defer { runtimeUseToken.end() }
         let snapshot = RuntimeSwitchSnapshot(prefix: bottle.url)
         if snapshot.isPending { throw RuntimeSwitchError.recoveryRequired(snapshot.backup) }
         try WhiskyWineInstaller.validateRuntimeCandidate(WhiskyWineInstaller.libraryFolder(for: runtime))
