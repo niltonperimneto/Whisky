@@ -91,7 +91,8 @@ public extension WhiskyWineInstaller {
             backend,
             runtimeInfo: whiskyWineInfo(for: runtime),
             d3dMetalInstalled: isD3DMetalInstalled(for: runtime),
-            dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime)
+            dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime),
+            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: runtime)
         )
     }
 

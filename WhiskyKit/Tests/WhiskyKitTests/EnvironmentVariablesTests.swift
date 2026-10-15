@@ -33,7 +33,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         settings.environmentVariables(wineEnv: &env)
 
         // DLL overrides are now composed per-DLL via DLLOverrideResolver (sorted alphabetically)
-        XCTAssertEqual(env["WINEDLLOVERRIDES"], "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=n,b;dxgi=n,b")
+        XCTAssertEqual(env["WINEDLLOVERRIDES"], "d3d10core=n,b;d3d11=n,b;d3d12=;d3d8=n,b;d3d9=n,b;dxgi=n,b")
         XCTAssertEqual(env["DXVK_HUD"], "full")
     }
 
@@ -119,7 +119,9 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertEqual(env["DXVK_HUD"], "fps")
     }
 
-    func testEnvironmentVariablesWithDXVKAsync() {
+    /// DXVK_ASYNC was DXVK-macOS's; upstream DXVK has no such switch, so a
+    /// stored setting no longer reaches the environment.
+    func testStoredDXVKAsyncIsNotExported() {
         var settings = BottleSettings()
         settings.graphicsBackend = .dxvk
         settings.dxvkAsync = true
@@ -127,7 +129,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         var env: [String: String] = [:]
         settings.environmentVariables(wineEnv: &env)
 
-        XCTAssertEqual(env["DXVK_ASYNC"], "1")
+        XCTAssertNil(env["DXVK_ASYNC"])
     }
 
     // MARK: - Enhanced Sync Environment Variables
@@ -293,13 +295,17 @@ final class EnvironmentVariablesTests: XCTestCase {
 
     func testEnvironmentVariablesWithDisabledShaderCache() {
         var settings = BottleSettings()
+        settings.graphicsBackend = .dxvk
         settings.shaderCacheEnabled = false
 
         var env: [String: String] = [:]
         settings.environmentVariables(wineEnv: &env)
 
-        // The variable DXVK reads, not the NVIDIA GL one the toggle used to set.
-        XCTAssertEqual(env["DXVK_STATE_CACHE"], "0")
+        // The variables DXVK and KosmicKrisp read, not the NVIDIA GL one the
+        // toggle used to set.
+        XCTAssertEqual(env["DXVK_SHADER_CACHE"], "0")
+        XCTAssertEqual(env["MESA_SHADER_CACHE_DISABLE"], "true")
+        XCTAssertNil(env["DXVK_STATE_CACHE"])
         XCTAssertNil(env["DXVK_SHADER_COMPILE_THREADS"])
         XCTAssertNil(env["__GL_SHADER_DISK_CACHE"])
     }
@@ -314,7 +320,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         let managedOverrides = settings.populateBottleManagedLayer(builder: &builder)
 
         // DXVK managed overrides should be returned, not set via builder
-        XCTAssertEqual(managedOverrides.count, 5) // dxgi, d3d9, d3d10core, d3d11, d3d12
+        XCTAssertEqual(managedOverrides.count, 6) // dxgi, d3d8, d3d9, d3d10core, d3d11, d3d12
         XCTAssertTrue(managedOverrides.allSatisfy { $0.source == .dxvk })
 
         // WINEDLLOVERRIDES should NOT be in the resolved environment (handled by DLLOverrideResolver)
@@ -339,14 +345,16 @@ final class EnvironmentVariablesTests: XCTestCase {
     }
 
     func testPopulateBottleManagedLayerRecommendedWithoutRuntimeAppliesDXVKPreset() {
-        // On a machine with no installed runtime `.recommended` resolves to
-        // DXVK, and the managed layer applies the DXVK preset even though the
+        // On a runtime with neither D3DMetal nor DXMT but with KosmicKrisp,
+        // `.recommended` resolves to DXVK, and the managed layer applies the DXVK preset even though the
         // legacy `dxvk` toggle is off — backend selection supersedes the
         // toggle, matching explicit `.dxvk` behavior.
         var settings = BottleSettings()
         settings.dxvk = false
 
-        let resolved = GraphicsBackendResolver.resolve(runtimeInfo: nil, d3dMetalInstalled: false)
+        let resolved = GraphicsBackendResolver.resolve(
+            runtimeInfo: nil, d3dMetalInstalled: false, kosmicKrispInstalled: true
+        )
         XCTAssertEqual(resolved, .dxvk)
 
         var builder = EnvironmentBuilder()
@@ -354,7 +362,7 @@ final class EnvironmentVariablesTests: XCTestCase {
             builder: &builder, resolvedBackend: resolved
         )
 
-        XCTAssertEqual(managedOverrides.count, 5) // dxgi, d3d9, d3d10core, d3d11, d3d12
+        XCTAssertEqual(managedOverrides.count, 6) // dxgi, d3d8, d3d9, d3d10core, d3d11, d3d12
         XCTAssertTrue(managedOverrides.allSatisfy { $0.source == .dxvk })
     }
 
@@ -407,7 +415,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         overrides.graphicsBackend = .dxmt
 
         let resolved = resolvedOverrides(bottleSettings: settings, programOverrides: overrides)
-        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=b;dxgi=n,b;winemetal=b")
+        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d8=b;d3d9=b;dxgi=n,b;winemetal=b")
     }
 
     func testProgramBackendOverrideDXMTNeutralizesLeakedDXVKd3d9() {
@@ -422,7 +430,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         overrides.graphicsBackend = .dxmt
 
         let resolved = resolvedOverrides(bottleSettings: settings, programOverrides: overrides)
-        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=b;dxgi=n,b;winemetal=b")
+        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d8=b;d3d9=b;dxgi=n,b;winemetal=b")
         XCTAssertFalse(resolved.contains("d3d9=n,b"), "Leaked DXVK d3d9 must be reset to builtin")
     }
 
@@ -454,7 +462,7 @@ final class EnvironmentVariablesTests: XCTestCase {
         overrides.dxvk = false
 
         let resolved = resolvedOverrides(bottleSettings: settings, programOverrides: overrides)
-        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d9=b;dxgi=n,b;winemetal=b")
+        XCTAssertEqual(resolved, "d3d10core=n,b;d3d11=n,b;d3d12=;d3d8=b;d3d9=b;dxgi=n,b;winemetal=b")
     }
 
     func testLegacyDXVKTrueDoesNotResurrectDXVKUnderD3DMetalOverride() {
@@ -579,12 +587,16 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
     }
 
+    /// A DXVK bottle sets the variable to `wined3d`, which is what switches
+    /// Wine's Vulkan to KosmicKrisp. Only `d3dmetal` answers the WDDM 2.7
+    /// caps query, so that is still no claim.
     func testDXVKBottleDoesNotClaimHardwareScheduling() {
         var settings = BottleSettings()
         settings.graphicsBackend = .dxvk
+        settings.frameGeneration = true
         var env: [String: String] = [:]
         settings.environmentVariables(wineEnv: &env)
-        XCTAssertNil(env["CX_ACTIVE_GRAPHICS_BACKEND"])
+        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "wined3d")
     }
 
     /// Resolves the environment a program launch actually sees: the bottle-managed
@@ -610,11 +622,10 @@ final class EnvironmentVariablesTests: XCTestCase {
         return resolved
     }
 
-    func testDXVKProgramOverrideKeepsHardwareSchedulingClaim() {
-        // Steam is steered onto DXVK so Chromium paints, and its games inherit that
-        // environment. The variable answers a capability query rather than selecting
-        // a backend, so stripping it here left every Steam-launched game unable to
-        // turn on DLSS frame generation even though it ran on D3DMetal.
+    /// A program moved onto DXVK needs KosmicKrisp, and win32u only takes
+    /// `CX_LIBVULKAN` while the variable says `wined3d`, so the loader switch
+    /// wins over the bottle's frame generation claim for that program.
+    func testDXVKProgramOverrideSwitchesTheVulkanLoader() {
         var settings = BottleSettings()
         settings.graphicsBackend = .d3dMetal
         settings.frameGeneration = true
@@ -623,7 +634,8 @@ final class EnvironmentVariablesTests: XCTestCase {
         overrides.graphicsBackend = .dxvk
 
         let env = resolvedEnvironment(bottleSettings: settings, programOverrides: overrides)
-        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "d3dmetal")
+        XCTAssertEqual(env["CX_ACTIVE_GRAPHICS_BACKEND"], "wined3d")
+        XCTAssertNotNil(env["CX_LIBVULKAN"])
     }
 
     func testDXMTProgramOverrideKeepsHardwareSchedulingClaim() {

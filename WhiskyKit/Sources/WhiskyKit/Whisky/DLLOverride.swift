@@ -146,8 +146,8 @@ public struct DLLOverrideResolver: Sendable {
 
     /// The standard DXVK DLL override preset.
     ///
-    /// Applies `n,b` (native then builtin) to the four core DXVK DLLs, and
-    /// turns `d3d12` off.
+    /// Applies `n,b` (native then builtin) to every DLL upstream DXVK carries,
+    /// `dxgi` and `d3d8` included, and turns `d3d12` off.
     ///
     /// DXVK ships no `d3d12`, so leaving it unmentioned let it fall through to
     /// the builtin, which is D3DMetal. A DX12 game then took its adapter from
@@ -159,6 +159,7 @@ public struct DLLOverrideResolver: Sendable {
     public static var dxvkPreset: [DLLOverrideEntry] {
         [
             DLLOverrideEntry(dllName: "dxgi", mode: .nativeThenBuiltin),
+            DLLOverrideEntry(dllName: "d3d8", mode: .nativeThenBuiltin),
             DLLOverrideEntry(dllName: "d3d9", mode: .nativeThenBuiltin),
             DLLOverrideEntry(dllName: "d3d10core", mode: .nativeThenBuiltin),
             DLLOverrideEntry(dllName: "d3d11", mode: .nativeThenBuiltin),

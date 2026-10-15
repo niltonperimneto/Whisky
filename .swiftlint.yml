@@ -7,6 +7,7 @@ excluded:
   - .build
   - WhiskyKit/.build
   - build
+  - WhiskyKit/build
   # Package checkouts land here when a build uses the repo as its derived-data path.
   - SourcePackages
 

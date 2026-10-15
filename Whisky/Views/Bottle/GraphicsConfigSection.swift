@@ -99,13 +99,13 @@ struct GraphicsConfigSection: View {
             // does not ship it.
             if resolvedBackend != .wined3d {
                 relay12Toggle
-                // Relay12 reads the async toggle too, to skip draws whose
-                // pipeline is compiling. A DXVK bottle already shows it with
-                // DXVK's settings.
-                if bottle.settings.relay12, resolvedBackend != .dxvk {
+                // Relay12 skips draws whose pipeline is still compiling when
+                // this is on. Upstream DXVK 3 has no async mode, so Relay12
+                // is the only reader.
+                if bottle.settings.relay12 {
                     SettingsToggle(
-                        "config.dxvk.async",
-                        detail: "config.dxvk.async.info",
+                        "config.relay12.async",
+                        detail: "config.relay12.async.info",
                         isOn: $bottle.settings.asyncShaderCompilation
                     )
                     .disabled(!relay12Available)
@@ -165,8 +165,7 @@ struct GraphicsConfigSection: View {
     /// True when a setting that only shows with advanced settings on is not at
     /// its default, so hiding them would hide something in effect.
     private var hasAdvancedSettingsConfigured: Bool {
-        !bottle.settings.dxvkAsync
-            || bottle.settings.dxvkHud != .off
+        bottle.settings.dxvkHud != .off
             || bottle.settings.metalHud
             || bottle.settings.metalTrace
             || bottle.settings.metalValidation

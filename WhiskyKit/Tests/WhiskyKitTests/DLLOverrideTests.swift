@@ -143,6 +143,7 @@ final class DLLOverrideTests: XCTestCase {
         let modesByName = Dictionary(uniqueKeysWithValues: preset.map { ($0.dllName, $0.mode) })
         XCTAssertEqual(modesByName, [
             "dxgi": .nativeThenBuiltin,
+            "d3d8": .nativeThenBuiltin,
             "d3d9": .nativeThenBuiltin,
             "d3d10core": .nativeThenBuiltin,
             "d3d11": .nativeThenBuiltin,

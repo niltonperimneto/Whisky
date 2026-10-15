@@ -29,13 +29,29 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
     case recommended
     /// Apple's Direct3D-to-Metal translation layer (Wine's built-in D3DMetal).
     case d3dMetal
-    /// DXVK: Direct3D-to-Vulkan translation via MoltenVK.
+    /// DXVK: upstream DXVK 3.x on Mesa's KosmicKrisp Vulkan driver. Requires a
+    /// runtime that carries the payload described in ``KosmicKrisp``.
     case dxvk
     /// DXMT: Direct3D-11-to-Metal translation. Requires a runtime that bundles
     /// the DXMT payload (Wine Libraries ≥ 3.1.0).
     case dxmt
     /// Wine's built-in OpenGL-based Direct3D translation.
     case wined3d
+
+    /// The raw value an earlier build wrote while DXVK 3 + KosmicKrisp was an
+    /// experimental backend beside DXVK-macOS on MoltenVK. It is DXVK now.
+    static let legacyKosmicKrispRawValue = "dxvkKosmicKrisp"
+
+    public init?(rawValue: String) {
+        switch rawValue {
+        case "recommended": self = .recommended
+        case "d3dMetal": self = .d3dMetal
+        case "dxvk", Self.legacyKosmicKrispRawValue: self = .dxvk
+        case "dxmt": self = .dxmt
+        case "wined3d": self = .wined3d
+        default: return nil
+        }
+    }
 
     /// A human-readable display name for this backend.
     public var displayName: String {
@@ -53,10 +69,17 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
         }
     }
 
+    /// Whether DXVK translates Direct3D under this backend, so DXVK's own
+    /// settings (HUD, async, `dxvk.conf`) apply to it.
+    public var usesDXVK: Bool {
+        self == .dxvk
+    }
+
     /// Whether this backend can actually be used with the given installed
     /// runtime record. DXMT requires a runtime that bundles its payload
     /// (Wine Libraries ≥ 3.1.0, signalled by `dxmtVersion` in the runtime
-    /// plist); every other backend ships with all runtimes. Pure so pickers
+    /// plist); every other backend ships with all runtimes, or, like DXVK on
+    /// KosmicKrisp, has no version record and is gated on its files alone. Pure so pickers
     /// and tests can inject a record; production callers pass
     /// `WhiskyWineInstaller.whiskyWineInfo()`.
     public func isAvailable(runtimeInfo: WhiskyWineVersion?) -> Bool {

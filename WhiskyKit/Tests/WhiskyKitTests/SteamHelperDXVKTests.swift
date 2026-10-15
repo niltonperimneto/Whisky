@@ -22,14 +22,16 @@ import Testing
 
 @Suite("Steam web helper on DXVK")
 struct SteamHelperDXVKTests {
-    /// A Steam install with a 64-bit and a 32-bit CEF build, a DXVK payload,
-    /// and Wine's own dxgi as GPTK's importer keeps it.
+    /// A Steam install with a 64-bit and a 32-bit CEF build, the runtime's
+    /// DXVK 3 payload, and what an earlier build staged from: DXVK-macOS and
+    /// Wine's own dxgi as GPTK's importer keeps it.
     private struct Fixture {
         let root: URL
         let client: URL
         let helper64: URL
         let helper32: URL
         let dxvk: URL
+        let legacyDXVK: URL
         let originalDXGI: URL
 
         init() throws {
@@ -38,13 +40,15 @@ struct SteamHelperDXVKTests {
             client = steam.appending(path: "steam.exe")
             helper64 = steam.appending(path: "bin/cef/cef.win64")
             helper32 = steam.appending(path: "bin/cef/cef.win7")
-            dxvk = root.appending(path: "DXVK")
+            dxvk = root.appending(path: "DXVK3")
+            legacyDXVK = root.appending(path: "DXVK")
             originalDXGI = root.appending(path: "originals/dxgi.dll")
             let manager = FileManager.default
             for directory in [
                 helper64,
                 helper32,
                 dxvk.appending(path: "x64"),
+                legacyDXVK.appending(path: "x64"),
                 originalDXGI.deletingLastPathComponent()
             ] {
                 try manager.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -52,8 +56,11 @@ struct SteamHelperDXVKTests {
             try Data().write(to: client)
             try PEBuilder.createMinimalPE32Plus().write(to: helper64.appending(path: "steamwebhelper.exe"))
             try PEBuilder.createMinimalPE32().write(to: helper32.appending(path: "steamwebhelper.exe"))
-            try Data("dxvk d3d11".utf8).write(to: dxvk.appending(path: "x64/d3d11.dll"))
-            try Data("dxvk d3d10core".utf8).write(to: dxvk.appending(path: "x64/d3d10core.dll"))
+            for name in Wine.steamHelperPayload {
+                try Data("dxvk3 \(name)".utf8).write(to: dxvk.appending(path: "x64/\(name)"))
+            }
+            try Data("dxvk-macos d3d11".utf8).write(to: legacyDXVK.appending(path: "x64/d3d11.dll"))
+            try Data("dxvk-macos d3d10core".utf8).write(to: legacyDXVK.appending(path: "x64/d3d10core.dll"))
             try fakePE(builtin: true).write(to: originalDXGI)
         }
 
@@ -70,38 +77,30 @@ struct SteamHelperDXVKTests {
         #expect(found.map(\.lastPathComponent) == ["cef.win64"])
     }
 
-    @Test("DXVK and Wine's dxgi go beside the helper, selected by n,b")
+    @Test("DXVK 3 and its own dxgi go beside the helper, selected by n,b")
     func stagesBesideTheHelper() throws {
         let fixture = try Fixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let overrides = Wine.stageSteamHelperDXVK(
-            in: [fixture.helper64], dxvk: fixture.dxvk, cleanDXGI: fixture.originalDXGI
-        )
+        try Data("stale Wine dxgi".utf8).write(to: fixture.helper64.appending(path: "dxgi.dll"))
+
+        let overrides = Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk)
         #expect(overrides == ["d3d10core": "n,b", "d3d11": "n,b", "dxgi": "n,b"])
         #expect(fixture.contents(fixture.helper64)
             == ["steamwebhelper.exe", "d3d11.dll", "d3d10core.dll", "dxgi.dll"])
-        let dxgi = try Data(contentsOf: fixture.helper64.appending(path: "dxgi.dll"))
-        #expect(try Wine.isNativePE(fixture.helper64.appending(path: "dxgi.dll")))
-        #expect(try dxgi == Wine.strippingBuiltinMarker(Data(contentsOf: fixture.originalDXGI)))
+        for name in Wine.steamHelperPayload {
+            #expect(try Data(contentsOf: fixture.helper64.appending(path: name))
+                == Data(contentsOf: fixture.dxvk.appending(path: "x64/\(name)")))
+        }
         #expect(fixture.contents(fixture.helper32) == ["steamwebhelper.exe"])
-    }
-
-    @Test("Without GPTK's dxgi, dxgi stays builtin")
-    func leavesDXGIBuiltinWithoutAClean() throws {
-        let fixture = try Fixture()
-        defer { try? FileManager.default.removeItem(at: fixture.root) }
-        let overrides = Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk, cleanDXGI: nil)
-        #expect(overrides == ["d3d10core": "n,b", "d3d11": "n,b"])
-        #expect(!fixture.contents(fixture.helper64).contains("dxgi.dll"))
     }
 
     @Test("No payload or no helper means no steer")
     func nothingToStage() throws {
         let fixture = try Fixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        #expect(Wine.stageSteamHelperDXVK(in: [], dxvk: fixture.dxvk, cleanDXGI: nil) == nil)
-        try FileManager.default.removeItem(at: fixture.dxvk.appending(path: "x64/d3d11.dll"))
-        #expect(Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk, cleanDXGI: nil) == nil)
+        #expect(Wine.stageSteamHelperDXVK(in: [], dxvk: fixture.dxvk) == nil)
+        try FileManager.default.removeItem(at: fixture.dxvk.appending(path: "x64/dxgi.dll"))
+        #expect(Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk) == nil)
         #expect(fixture.contents(fixture.helper64) == ["steamwebhelper.exe"])
     }
 
@@ -109,14 +108,31 @@ struct SteamHelperDXVKTests {
     func clearsOnlyStagedFiles() throws {
         let fixture = try Fixture()
         defer { try? FileManager.default.removeItem(at: fixture.root) }
-        _ = Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk, cleanDXGI: fixture.originalDXGI)
+        _ = Wine.stageSteamHelperDXVK(in: [fixture.helper64], dxvk: fixture.dxvk)
         // A dxgi of Steam's own in the other build stays.
         try Data("steam's dxgi".utf8).write(to: fixture.helper32.appending(path: "dxgi.dll"))
-        Wine.removeSteamHelperDXVK(
-            from: [fixture.helper64, fixture.helper32], dxvk: fixture.dxvk, originalDXGI: fixture.originalDXGI
-        )
+        Wine.removeSteamHelperDXVK(from: [fixture.helper64, fixture.helper32], dxvk: fixture.dxvk)
         #expect(fixture.contents(fixture.helper64) == ["steamwebhelper.exe"])
         #expect(fixture.contents(fixture.helper32) == ["steamwebhelper.exe", "dxgi.dll"])
+    }
+
+    @Test("What an earlier build staged from DXVK-macOS is taken out")
+    func clearsLegacyStaging() throws {
+        let fixture = try Fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let manager = FileManager.default
+        for name in ["d3d11.dll", "d3d10core.dll"] {
+            try manager.copyItem(
+                at: fixture.legacyDXVK.appending(path: "x64/\(name)"), to: fixture.helper64.appending(path: name)
+            )
+        }
+        try Wine.strippingBuiltinMarker(Data(contentsOf: fixture.originalDXGI))
+            .write(to: fixture.helper64.appending(path: "dxgi.dll"))
+
+        Wine.removeSteamHelperDXVK(
+            from: [fixture.helper64], dxvk: fixture.legacyDXVK, originalDXGI: fixture.originalDXGI
+        )
+        #expect(fixture.contents(fixture.helper64) == ["steamwebhelper.exe"])
     }
 
     @Test("The helper's entries replace the launcher's for the same DLLs only")

@@ -32,7 +32,8 @@ public enum GraphicsBackendResolver {
     /// without the payload makes launches silently fall back to wined3d, which
     /// cannot bring up D3D11 on current macOS — so the resolver only recommends
     /// backends that are actually installed: DXMT (native D3D11-to-Metal) when
-    /// the runtime bundles it, otherwise DXVK, which ships with every runtime.
+    /// the runtime bundles it, otherwise DXVK on KosmicKrisp, and WineD3D on a
+    /// runtime that carries neither.
     ///
     /// - Parameters:
     ///   - macOSVersion: The macOS version to consider. Defaults to the running system.
@@ -42,6 +43,8 @@ public enum GraphicsBackendResolver {
     ///     to checking the installed runtime.
     ///   - dxmtRuntimeNative: Whether the runtime's DXMT payload is the native
     ///     variant. Defaults to checking the installed runtime.
+    ///   - kosmicKrispInstalled: Whether the runtime carries the KosmicKrisp
+    ///     driver and DXVK 3. Defaults to checking the installed runtime.
     ///   - architecture: The architecture of the executable being launched.
     ///     Defaults to `.x64`, which is the answer to give when the target is
     ///     not known, and is what every caller that is describing a bottle
@@ -53,15 +56,17 @@ public enum GraphicsBackendResolver {
         runtimeInfo: WhiskyWineVersion? = WhiskyWineInstaller.whiskyWineInfo(),
         d3dMetalInstalled: Bool = WhiskyWineInstaller.isD3DMetalInstalled(),
         dxmtRuntimeNative: Bool = Wine.isDXMTRuntimeNative(),
+        kosmicKrispInstalled: Bool = KosmicKrisp.isInstalled(for: nil),
         architecture: Architecture = .x64
     ) -> GraphicsBackend {
+        let dxvkOrFallback: GraphicsBackend = kosmicKrispInstalled ? .dxvk : .wined3d
         // D3DMetal and DXMT are both 64-bit only: the runtime carries them in
         // x86_64-windows and leaves i386-windows as Wine's own DLLs. Offering
         // either to a 32-bit program does not fail loudly, it quietly loads
         // Wine's builtin d3d11 on wined3d, and the game reports that DirectX 11
         // is not installed. DXVK is the one backend with a 32-bit payload.
         if architecture == .x32 {
-            return .dxvk
+            return dxvkOrFallback
         }
         // A launcher resolves like its games. Its backend is staged into the
         // prefix's system32, which every game it starts shares, so steering the
@@ -83,7 +88,7 @@ public enum GraphicsBackendResolver {
         ) {
             return .dxmt
         }
-        return .dxvk
+        return dxvkOrFallback
     }
 
     /// The backend a launcher's web helper renders on, when it is not the
@@ -127,6 +132,7 @@ public enum GraphicsBackendResolver {
             runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: runtime),
             d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: runtime),
             dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime),
+            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: runtime),
             architecture: architecture
         )
     }
