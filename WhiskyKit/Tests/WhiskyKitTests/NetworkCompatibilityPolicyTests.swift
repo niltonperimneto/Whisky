@@ -16,9 +16,9 @@
 //  If not, see https://www.gnu.org/licenses/.
 //
 
-@testable import WhiskyKit
 import SemanticVersion
 import Testing
+@testable import WhiskyKit
 
 struct NetworkCompatibilityPolicyTests {
     private let compatible = NetworkRuntimeCapabilities(

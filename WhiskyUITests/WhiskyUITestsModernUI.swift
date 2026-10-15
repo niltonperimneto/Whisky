@@ -28,15 +28,14 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
 
     // MARK: - Shelf
 
-    func testShelfRowIsOfferedBesideTheLibrary() throws {
-        require(app.buttons["sidebar.library"], "library sidebar row", timeout: 8)
-        require(app.buttons["sidebar.shelf"], "shelf sidebar row", timeout: 8)
+    /// The modern shell is a single pane: the shelf is the root and the
+    /// bottle switcher lives in the title bar, so there is no sidebar.
+    func testShelfIsTheRootWithoutASidebar() throws {
+        require(shelfContainer, "bottle shelf", timeout: 8)
+        XCTAssertFalse(app.buttons["sidebar.library"].exists, "modern shell still shows the legacy sidebar")
     }
 
-    func testShelfOpensAndListsBottles() throws {
-        let shelfRow = require(app.buttons["sidebar.shelf"], "shelf sidebar row", timeout: 8)
-        shelfRow.click()
-
+    func testShelfListsBottles() throws {
         require(shelfContainer, "bottle shelf", timeout: 8)
 
         // A container with no bottles legitimately shows the empty state, so
@@ -132,8 +131,6 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
     // MARK: - Localization
 
     func testModernSurfacesLeakNoRawKeys() throws {
-        let shelfRow = require(app.buttons["sidebar.shelf"], "shelf sidebar row", timeout: 8)
-        shelfRow.click()
         require(shelfContainer, "bottle shelf", timeout: 8)
 
         let leaks = rawKeyLeaks()
@@ -159,8 +156,7 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
     /// Opens the first bottle from the shelf, skipping when the container has
     /// no bottles: CI runners start fresh without fixtures.
     private func openFirstBottleFromShelf() throws {
-        let shelfRow = require(app.buttons["sidebar.shelf"], "shelf sidebar row", timeout: 8)
-        shelfRow.click()
+        require(shelfContainer, "bottle shelf", timeout: 8)
 
         let card = app.descendants(matching: .any).matching(identifier: "shelf.bottle").firstMatch
         guard card.waitForExistence(timeout: 5) else {
@@ -170,40 +166,5 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
             )
         }
         card.click()
-    }
-}
-
-// MARK: - Temporary layout probe
-
-final class WhiskyUITestsLayoutProbe: WhiskyUITestCase {
-    override var extraLaunchArguments: [String] { ["-modernUI", "1"] }
-
-    func testDumpSegmentsAndToolbar() throws {
-        // No sidebar now: the shelf is the landing screen.
-        let card = app.descendants(matching: .any).matching(identifier: "shelf.bottle").firstMatch
-        guard card.waitForExistence(timeout: 8) else { throw XCTSkip("no bottle fixture") }
-        card.click()
-        Thread.sleep(forTimeInterval: 5)
-
-        print("=====PROBE: sidebarExists=\(app.outlines["bottleSidebar"].exists)")
-        print("=====PROBE: picker=\(app.descendants(matching: .any).matching(identifier: "bottle.picker").count)")
-        print("=====PROBE: run=\(app.descendants(matching: .any).matching(identifier: "bottle.runProgram").count)")
-
-        for name in ["Curated", "All", "Pinned", "Steam", "Installed"] {
-            let seg = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", name)).firstMatch
-            if seg.exists {
-                let frame = seg.frame
-                print("=====PROBE seg '\(seg.label)' w=\(frame.width) h=\(frame.height)")
-            } else {
-                print("=====PROBE seg '\(name)' MISSING")
-            }
-        }
-
-        let tiles = app.descendants(matching: .any).matching(identifier: "appgrid.card")
-        print("=====PROBE: tiles=\(tiles.count)")
-        for index in 0..<min(tiles.count, 4) {
-            let tile = tiles.element(boundBy: index)
-            print("=====PROBE tile '\(tile.label)' w=\(tile.frame.width) h=\(tile.frame.height)")
-        }
     }
 }

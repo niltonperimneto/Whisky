@@ -79,6 +79,7 @@ final class BottleAppGridModel {
             _launchError = newValue
         }
     }
+
     private var _launchError: String?
 
     /// Programs whose launch call has not returned yet.

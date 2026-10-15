@@ -198,10 +198,16 @@ public enum SteamLibrarySource: LibrarySource {
     /// Matching on the filename rather than the path survives all three, and the
     /// next one as long as the names hold.
     ///
-    /// Portrait first because it maps to the grid glass card. Remote fallback
-    /// 
+    /// Portrait first because it maps to the grid glass card; a landscape
+    /// banner is the fallback. With nothing cached, the store's portrait on
+    /// Steam's CDN, so a card is never left empty.
     public static func artworkURL(appID: Int, steamRoot: URL) -> URL? {
-        let portrait = ["library_600x900_2x.jpg", "library_600x900.jpg", "library_capsule.jpg", "\(appID)_library_600x900.jpg"]
+        let portrait = [
+            "library_600x900_2x.jpg",
+            "library_600x900.jpg",
+            "library_capsule.jpg",
+            "\(appID)_library_600x900.jpg"
+        ]
         let landscape = ["library_header.jpg", "header.jpg", "\(appID)_header.jpg"]
         let cached = cachedFiles(appID: appID, steamRoot: steamRoot)
 
@@ -210,7 +216,9 @@ public enum SteamLibrarySource: LibrarySource {
                 return match
             }
         }
-        return URL(string: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/\(appID)/library_600x900_2x.jpg")
+        return URL(
+            string: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/\(appID)/library_600x900_2x.jpg"
+        )
     }
 
     /// The small square icon Steam caches beside the art, if it left one.

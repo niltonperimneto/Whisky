@@ -80,11 +80,11 @@ struct SegmentedPillPicker<Item: Hashable, Label: View>: View {
 }
 
 extension View {
-    @ViewBuilder func ifLet<V, Transform: View>(
+    @ViewBuilder func ifLet<V>(
         _ value: V?,
-        transform: (Self, V) -> Transform
+        transform: (Self, V) -> some View
     ) -> some View {
-        if let value = value {
+        if let value {
             transform(self, value)
         } else {
             self

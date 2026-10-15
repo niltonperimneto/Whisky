@@ -28,7 +28,7 @@ struct GameModeManagerTests {
     }
 
     @Test("A program that did not ask for Game Mode takes no claim")
-    func testUnrequestedSessionTakesNoClaim() {
+    func unrequestedSessionTakesNoClaim() {
         let manager = GameModeManager.shared
         let bottleURL = uniqueBottleURL()
 
@@ -40,7 +40,7 @@ struct GameModeManagerTests {
     }
 
     @Test("A requested session holds Game Mode until it is returned")
-    func testRequestedSessionHoldsAndReleases() throws {
+    func requestedSessionHoldsAndReleases() throws {
         let manager = GameModeManager.shared
         let bottleURL = uniqueBottleURL()
 
@@ -55,7 +55,7 @@ struct GameModeManagerTests {
     }
 
     @Test("Two games in one bottle share the activity until the last one exits")
-    func testClaimsAreReferenceCounted() throws {
+    func claimsAreReferenceCounted() throws {
         let manager = GameModeManager.shared
         let bottleURL = uniqueBottleURL()
 
@@ -76,7 +76,7 @@ struct GameModeManagerTests {
     }
 
     @Test("Returning a claim twice does not release another program's hold")
-    func testDoubleReleaseIsANoOp() throws {
+    func doubleReleaseIsANoOp() throws {
         let manager = GameModeManager.shared
         let bottleURL = uniqueBottleURL()
 
@@ -98,7 +98,7 @@ struct GameModeManagerTests {
     }
 
     @Test("Stopping a bottle drops claims its runs never returned")
-    func testEndAllSessionsDropsOutstandingClaims() throws {
+    func endAllSessionsDropsOutstandingClaims() throws {
         let manager = GameModeManager.shared
         let bottleURL = uniqueBottleURL()
 
@@ -116,7 +116,7 @@ struct GameModeManagerTests {
     }
 
     @Test("Claims in different bottles are independent")
-    func testClaimsAreScopedPerBottle() throws {
+    func claimsAreScopedPerBottle() throws {
         let manager = GameModeManager.shared
         let first = uniqueBottleURL()
         let second = uniqueBottleURL()
@@ -138,7 +138,7 @@ struct GameModeManagerTests {
     // MARK: - Preconditions
 
     @Test("A bundle that is not categorised as a game is ineligible")
-    func testNonGameBundleIsIneligible() {
+    func nonGameBundleIsIneligible() {
         let bundle = StubBundle(values: [
             "LSApplicationCategoryType": "public.app-category.utilities",
             "LSSupportsGameMode": true
@@ -148,14 +148,14 @@ struct GameModeManagerTests {
     }
 
     @Test("A game bundle that does not declare support is ineligible")
-    func testGameBundleWithoutSupportKeyIsIneligible() {
+    func gameBundleWithoutSupportKeyIsIneligible() {
         let bundle = StubBundle(values: ["LSApplicationCategoryType": "public.app-category.games"])
 
         #expect(GameModeManager.shared.eligibility(of: bundle) == .gameModeUnsupported)
     }
 
     @Test("Either support key makes a game bundle eligible", arguments: GameModeManager.supportKeys)
-    func testEitherSupportKeyIsEnough(key: String) {
+    func eitherSupportKeyIsEnough(key: String) {
         let bundle = StubBundle(values: [
             "LSApplicationCategoryType": "public.app-category.games",
             key: true
@@ -165,22 +165,25 @@ struct GameModeManagerTests {
     }
 
     @Test("Whisky's own bundle declares everything Game Mode needs")
-    func testWhiskyBundleIsEligible() throws {
+    func whiskyBundleIsEligible() throws {
         // The test bundle is not the app, so the app's plist is read directly.
         let appPlist = try #require(whiskyInfoPlistURL())
         let parsed = try #require(
-            PropertyListSerialization.propertyList(
-                from: try Data(contentsOf: appPlist), options: [], format: nil
+            try PropertyListSerialization.propertyList(
+                from: Data(contentsOf: appPlist), options: [], format: nil
             ) as? [String: Any]
         )
 
-        #expect(parsed["LSSupportsGameMode"] as? Bool == true)
+        // The same rule eligibility(of:) applies: either key declares support.
+        // The plist has only ever carried GCSupportsGameMode, the one Xcode's
+        // build setting writes; the category comes from the build settings.
+        #expect(GameModeManager.supportKeys.contains { parsed[$0] as? Bool == true })
     }
 
     /// `Whisky/Info.plist`, found by walking up from this source file.
     private func whiskyInfoPlistURL() -> URL? {
         var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        for _ in 0..<6 {
+        for _ in 0 ..< 6 {
             let candidate = directory.appending(path: "Whisky").appending(path: "Info.plist")
             if FileManager.default.fileExists(atPath: candidate.path(percentEncoded: false)) {
                 return candidate

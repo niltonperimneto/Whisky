@@ -313,7 +313,7 @@ struct BottleShelfCard: View {
         }
     }
 
-    private func pill<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    private func pill(@ViewBuilder _ content: () -> some View) -> some View {
         content()
             .padding(.horizontal, WhiskyDesignSystem.Spacing.small)
             .frame(height: 26)
@@ -357,7 +357,7 @@ struct BottleShelfCard: View {
     /// `hashValue`, which Swift seeds per process — a tile that changed colour
     /// every time the app started would be worse than no colour at all.
     private var palette: IconPalette {
-        var hash: UInt64 = 5381
+        var hash: UInt64 = 5_381
         for byte in bottle.settings.name.utf8 {
             hash = (hash &* 33) &+ UInt64(byte)
         }

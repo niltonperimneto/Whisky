@@ -115,7 +115,6 @@ extension Wine {
                 // capability claim would be a lie.
                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
-
             }
         }
 

@@ -50,7 +50,9 @@ struct SteamProcessWatchTests {
     func appearsBeforeTimeout() async {
         let watch = makeWatch(responses: [[], [], ["steam.exe", "svchost.exe"]])
 
-        let found = await watch.waitForAny(of: ["steam.exe"], timeout: 1)
+        // Three 5 ms polls, well inside the deadline even when the whole suite
+        // is running in parallel; one second was not, under load.
+        let found = await watch.waitForAny(of: ["steam.exe"], timeout: 10)
 
         #expect(found)
     }

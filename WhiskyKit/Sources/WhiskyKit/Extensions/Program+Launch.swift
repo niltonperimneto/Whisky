@@ -317,6 +317,6 @@ private final class LaunchSignal {
 
 extension Program {
     @MainActor public func launch() async -> LaunchResult {
-        return await self.launchWithUserMode(useTerminal: false)
+        await self.launchWithUserMode(useTerminal: false)
     }
 }

@@ -101,7 +101,6 @@ struct ProgramOverrideSettingsView: View {
                 )
             }
     }
-
 }
 
 // MARK: - Graphics, Sync, Performance
@@ -251,7 +250,6 @@ extension ProgramOverrideSettingsView {
             )
         }
     }
-
 }
 
 // MARK: - Input, Display
@@ -334,10 +332,14 @@ extension ProgramOverrideSettingsView {
                                 .multilineTextAlignment(.trailing)
                             Text(verbatim: "\u{00D7}")
                                 .foregroundStyle(.secondary)
-                            TextField("config.virtualDesktop.height", value: displayCustomHeightBinding, format: .number)
-                                .labelsHidden()
-                                .frame(width: 70)
-                                .multilineTextAlignment(.trailing)
+                            TextField(
+                                "config.virtualDesktop.height",
+                                value: displayCustomHeightBinding,
+                                format: .number
+                            )
+                            .labelsHidden()
+                            .frame(width: 70)
+                            .multilineTextAlignment(.trailing)
                         }
                     }
                 }
@@ -391,7 +393,6 @@ extension ProgramOverrideSettingsView {
             set: { height in updateOverrides { $0.customResolutionHeight = min(max(height, 480), 4_320) } }
         )
     }
-
 }
 
 // MARK: - DLL Overrides, Tags, Reset

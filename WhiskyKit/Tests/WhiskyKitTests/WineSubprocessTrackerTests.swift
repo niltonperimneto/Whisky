@@ -70,7 +70,7 @@ final class WineSubprocessTrackerTests: XCTestCase {
         for line in noiseLines {
             let parsed = WineSubprocessTracker.shared.parseProcessCreation(line: line)
             XCTAssertNotNil(parsed)
-            if let parsed = parsed {
+            if let parsed {
                 XCTAssertTrue(
                     WineSubprocessTracker.shared.isNoiseProcess(parsed.imageName),
                     "Expected \(parsed.imageName) to be considered noise"
