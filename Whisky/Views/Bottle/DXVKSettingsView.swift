@@ -39,7 +39,11 @@ struct DXVKSettingsView: View {
 
     var body: some View {
         Section {
-            SettingsToggle("config.dxvk.async", detail: "config.dxvk.async.info", isOn: $bottle.settings.dxvkAsync)
+            SettingsToggle(
+                "config.dxvk.async",
+                detail: "config.dxvk.async.info",
+                isOn: $bottle.settings.asyncShaderCompilation
+            )
 
             SettingsPicker("config.dxvkHud", detail: "config.dxvkHud.info", selection: $bottle.settings.dxvkHud) {
                 Text("config.dxvkHud.off").tag(DXVKHUD.off)
