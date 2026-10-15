@@ -3,7 +3,7 @@
 > **Target Audience:** Autonomous Coding Agents, Subagents, and Human Systems Engineers  
 > **Repository:** `dappermint/Whisky` (Whisky Preview / WhiskyKit / WhiskyCmd)  
 > **Primary Platforms:** macOS 26.0+ (Tahoe and later), Apple Silicon (`arm64` / `arm64e`)  
-> **Core Subsystems:** Swift 6 Concurrency, SwiftUI, Wine Staging / WhiskyWine (`winecx-gptk`), Rosetta 2, D3DMetal (GPTK), DXMT, DXVK, MoltenVK
+> **Core Subsystems:** Swift 6 Concurrency, SwiftUI, Wine Staging / WhiskyWine (`winecx-gptk`), Rosetta 2, D3DMetal (GPTK), DXMT, DXVK, KosmicKrisp
 
 ---
 
@@ -79,7 +79,7 @@ graph TD
         WineRuntime --> Rosetta[Rosetta 2 Translation: x86_64 -> ARM64]
         WineRuntime --> D3DMetal[D3DMetal: DX11/12 -> Metal]
         WineRuntime --> DXMT[DXMT: DX11 -> Metal]
-        WineRuntime --> DXVK[DXVK: DX9/10/11 -> Vulkan -> MoltenVK -> Metal]
+        WineRuntime --> DXVK[DXVK: DX9/10/11 -> Vulkan -> KosmicKrisp -> Metal]
         WineRuntime --> WineD3D[WineD3D: OpenGL / Vulkan fallback]
     end
 ```
@@ -145,7 +145,7 @@ Whisky provides four distinct graphics pipelines. Agents modifying graphics sett
     │
     ├── D3D11 Calls ─────────────► [DXMT] ──────────────────────► [Metal 3+ API] ─────► Apple Silicon GPU
     │
-    ├── D3D9 / D3D10 / D3D11 ────► [DXVK] ──────► [MoltenVK] ───► [Metal API]    ─────► Apple Silicon GPU
+    ├── D3D9 / D3D10 / D3D11 ────► [DXVK] ──────► [KosmicKrisp] ───► [Metal API]    ─────► Apple Silicon GPU
     │
     └── OpenGL / GDI ────────────► [WineD3D] ───────────────────► [Metal / GL]   ─────► Apple Silicon GPU
 ```
@@ -157,7 +157,7 @@ Whisky provides four distinct graphics pipelines. Agents modifying graphics sett
 2. **DXMT:**
    - Direct D3D11-to-Metal translator without Vulkan intermediaries. Excellent performance for D3D11 titles.
 3. **DXVK:**
-   - Translates D3D9/10/11 to Vulkan, executed over MoltenVK. Universal fallback for titles incompatible with D3DMetal or DXMT.
+   - Translates D3D9/10/11 to Vulkan through the Khronos loader and KosmicKrisp. Offer it only when its runtime payload and physical Vulkan device probe are usable. Preserve legacy runtime decoding and explicit bottle pins.
 4. **Metal Performance HUD:**
    - Controlled via `MTL_HUD_ENABLED=1`. Can be toggled per-bottle in bottle settings.
 

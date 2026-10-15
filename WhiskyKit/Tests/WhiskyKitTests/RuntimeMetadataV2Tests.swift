@@ -45,6 +45,7 @@ struct RuntimeMetadataV2Tests {
             dxmtVersion: "0.80",
             gptkCapable: true,
             name: "winecx-gptk-11.17-canary",
+            runtimeLayoutVersion: 2,
             manifestVersion: 2,
             releaseChannel: .canary,
             wineVersion: "11.17",
@@ -63,7 +64,8 @@ struct RuntimeMetadataV2Tests {
                 dxvk: true,
                 dxmt: true,
                 wined3d: true,
-                wow64: true
+                wow64: true,
+                vulkanProvider: "kosmickrisp"
             )
         )
 
@@ -71,6 +73,8 @@ struct RuntimeMetadataV2Tests {
             WhiskyWineVersion.self,
             from: PropertyListEncoder().encode(original)
         )
+        #expect(decoded.runtimeLayoutVersion == 2)
+        #expect(decoded.capabilities?.vulkanProvider == "kosmickrisp")
         #expect(decoded.wineVersion == "11.17")
         #expect(decoded.releaseChannel == .canary)
         #expect(decoded.capabilities?.hasVerifiedReceiveMessagePath == true)

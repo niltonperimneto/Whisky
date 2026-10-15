@@ -29,6 +29,7 @@ jobs:
       ARCHIVE_URL: ${{ github.event.client_payload.archiveURL }}
       ARCHIVE_SHA256: ${{ github.event.client_payload.sha256 }}
       RUNTIME_VERSION: ${{ github.event.client_payload.version }}
+      RUNTIME_LAYOUT_VERSION: ${{ github.event.client_payload.runtimeLayoutVersion }}
       HUB_COMMIT: ${{ github.event.client_payload.hubCommit || 'main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,15 +38,20 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/runtime"
           curl -fsSL -o "$RUNNER_TEMP/runtime/catalog.json" \
-            "https://raw.githubusercontent.com/$HUB/main/runtime-catalog.json"
-          curl -fsSL -o "$RUNNER_TEMP/runtime/contract.json" \
-            "https://raw.githubusercontent.com/$HUB/$HUB_COMMIT/contracts/runtime-layout.json"
+            "https://raw.githubusercontent.com/$HUB/main/runtime-catalog-v2.json"
           if [ -z "$ARCHIVE_URL" ]; then
             # Scheduled or manual: the catalog's newest entry.
             ARCHIVE_URL=$(jq -r '.runtimes[0].archiveURL' "$RUNNER_TEMP/runtime/catalog.json")
             ARCHIVE_SHA256=$(jq -r '.runtimes[0].sha256' "$RUNNER_TEMP/runtime/catalog.json")
             RUNTIME_VERSION=$(jq -r '.runtimes[0].version' "$RUNNER_TEMP/runtime/catalog.json")
+            RUNTIME_LAYOUT_VERSION=$(jq -r '.runtimes[0].runtimeLayoutVersion // 1' "$RUNNER_TEMP/runtime/catalog.json")
           fi
+          if [ "${RUNTIME_LAYOUT_VERSION:-1}" = 2 ]; then
+            contract="$HUB_COMMIT/contracts/runtime-layout.json"
+          else
+            contract="main/contracts/runtime-layout-v1.json"
+          fi
+          curl -fsSL -o "$RUNNER_TEMP/runtime/contract.json" "https://raw.githubusercontent.com/$HUB/$contract"
           {
             echo "ARCHIVE_URL=$ARCHIVE_URL"
             echo "ARCHIVE_SHA256=$ARCHIVE_SHA256"

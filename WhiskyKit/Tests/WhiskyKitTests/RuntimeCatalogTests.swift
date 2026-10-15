@@ -41,6 +41,24 @@ struct RuntimeCatalogTests {
         #expect(catalog.runtimes[0].channel == .canary)
     }
 
+    @Test func acceptsV2AndRejectsUnknownLayouts() throws {
+        let digest = String(repeating: "b", count: 64)
+        let data = Data("""
+        {"catalogVersion":2,"runtimes":[{
+          "identifier":"new","version":"5.0.0","channel":"canary",
+          "archiveURL":"https://example.com/runtime.tar.gz","sha256":"\(digest)",
+          "runtimeLayoutVersion":2,"capabilities":{"vulkanProvider":"kosmickrisp"}
+        }]}
+        """.utf8)
+        let catalog = try RuntimeCatalog.decode(data)
+        #expect(catalog.runtimes.first?.runtimeLayoutVersion == 2)
+        #expect(catalog.runtimes.first?.capabilities?.vulkanProvider == "kosmickrisp")
+        let json = try #require(String(data: data, encoding: .utf8))
+        let future = Data(json
+            .replacingOccurrences(of: "runtimeLayoutVersion\":2", with: "runtimeLayoutVersion\":3").utf8)
+        #expect(throws: RuntimeCatalogError.unsupportedVersion) { try RuntimeCatalog.decode(future) }
+    }
+
     @Test func rejectsInvalidDigest() {
         let data = Data("""
         {"catalogVersion":1,"runtimes":[{

@@ -242,7 +242,7 @@ extension Wine {
             // The CrossOver Vulkan loader switch needs this value even for a
             // native Vulkan game with no Direct3D DLLs. A frame generation
             // override must not disconnect a DXVK launch from KosmicKrisp.
-            if builder.resolve().environment["CX_LIBVULKAN"] != nil {
+            if builder.resolve().environment["CX_ACTIVE_GRAPHICS_BACKEND"] == "wined3d" {
                 builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "wined3d", layer: .programUser)
             } else if frameGeneration {
                 builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .programUser)

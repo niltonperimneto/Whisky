@@ -289,6 +289,7 @@ public class WhiskyWineInstaller {
         else {
             throw WhiskyWineInstallError.runtimeIncomplete
         }
+        try validateRuntimeLayout(folder, info: info)
         try verifyRuntimeManifest(in: folder, info: info)
     }
 
@@ -507,7 +508,7 @@ public class WhiskyWineInstaller {
             runtimeInfo: whiskyWineInfo(),
             d3dMetalInstalled: isD3DMetalInstalled(),
             dxmtRuntimeNative: Wine.isDXMTRuntimeNative(),
-            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: nil)
+            kosmicKrispInstalled: KosmicKrisp.isUsable(for: nil)
         )
     }
 
