@@ -22,7 +22,7 @@ import XCTest
 final class ManagedPresetTests: XCTestCase {
     func testDXVKBackendContributesTheDXVKPreset() {
         let preset = DLLOverrideResolver.managedPreset(for: .dxvk)
-        XCTAssertEqual(preset.map(\.dllName).sorted(), ["d3d10core", "d3d11", "d3d12", "d3d9", "dxgi"])
+        XCTAssertEqual(preset.map(\.dllName).sorted(), ["d3d10core", "d3d11", "d3d12", "d3d8", "d3d9", "dxgi"])
     }
 
     /// The case the config section used to miss entirely: a DXMT bottle applies

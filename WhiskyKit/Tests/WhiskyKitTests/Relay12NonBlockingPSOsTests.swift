@@ -71,7 +71,8 @@ struct Relay12NonBlockingPSOsTests {
         #expect(environment(settings, backend: .d3dMetal)[nonBlocking] == nil)
         let dxvk = environment(settings, backend: .dxvk)
         #expect(dxvk[nonBlocking] == nil)
-        #expect(dxvk["DXVK_ASYNC"] == "1")
+        // Upstream DXVK 3 on KosmicKrisp has no async mode, so nothing sets it.
+        #expect(dxvk["DXVK_ASYNC"] == nil)
     }
 
     @Test(

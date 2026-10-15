@@ -119,12 +119,7 @@ extension ProgramOverrideSettingsView {
 
             // Resolved, so a program on Recommended that runs DXVK does not
             // hide the controls that are in effect.
-            if effectiveBackend == .dxvk {
-                InheritableToggle(
-                    "config.dxvk.async",
-                    value: field(\.dxvkAsync),
-                    inherited: bottle.settings.dxvkAsync
-                )
+            if effectiveBackend.usesDXVK {
                 InheritablePicker(
                     "config.dxvkHud",
                     value: field(\.dxvkHud),
@@ -160,12 +155,12 @@ extension ProgramOverrideSettingsView {
                 )
                 .disabled(!relay12Available)
                 .accessibilityIdentifier("programRelay12Toggle")
-                // Relay12 reads the async toggle too, to skip draws whose
-                // pipeline is compiling. Under DXVK it is already shown above.
-                if effectiveBackend != .dxvk, program.settings.overrides?.relay12 ?? bottle.settings.relay12 {
+                // Relay12 skips draws whose pipeline is still compiling when
+                // this is on; upstream DXVK 3 has no async mode of its own.
+                if program.settings.overrides?.relay12 ?? bottle.settings.relay12 {
                     InheritableToggle(
-                        "config.dxvk.async",
-                        detail: "config.dxvk.async.info",
+                        "config.relay12.async",
+                        detail: "config.relay12.async.info",
                         value: field(\.dxvkAsync),
                         inherited: bottle.settings.relay12NonBlockingPSOs
                     )
@@ -443,8 +438,9 @@ extension ProgramOverrideSettingsView {
     }
 
     private var computedManagedOverrides: [(entry: DLLOverrideEntry, source: String)] {
-        guard bottle.settings.graphicsBackend == .dxvk else { return [] }
-        return DLLOverrideResolver.dxvkPreset.map {
+        let backend = bottle.settings.graphicsBackend
+        guard backend.usesDXVK else { return [] }
+        return DLLOverrideResolver.managedPreset(for: backend).map {
             (entry: $0, source: String(localized: "config.dllOverrides.source.dxvk"))
         }
     }

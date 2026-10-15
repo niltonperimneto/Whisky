@@ -125,6 +125,32 @@ extension Wine {
             builder.set(key, value, layer: .bottleManaged, reason: "Relay12 per-program choices")
         }
 
+        let cacheBackend = programOverrides?.graphicsBackend ?? resolvedBackend ?? bottle.settings.graphicsBackend
+        if cacheBackend == .dxvk {
+            let cacheRoot = bottle.url.appending(path: "ShaderCaches/kosmickrisp")
+            do {
+                for name in ["dxvk", "mesa"] {
+                    try FileManager.default.createDirectory(
+                        at: cacheRoot.appending(path: name), withIntermediateDirectories: true
+                    )
+                }
+                builder.set(
+                    "DXVK_SHADER_CACHE_PATH",
+                    "Z:\(cacheRoot.appending(path: "dxvk").path)",
+                    layer: .bottleManaged,
+                    reason: "Persistent upstream DXVK cache"
+                )
+                builder.set(
+                    "MESA_SHADER_CACHE_DIR",
+                    cacheRoot.appending(path: "mesa").path,
+                    layer: .bottleManaged,
+                    reason: "Persistent KosmicKrisp cache"
+                )
+            } catch {
+                envLogger.warning("Could not create shader cache folders: \(error.localizedDescription)")
+            }
+        }
+
         // DXVK reads its config from DXVK_CONFIG_FILE or the process working
         // directory, and the working directory of a launch is never the bottle
         // root the config editor writes to, so without this line the file is
@@ -173,6 +199,8 @@ extension Wine {
             applyProgramOverrides(
                 overrides,
                 runtime: bottle.settings.runtime,
+                inheritedBackend: resolvedBackend ?? bottle.settings.graphicsBackend,
+                inheritedShaderCacheEnabled: bottle.settings.shaderCacheEnabled,
                 frameGeneration: bottle.settings.frameGeneration,
                 metal4Enabled: bottle.settings.metal4Enabled,
                 relay12: bottle.settings.relay12,

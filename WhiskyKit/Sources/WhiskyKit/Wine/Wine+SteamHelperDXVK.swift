@@ -19,7 +19,7 @@
 import Foundation
 import os.log
 
-/// Steam's web helper on DXVK while Steam and its games stay on D3DMetal.
+/// Steam's web helper on DXVK.
 ///
 /// The helper is Chromium, which does not paint on D3DMetal or DXMT. Putting
 /// DXVK in `system32` for it put DXVK under every game Steam started, because
@@ -47,62 +47,62 @@ extension Wine {
         .sorted { $0.path < $1.path }
     }
 
+    /// The DLLs staged beside the helper. Upstream DXVK carries its own DXGI,
+    /// which Chromium's D3D11 has to come from as well.
+    static let steamHelperPayload = ["d3d10core.dll", "d3d11.dll", "dxgi.dll"]
+
     /// Places DXVK beside each helper and returns the overrides that select it.
     ///
     /// - Parameters:
     ///   - directories: The helper directories, from ``steamHelperDirectories(forClient:)``.
     ///   - dxvk: The runtime's DXVK folder; its `x64` lane is staged.
-    ///   - cleanDXGI: Wine's own `dxgi.dll` when GPTK replaced the builtin one,
-    ///     as ``enableDXVK(bottle:)`` deploys it; `nil` leaves dxgi builtin.
     /// - Returns: The helper's overrides, or `nil` when nothing could be staged,
     ///   in which case anything partly staged has been taken out again.
-    static func stageSteamHelperDXVK(in directories: [URL], dxvk: URL, cleanDXGI: URL?) -> [String: String]? {
+    static func stageSteamHelperDXVK(in directories: [URL], dxvk: URL) -> [String: String]? {
         let lane = dxvk.appending(path: "x64")
-        let payload = ["d3d10core.dll", "d3d11.dll"]
-        guard !directories.isEmpty, payload.allSatisfy({
+        guard !directories.isEmpty, steamHelperPayload.allSatisfy({
             FileManager.default.fileExists(atPath: lane.appending(path: $0).path(percentEncoded: false))
         })
         else { return nil }
 
         do {
             for directory in directories {
-                for name in payload {
+                for name in steamHelperPayload {
                     _ = try FileManager.default.installFileIfContentDiffers(
                         at: directory.appending(path: name), from: lane.appending(path: name)
                     )
-                }
-                let dxgi = directory.appending(path: "dxgi.dll")
-                if let cleanDXGI {
-                    try FileManager.default.installFile(at: dxgi, from: cleanDXGI)
-                    try stripBuiltinMarker(at: dxgi)
                 }
             }
         } catch {
             Logger.wineKit.warning(
                 "Could not stage DXVK for Steam's web helper: \(error.localizedDescription, privacy: .public)"
             )
-            removeSteamHelperDXVK(from: directories, dxvk: dxvk, originalDXGI: cleanDXGI)
+            removeSteamHelperDXVK(from: directories, dxvk: dxvk)
             return nil
         }
 
-        var overrides = ["d3d10core": "n,b", "d3d11": "n,b"]
-        if cleanDXGI != nil {
-            overrides["dxgi"] = "n,b"
-        }
-        return overrides
+        return ["d3d10core": "n,b", "d3d11": "n,b", "dxgi": "n,b"]
     }
 
     /// Takes staged DXVK back out of the helper directories.
     ///
     /// Only a file byte-identical to what staging puts there is removed, so a
-    /// DLL Steam ships under one of these names is never touched.
+    /// DLL Steam ships under one of these names is never touched. What an
+    /// earlier build staged, DXVK-macOS beside Wine's own `dxgi.dll`, is
+    /// recognised too.
     ///
-    /// - Parameter originalDXGI: Wine's own `dxgi.dll`, whether or not this
-    ///   launch would stage it, so a copy staged by an earlier one is found.
-    static func removeSteamHelperDXVK(from directories: [URL], dxvk: URL, originalDXGI: URL?) {
-        let lane = dxvk.appending(path: "x64")
-        var staged = ["d3d10core.dll", "d3d11.dll"].compactMap { name in
-            (try? Data(contentsOf: lane.appending(path: name))).map { (name, $0) }
+    /// - Parameters:
+    ///   - legacyDXVK: The runtime's DXVK-macOS folder, if it still has one.
+    ///   - originalDXGI: Wine's own `dxgi.dll`, which that build staged with
+    ///     its builtin marker stripped.
+    static func removeSteamHelperDXVK(
+        from directories: [URL], dxvk: URL, legacyDXVK: URL? = nil, originalDXGI: URL? = nil
+    ) {
+        var staged: [(String, Data)] = []
+        for payload in [dxvk, legacyDXVK].compactMap({ $0?.appending(path: "x64") }) {
+            staged += steamHelperPayload.compactMap { name in
+                (try? Data(contentsOf: payload.appending(path: name))).map { (name, $0) }
+            }
         }
         if let originalDXGI, let dxgi = try? Data(contentsOf: originalDXGI), dxgi.count >= 0x50 {
             staged.append(("dxgi.dll", strippingBuiltinMarker(dxgi)))
@@ -116,7 +116,8 @@ extension Wine {
         }
     }
 
-    /// `contents` as ``stripBuiltinMarker(at:)`` leaves it on disk.
+    /// `contents` with the "Wine builtin DLL" marker at 0x40 overwritten, as
+    /// an earlier build staged Wine's `dxgi.dll` beside the helper.
     static func strippingBuiltinMarker(_ contents: Data) -> Data {
         var stripped = contents
         stripped.replaceSubrange(0x40 ..< 0x50, with: [
@@ -140,27 +141,56 @@ extension Wine {
         let runtime = bottle.settings.runtime
         let directories = steamHelperDirectories(forClient: url)
         let dxvk = dxvkFolder(for: runtime)
-        let originalDXGI = GPTKImporter.originalsFolder(
-            inStore: GPTKImporter.storeFolder, key: GPTKImporter.originalsKey(for: runtime)
-        ).appending(path: "dxgi.dll")
 
-        // An explicit backend on steam.exe is the user's answer for its helper too.
-        guard plan.decisionSource != .program,
-              GraphicsBackendResolver.helperBackend(
-                  for: launcher, launcherBackend: plan.effectiveBackend
-              ) == .dxvk
+        // Whatever DXVK-macOS an earlier build staged goes, in every case.
+        removeSteamHelperDXVK(
+            from: directories,
+            dxvk: legacyDXVKFolder(for: runtime),
+            originalDXGI: GPTKImporter.originalsFolder(
+                inStore: GPTKImporter.storeFolder, key: GPTKImporter.originalsKey(for: runtime)
+            ).appending(path: "dxgi.dll")
+        )
+
+        // A DXVK launch stages beside the helper too, because Steam's games
+        // may be on another backend by their own override. An explicit
+        // backend on steam.exe is the user's answer for its helper as well.
+        let onDXVK = plan.effectiveBackend == .dxvk
+        guard onDXVK || (plan.decisionSource != .program &&
+            GraphicsBackendResolver.helperBackend(
+                for: launcher, launcherBackend: plan.effectiveBackend
+            ) == .dxvk),
+            KosmicKrisp.isInstalled(for: runtime)
         else {
-            removeSteamHelperDXVK(from: directories, dxvk: dxvk, originalDXGI: originalDXGI)
+            removeSteamHelperDXVK(from: directories, dxvk: dxvk)
+            if !onDXVK, plan.decisionSource != .program,
+               GraphicsBackendResolver.helperBackend(for: launcher, launcherBackend: plan.effectiveBackend) != nil {
+                log
+                    .write(
+                        line: "Steam web helper graphics: \(plan.effectiveBackend.rawValue), no KosmicKrisp in runtime"
+                    )
+            }
             return nil
         }
 
-        let cleanDXGI = GPTKImporter.isDeployed(for: runtime)
-            ? try? GPTKImporter.originalDXGI(inStore: GPTKImporter.storeFolder, runtime: runtime)
-            : nil
-        let overrides = stageSteamHelperDXVK(in: directories, dxvk: dxvk, cleanDXGI: cleanDXGI)
+        let overrides = stageSteamHelperDXVK(in: directories, dxvk: dxvk)
         log.write(line: overrides == nil
             ? "Steam web helper graphics: \(plan.effectiveBackend.rawValue), DXVK could not be staged"
             : "Steam web helper graphics: dxvk, staged beside the helper")
         return overrides
+    }
+
+    /// Puts a launch whose Steam helper was steered onto DXVK on KosmicKrisp.
+    ///
+    /// The helper needs the driver like a DXVK bottle does, and the driver is
+    /// chosen per process tree, so Steam gets it. A value already set wins:
+    /// frame generation's `CX_ACTIVE_GRAPHICS_BACKEND` is the bottle's answer,
+    /// and `WINE_VULKAN_LIBRARY` still reaches the loader without it.
+    static func addSteamHelperDriver(
+        to environment: inout [String: String], backend: GraphicsBackend, runtime: String?
+    ) {
+        guard backend != .dxvk else { return }
+        for (key, value) in KosmicKrisp.environment(for: runtime) where environment[key] == nil {
+            environment[key] = value
+        }
     }
 }

@@ -498,15 +498,16 @@ public class WhiskyWineInstaller {
     /// ``GraphicsBackend/isAvailable(runtimeInfo:)`` version gate with the
     /// payload checks version records can't express: DXMT needs the *native*
     /// payload variant (an older builtin-variant payload would silently
-    /// redirect to wined3d), and D3DMetal needs the GPTK payload on disk —
+    /// redirect to wined3d), D3DMetal needs the GPTK payload on disk —
     /// without it a d3dMetal bottle silently degrades to wined3d at launch
-    /// (issue #146).
+    /// (issue #146) — and DXVK needs the KosmicKrisp driver and DXVK 3.
     public static func isBackendAvailable(_ backend: GraphicsBackend) -> Bool {
         backendAvailability(
             backend,
             runtimeInfo: whiskyWineInfo(),
             d3dMetalInstalled: isD3DMetalInstalled(),
-            dxmtRuntimeNative: Wine.isDXMTRuntimeNative()
+            dxmtRuntimeNative: Wine.isDXMTRuntimeNative(),
+            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: nil)
         )
     }
 
@@ -517,7 +518,8 @@ public class WhiskyWineInstaller {
         _ backend: GraphicsBackend,
         runtimeInfo: WhiskyWineVersion?,
         d3dMetalInstalled: Bool,
-        dxmtRuntimeNative: Bool
+        dxmtRuntimeNative: Bool,
+        kosmicKrispInstalled: Bool = false
     ) -> Bool {
         let versionAvailable = backend.isAvailable(runtimeInfo: runtimeInfo)
         switch backend {
@@ -525,7 +527,9 @@ public class WhiskyWineInstaller {
             return versionAvailable && dxmtRuntimeNative
         case .d3dMetal:
             return versionAvailable && d3dMetalInstalled
-        case .recommended, .dxvk, .wined3d:
+        case .dxvk:
+            return versionAvailable && kosmicKrispInstalled
+        case .recommended, .wined3d:
             return versionAvailable
         }
     }

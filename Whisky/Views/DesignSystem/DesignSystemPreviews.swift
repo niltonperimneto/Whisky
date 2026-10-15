@@ -72,7 +72,7 @@ struct DesignSystemGalleryView: View {
                             detail: "config.metalHud.info",
                             isOn: $metalHudOn
                         )
-                        InheritableToggle("config.dxvk.async", value: $dxvkOverride, inherited: true)
+                        InheritableToggle("config.relay12.async", value: $dxvkOverride, inherited: true)
                         InheritableToggle("config.shaderCache", value: $shaderCacheOverride, inherited: true)
                         SettingsNotice(.info, "settings.advanced.inEffect")
                     }

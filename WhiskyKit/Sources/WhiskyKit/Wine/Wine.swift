@@ -105,27 +105,36 @@ public class Wine {
         public let decisionSource: GraphicsLaunchDecisionSource
         public let programOverrides: ProgramOverrides?
 
-        /// DXVK-macOS ships its D3D implementation without an upstream DXGI
-        /// DLL. Wine DXGI is therefore a declared compatibility component, not
-        /// an accidental fallback that should be diagnosed as pure WineD3D.
+        /// Upstream DXVK carries its own `dxgi.dll`; every other backend keeps
+        /// the one it comes with.
         public var dxgiStrategy: String {
-            effectiveBackend == .dxvk ? "wine-dxgi-compat" : "backend-default"
+            switch effectiveBackend {
+            case .dxvk: "dxvk-native"
+            case .recommended, .d3dMetal, .dxmt, .wined3d: "backend-default"
+            }
         }
     }
 
-    /// URL to the installed DXVK folder containing Direct3D-to-Vulkan translation libraries.
-    private static let dxvkFolder: URL = WhiskyWineInstaller.libraryFolder.appending(path: "DXVK")
     /// URL to the installed DXMT payload containing Direct3D-11-to-Metal translation libraries.
     /// Absent on runtimes older than Wine Libraries 3.1.0.
     private static let dxmtFolder: URL = WhiskyWineInstaller.libraryFolder.appending(path: "DXMT")
 
-    /// The DXVK payload belonging to `runtime`.
+    /// The DXVK payload belonging to `runtime`: upstream DXVK 3.x, which runs
+    /// on KosmicKrisp.
     ///
     /// Translation payloads ship inside a runtime and are built against it, so
     /// a bottle on another runtime must use that runtime's copy or none. A
     /// runtime that ships neither (a GPTK build without Vulkan, say) simply has
     /// those backends unavailable, which is the honest answer.
     static func dxvkFolder(for runtime: String?) -> URL {
+        KosmicKrisp.dxvkFolder(for: runtime)
+    }
+
+    /// Where a runtime kept DXVK-macOS 1.10, the MoltenVK build DXVK used to be.
+    ///
+    /// Nothing is staged from it any more. It is only read so a prefix that
+    /// last ran it can have its files recognised and taken out again.
+    static func legacyDXVKFolder(for runtime: String?) -> URL {
         WhiskyWineInstaller.libraryFolder(for: runtime).appending(path: "DXVK")
     }
 
@@ -341,7 +350,8 @@ public class Wine {
             choice,
             runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: bottle.settings.runtime),
             d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: bottle.settings.runtime),
-            dxmtRuntimeNative: isDXMTRuntimeNative(for: bottle.settings.runtime)
+            dxmtRuntimeNative: isDXMTRuntimeNative(for: bottle.settings.runtime),
+            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: bottle.settings.runtime)
         )
         // A launcher takes the bottle's backend like its games do: that backend
         // is staged into the shared system32, so a launcher on another one put
@@ -402,6 +412,10 @@ public class Wine {
                 fileHandle.write(line: "Relay12 non-blocking pipelines: \(nonBlocking)")
             }
         }
+        if backend == .dxvk {
+            let driver = KosmicKrisp.driverFolder(for: bottle.settings.runtime)
+            fileHandle.write(line: "KosmicKrisp driver: \(driver.path(percentEncoded: false))")
+        }
 
         if isPEAK {
             fileHandle.write(line: "PEAK diagnostics: delay-load/module tracing enabled")
@@ -452,10 +466,6 @@ public class Wine {
         try prepareBackendPrefix(effectiveBackend, bottle: bottle)
         applyRelay12(bottle: bottle, programOverrides: programOverrides, backend: effectiveBackend)
 
-        if effectiveBackend == .dxvk {
-            try enableDXVK(bottle: bottle)
-        }
-
         // An attached run holds this for the whole session. A detached run only
         // holds it while the `wine start` stub lives, covering startup.
         let activityToken: NSObjectProtocol? = bottle.settings.disableAppNap
@@ -501,6 +511,9 @@ public class Wine {
         )
 
         let steamHelper = prepareSteamHelper(for: url, bottle: bottle, plan: graphicsPlan, log: fileHandle)
+        if steamHelper != nil {
+            addSteamHelperDriver(to: &wineEnvironment, backend: effectiveBackend, runtime: bottle.settings.runtime)
+        }
         try await applyDLLOverrides(
             for: url, bottle: bottle,
             wineEnvironment: &wineEnvironment,
@@ -556,7 +569,7 @@ public class Wine {
             for: url,
             arguments: args,
             blockInjectedOverlays: bottle.settings.blockInjectedOverlays,
-            helperOnDXVK: steamHelper != nil || effectiveBackend == .dxvk
+            helperOnDXVK: steamHelper != nil || effectiveBackend.usesDXVK
         )
         let command = SteamHelper.command(
             program: url, args: programArguments, workingDirectory: runDirectory, environment: wineEnvironment
@@ -1070,40 +1083,44 @@ public class Wine {
 
     /// Installs DXVK libraries into a bottle's Windows system directories.
     ///
-    /// DXVK translates DirectX 9/10/11 calls to Vulkan, often providing better
-    /// performance than Wine's built-in DirectX implementation. This method copies
-    /// the DXVK DLL files to the bottle's system32 and syswow64 directories.
+    /// DXVK translates DirectX 8/9/10/11 calls to Vulkan, on the KosmicKrisp
+    /// driver. This copies the runtime's upstream DXVK 3.x DLLs, `dxgi.dll`
+    /// included, into the bottle's system32 and syswow64 directories. The
+    /// Vulkan driver is not a prefix file: ``KosmicKrisp/environment(for:)``
+    /// selects it.
     ///
     /// - Parameter bottle: The ``Bottle`` to install DXVK into.
-    /// - Throws: An error if the DLL files cannot be copied.
+    /// - Throws: ``DXVKError/payloadMissing`` when the runtime does not carry
+    ///   the KosmicKrisp driver and DXVK 3, or an error if the DLL files cannot
+    ///   be copied.
     ///
     /// - Note: This is automatically called by ``runProgram(at:args:bottle:environment:)``
-    ///   when DXVK is enabled in the bottle settings.
+    ///   when DXVK is the bottle's backend.
     @MainActor
     public static func enableDXVK(bottle: Bottle) throws {
-        let dxvk = Wine.dxvkFolder(for: bottle.settings.runtime)
+        let runtime = bottle.settings.runtime
+        guard KosmicKrisp.isInstalled(for: runtime) else {
+            throw DXVKError.payloadMissing
+        }
+        let dxvk = dxvkFolder(for: runtime)
+        let windows = bottle.url.appending(path: "drive_c").appending(path: "windows")
         try FileManager.default.replaceDLLs(
-            in: bottle.url.appending(path: "drive_c").appending(path: "windows").appending(path: "system32"),
+            in: windows.appending(path: "system32"),
             withContentsIn: dxvk.appending(path: "x64")
         )
         try FileManager.default.replaceDLLs(
-            in: bottle.url.appending(path: "drive_c").appending(path: "windows").appending(path: "syswow64"),
+            in: windows.appending(path: "syswow64"),
             withContentsIn: dxvk.appending(path: "x32")
         )
-        // DXVK-macOS ships no dxgi.dll, so enableDXVK never overwrites one.
-        // Reconcile dxgi.dll against the payload deployed into this bottle's runtime.
-        guard reconcileDXGIForDXVK(bottle: bottle) else {
-            throw DXVKError.dxgiCompatibilityUnavailable
-        }
     }
 
     public enum DXVKError: LocalizedError, Equatable {
-        case dxgiCompatibilityUnavailable
+        case payloadMissing
 
         public var errorDescription: String? {
             switch self {
-            case .dxgiCompatibilityUnavailable:
-                "DXVK's Wine DXGI compatibility component is missing or could not be installed."
+            case .payloadMissing:
+                "This runtime does not include the KosmicKrisp driver and DXVK 3 payload."
             }
         }
     }
@@ -1163,9 +1180,6 @@ public class Wine {
             let keep = prefixDLLNames(for: backend, runtime: bottle.settings.runtime)
             clearForeignBackendDLLs(keeping: keep, bottle: bottle)
             try prepareBackendPrefix(backend, bottle: bottle)
-            if backend == .dxvk {
-                try enableDXVK(bottle: bottle)
-            }
             guard !graphicsPrefixNeedsRepair(backend: backend, bottle: bottle) else {
                 return .failed("Graphics DLL verification failed")
             }
@@ -1185,6 +1199,7 @@ public class Wine {
         let runtime = bottle.settings.runtime
         let names = prefixDLLNames(for: .dxvk, runtime: runtime)
             .union(prefixDLLNames(for: .dxmt, runtime: runtime))
+            .union(legacyDXVKDLLNames(runtime: runtime))
             .union(["dxgi.dll"])
         let windows = bottle.url.appending(path: "drive_c/windows")
         let entries = try ["system32", "syswow64"].flatMap { lane in
@@ -1226,7 +1241,7 @@ public class Wine {
             return !payloadMatchesPrefix(
                 payload: dxvkFolder(for: runtime),
                 windows: windows
-            ) || !dxgiStrategyMatches(bottle: bottle)
+            )
         case .dxmt:
             return !payloadMatchesPrefix(
                 payload: dxmtFolder(for: runtime),
@@ -1241,8 +1256,7 @@ public class Wine {
     }
 
     /// Checks the runtime payload against both Windows architecture lanes.
-    /// DXVK-macOS intentionally has no dxgi.dll, so only files actually present
-    /// in the payload participate in this check.
+    /// Only files actually present in the payload participate in this check.
     private static func payloadMatchesPrefix(payload: URL, windows: URL) -> Bool {
         let lanes = [("x64", "system32"), ("x32", "syswow64")]
         return lanes.allSatisfy { sourceLane, destinationLane in
@@ -1269,161 +1283,6 @@ public class Wine {
               let right = try? Data(contentsOf: rhs, options: .mappedIfSafe)
         else { return false }
         return left == right
-    }
-
-    /// Strips the "Wine builtin DLL" marker at offset 0x40 from a PE file.
-    static func stripBuiltinMarker(at fileURL: URL) throws {
-        guard FileManager.default.fileExists(atPath: fileURL.path(percentEncoded: false)) else { return }
-        let handle = try FileHandle(forUpdating: fileURL)
-        defer { try? handle.close() }
-        let dosCode: [UInt8] = [
-            0x0E, 0x1F, 0xBA, 0x0E, 0x00, 0xB4, 0x09, 0xCD,
-            0x21, 0xB8, 0x01, 0x4C, 0xCD, 0x21, 0x90, 0x90
-        ]
-        try handle.seek(toOffset: 0x40)
-        try handle.write(contentsOf: Data(dosCode))
-    }
-
-    /// Reconciles the prefix's `dxgi.dll` against the GPTK payload deployed into
-    /// the bottle's selected runtime.
-    @discardableResult
-    @MainActor
-    static func reconcileDXGIForDXVK(bottle: Bottle) -> Bool {
-        let runtime = bottle.settings.runtime
-        let originals: URL
-        do {
-            originals = try GPTKImporter.originalDXGI(
-                inStore: GPTKImporter.storeFolder,
-                runtime: runtime
-            )
-        } catch {
-            Logger.wineKit.warning(
-                "DXGI backup migration failed: \(error.localizedDescription, privacy: .public)"
-            )
-            originals = GPTKImporter.originalsFolder(
-                inStore: GPTKImporter.storeFolder,
-                key: GPTKImporter.originalsKey(for: runtime)
-            ).appending(path: "dxgi.dll")
-        }
-        return reconcileDXGIForDXVK(
-            prefixRoot: bottle.url,
-            gptkOriginalsDXGI: originals,
-            gptkPayloadIsDeployed: GPTKImporter.isDeployed(for: runtime)
-        )
-    }
-
-    /// Testable reconciliation seam with explicit storage and deployment state.
-    @discardableResult
-    static func reconcileDXGIForDXVK(
-        prefixRoot: URL,
-        gptkOriginalsDXGI: URL,
-        gptkPayloadIsDeployed: Bool
-    ) -> Bool {
-        guard gptkPayloadIsDeployed else {
-            return removeStaleNativeDXGI(prefixRoot: prefixRoot)
-        }
-        return deployCleanDXGI(prefixRoot: prefixRoot, from: gptkOriginalsDXGI)
-    }
-
-    @MainActor
-    private static func dxgiStrategyMatches(bottle: Bottle) -> Bool {
-        let runtime = bottle.settings.runtime
-        let isDeployed = GPTKImporter.isDeployed(for: runtime)
-        if !isDeployed {
-            return dxgiStrategyMatches(
-                prefixRoot: bottle.url,
-                gptkOriginalsDXGI: GPTKImporter.storeFolder.appending(path: "unused-dxgi.dll"),
-                gptkPayloadIsDeployed: false
-            )
-        }
-        let original: URL
-        do {
-            original = try GPTKImporter.originalDXGI(inStore: GPTKImporter.storeFolder, runtime: runtime)
-        } catch {
-            return false
-        }
-        return dxgiStrategyMatches(
-            prefixRoot: bottle.url,
-            gptkOriginalsDXGI: original,
-            gptkPayloadIsDeployed: isDeployed
-        )
-    }
-
-    static func dxgiStrategyMatches(
-        prefixRoot: URL,
-        gptkOriginalsDXGI: URL,
-        gptkPayloadIsDeployed: Bool
-    ) -> Bool {
-        let root = prefixRoot.appending(path: "drive_c/windows")
-        let destinations = ["system32", "syswow64"].map {
-            root.appending(path: $0).appending(path: "dxgi.dll")
-        }
-        if !gptkPayloadIsDeployed {
-            return destinations.allSatisfy { destination in
-                !FileManager.default.fileExists(atPath: destination.path(percentEncoded: false))
-                    || (try? isNativePE(destination)) != true
-            }
-        }
-
-        let destination = destinations[0]
-        guard var expected = try? Data(contentsOf: gptkOriginalsDXGI),
-              let installed = try? Data(contentsOf: destination),
-              expected.count >= 0x50
-        else { return false }
-        expected.replaceSubrange(0x40 ..< 0x50, with: [
-            0x0E, 0x1F, 0xBA, 0x0E, 0x00, 0xB4, 0x09, 0xCD,
-            0x21, 0xB8, 0x01, 0x4C, 0xCD, 0x21, 0x90, 0x90
-        ])
-        return expected == installed && (try? isNativePE(destination)) == true
-    }
-
-    /// Removes a native `dxgi.dll` the prefix must not keep under DXVK.
-    @discardableResult
-    static func removeStaleNativeDXGI(prefixRoot: URL) -> Bool {
-        let fileManager = FileManager.default
-        var succeeded = true
-        for dir in ["system32", "syswow64"] {
-            let dxgi = prefixRoot.appending(path: "drive_c").appending(path: "windows")
-                .appending(path: dir).appending(path: "dxgi.dll")
-            guard fileManager.fileExists(atPath: dxgi.path(percentEncoded: false)),
-                  (try? isNativePE(dxgi)) == true
-            else { continue }
-            do {
-                try fileManager.removeItem(at: dxgi)
-                Logger.wineKit.info("Removed stale native dxgi.dll from \(dir, privacy: .public)")
-            } catch {
-                succeeded = false
-                Logger.wineKit.warning(
-                    "Could not remove stale native dxgi.dll: \(error.localizedDescription, privacy: .public)"
-                )
-            }
-        }
-        return succeeded
-    }
-
-    /// Deploys Wine's backed-up clean `dxgi.dll` into the prefix, with the
-    /// builtin marker stripped so the loader accepts it as a true native PE.
-    @discardableResult
-    static func deployCleanDXGI(prefixRoot: URL, from gptkOriginalsDXGI: URL) -> Bool {
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: gptkOriginalsDXGI.path(percentEncoded: false)) else { return false }
-
-        let sys32DXGI = prefixRoot.appending(path: "drive_c").appending(path: "windows")
-            .appending(path: "system32").appending(path: "dxgi.dll")
-        do {
-            try fileManager.installFile(at: sys32DXGI, from: gptkOriginalsDXGI)
-            try stripBuiltinMarker(at: sys32DXGI)
-            return dxgiStrategyMatches(
-                prefixRoot: prefixRoot,
-                gptkOriginalsDXGI: gptkOriginalsDXGI,
-                gptkPayloadIsDeployed: true
-            )
-        } catch {
-            Logger.wineKit.warning(
-                "Could not deploy clean dxgi.dll into prefix: \(error.localizedDescription, privacy: .public)"
-            )
-            return false
-        }
     }
 
     /// Errors thrown by ``enableDXMT(bottle:)``.
@@ -1509,16 +1368,26 @@ public class Wine {
     static func prefixDLLNames(for backend: GraphicsBackend, runtime: String?) -> Set<String> {
         switch backend {
         case .dxvk:
-            let folder = dxvkFolder(for: runtime).appending(path: "x64")
-            let contents = (try? FileManager.default.contentsOfDirectory(
-                atPath: folder.path(percentEncoded: false)
-            )) ?? []
-            return Set(contents.filter { $0.hasSuffix(".dll") })
+            payloadDLLNames(in: dxvkFolder(for: runtime))
         case .dxmt:
-            return Set(dxmtPrefixDLLs)
+            Set(dxmtPrefixDLLs)
         case .d3dMetal, .wined3d, .recommended:
-            return []
+            []
         }
+    }
+
+    /// The DLLs DXVK-macOS left in a prefix, so a bottle that last ran it
+    /// loses them whatever it runs next.
+    static func legacyDXVKDLLNames(runtime: String?) -> Set<String> {
+        payloadDLLNames(in: legacyDXVKFolder(for: runtime))
+    }
+
+    private static func payloadDLLNames(in payload: URL) -> Set<String> {
+        let folder = payload.appending(path: "x64")
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            atPath: folder.path(percentEncoded: false)
+        )) ?? []
+        return Set(contents.filter { $0.hasSuffix(".dll") })
     }
 
     /// Whether the file in the prefix is one a backend payload put there.
@@ -1536,6 +1405,8 @@ public class Wine {
             dxvkFolder(for: runtime).appending(path: "x32"),
             dxmtFolder(for: runtime).appending(path: "x64"),
             dxmtFolder(for: runtime).appending(path: "x32"),
+            legacyDXVKFolder(for: runtime).appending(path: "x64"),
+            legacyDXVKFolder(for: runtime).appending(path: "x32"),
             origFolder
         ]
         guard let installed = try? Data(contentsOf: file) else { return false }
@@ -1567,6 +1438,7 @@ public class Wine {
         let runtime = bottle.settings.runtime
         let remove = prefixDLLNames(for: .dxvk, runtime: runtime)
             .union(prefixDLLNames(for: .dxmt, runtime: runtime))
+            .union(legacyDXVKDLLNames(runtime: runtime))
             .subtracting(keep)
         guard !remove.isEmpty else { return }
 
@@ -1618,11 +1490,13 @@ public class Wine {
         switch backend {
         case .dxmt:
             try enableDXMT(bottle: bottle)
+        case .dxvk:
+            try enableDXVK(bottle: bottle)
         case .d3dMetal:
             // Applied in both directions, so clearing the setting takes effect
             // on the next launch by itself.
             applyMetalFX(bottle: bottle)
-        case .dxvk, .wined3d, .recommended:
+        case .wined3d, .recommended:
             break
         }
     }

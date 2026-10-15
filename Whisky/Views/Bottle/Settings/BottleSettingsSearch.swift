@@ -74,8 +74,8 @@ enum BottleSettingsSearch {
         .init(tab: .graphics, titleKey: "config.relay12", keywords: ["d3d11on12", "d3d12"]),
         .init(tab: .graphics, titleKey: "config.forceD3D11", keywords: ["dx11", "directx 11"]),
         .init(
-            tab: .graphics, titleKey: "config.dxvk.async",
-            keywords: ["DXVK_ASYNC", "D3D11ON12_COMPAT_NonBlockingPSOs", "shader", "stutter", "pipeline"]
+            tab: .graphics, titleKey: "config.relay12.async",
+            keywords: ["D3D11ON12_COMPAT_NonBlockingPSOs", "shader", "stutter", "pipeline", "async"]
         ),
         .init(tab: .graphics, titleKey: "config.dxvkHud", keywords: ["DXVK_HUD", "fps"]),
         .init(tab: .graphics, titleKey: "config.dxvk.confFile"),

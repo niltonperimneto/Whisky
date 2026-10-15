@@ -35,6 +35,7 @@ final class GraphicsBackendResolverTests: XCTestCase {
                 runtimeInfo: runtime,
                 d3dMetalInstalled: true,
                 dxmtRuntimeNative: true,
+                kosmicKrispInstalled: true,
                 architecture: .x32
             ),
             .dxvk
@@ -117,7 +118,8 @@ final class GraphicsBackendResolverTests: XCTestCase {
 
         XCTAssertEqual(
             GraphicsBackendResolver.resolve(
-                runtimeInfo: runtime, d3dMetalInstalled: false, dxmtRuntimeNative: false
+                runtimeInfo: runtime, d3dMetalInstalled: false, dxmtRuntimeNative: false,
+                kosmicKrispInstalled: true
             ),
             .dxvk
         )
@@ -128,14 +130,18 @@ final class GraphicsBackendResolverTests: XCTestCase {
         let runtime = WhiskyWineVersion(version: SemanticVersion(3, 0, 0))
 
         XCTAssertEqual(
-            GraphicsBackendResolver.resolve(runtimeInfo: runtime, d3dMetalInstalled: false),
+            GraphicsBackendResolver.resolve(
+                runtimeInfo: runtime, d3dMetalInstalled: false, kosmicKrispInstalled: true
+            ),
             .dxvk
         )
     }
 
     func testResolvesDXVKWhenRuntimeRecordMissing() {
         XCTAssertEqual(
-            GraphicsBackendResolver.resolve(runtimeInfo: nil, d3dMetalInstalled: false),
+            GraphicsBackendResolver.resolve(
+                runtimeInfo: nil, d3dMetalInstalled: false, kosmicKrispInstalled: true
+            ),
             .dxvk
         )
     }

@@ -1020,8 +1020,14 @@ public struct BottleSettings: Codable, Equatable {
             case .off:
                 break
             }
-            if dxvkAsync {
-                builder.set("DXVK_ASYNC", "1", layer: .bottleManaged)
+            // Upstream DXVK needs Vulkan 1.3 features only KosmicKrisp
+            // exposes, so the launch runs on that driver. The file placement
+            // happens in `Wine.enableDXVK` at launch.
+            for (key, value) in KosmicKrisp.environment(for: runtime) {
+                builder.set(key, value, layer: .bottleManaged, reason: "DXVK on KosmicKrisp")
+            }
+            for key in KosmicKrisp.conflictingEnvironmentKeys {
+                builder.remove(key, layer: .bottleManaged)
             }
 
         case .dxmt:
@@ -1108,12 +1114,10 @@ public struct BottleSettings: Codable, Equatable {
         // fixes on every supported macOS, so the toggle's off position changed
         // nothing and its on position only hid the provenance.
 
-        // Shader cache control. DXVK_STATE_CACHE is the variable DXVK actually
-        // reads; the previous pair (a compile-thread throttle and an NVIDIA GL
-        // driver variable) changed nothing on this platform.
-        if !shaderCacheEnabled {
-            builder.set("DXVK_STATE_CACHE", "0", layer: .bottleManaged)
-        }
+        Wine.configureShaderCache(
+            enabled: shaderCacheEnabled, backend: resolvedBackend,
+            builder: &builder, layer: .bottleManaged
+        )
 
         // Force D3D11 mode - helps with compatibility (whisky-app/whisky#1361)
         if forceD3D11 {

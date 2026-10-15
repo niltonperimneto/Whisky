@@ -30,7 +30,7 @@ struct DXVKSettingsView: View {
     @State private var confExists: Bool = false
 
     private var isDXVKActive: Bool {
-        resolvedBackend == .dxvk
+        resolvedBackend.usesDXVK
     }
 
     private var confURL: URL {
@@ -39,12 +39,6 @@ struct DXVKSettingsView: View {
 
     var body: some View {
         Section {
-            SettingsToggle(
-                "config.dxvk.async",
-                detail: "config.dxvk.async.info",
-                isOn: $bottle.settings.asyncShaderCompilation
-            )
-
             SettingsPicker("config.dxvkHud", detail: "config.dxvkHud.info", selection: $bottle.settings.dxvkHud) {
                 Text("config.dxvkHud.off").tag(DXVKHUD.off)
                 Text("config.dxvkHud.fps").tag(DXVKHUD.fps)

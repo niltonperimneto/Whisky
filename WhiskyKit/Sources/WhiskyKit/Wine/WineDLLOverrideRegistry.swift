@@ -35,7 +35,7 @@ public extension Wine {
             case .d3dMetal:
                 "d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
             case .dxvk:
-                "d3d9=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
+                "d3d8=n,b;d3d9=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
             case .dxmt:
                 "d3d10core=n,b;d3d11=n,b;d3d12=n,b;dxgi=n,b"
             case .wined3d:

@@ -138,12 +138,18 @@ private struct BackendCard: View {
 
     // MARK: - Unavailability
 
-    /// Only payload-dependent backends (DXMT, D3DMetal) can be unavailable;
-    /// each explains what the installed engine is missing (issue #146).
+    /// Only payload-dependent backends (DXMT, D3DMetal, DXVK) can be
+    /// unavailable; each explains what the installed engine is missing
+    /// (issue #146).
     private var unavailableReasonKey: LocalizedStringKey {
-        backend == .d3dMetal
-            ? "config.graphics.backend.d3dMetal.unavailable"
-            : "config.graphics.backend.dxmt.unavailable"
+        switch backend {
+        case .d3dMetal:
+            "config.graphics.backend.d3dMetal.unavailable"
+        case .dxvk:
+            "config.graphics.backend.dxvk.unavailable"
+        case .recommended, .dxmt, .wined3d:
+            "config.graphics.backend.dxmt.unavailable"
+        }
     }
 
     // MARK: - Icon

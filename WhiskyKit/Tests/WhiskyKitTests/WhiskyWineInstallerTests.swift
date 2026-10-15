@@ -228,7 +228,7 @@ final class WhiskyWineInstallerTests: XCTestCase {
     }
 
     func testUniversalBackendsUnaffectedByMissingPayloads() {
-        for backend in [GraphicsBackend.recommended, .dxvk, .wined3d] {
+        for backend in [GraphicsBackend.recommended, .wined3d] {
             XCTAssertTrue(WhiskyWineInstaller.backendAvailability(
                 backend, runtimeInfo: nil, d3dMetalInstalled: false, dxmtRuntimeNative: false
             ))

@@ -65,10 +65,10 @@ final class BackendResolverLauncherTests: XCTestCase {
     func testLauncherAndGameAgreeWhenOnlyDXVKExists() {
         let runtime = WhiskyWineVersion(version: SemanticVersion(3, 0, 0))
         let game = GraphicsBackendResolver.resolve(
-            for: nil, runtimeInfo: runtime, d3dMetalInstalled: false
+            for: nil, runtimeInfo: runtime, d3dMetalInstalled: false, kosmicKrispInstalled: true
         )
         let launcher = GraphicsBackendResolver.resolve(
-            for: .steam, runtimeInfo: runtime, d3dMetalInstalled: false
+            for: .steam, runtimeInfo: runtime, d3dMetalInstalled: false, kosmicKrispInstalled: true
         )
         XCTAssertEqual(game, .dxvk)
         XCTAssertEqual(game, launcher)

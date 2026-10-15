@@ -31,6 +31,24 @@ extension Wine {
         return names.sorted().map { DLLOverrideEntry(dllName: $0, mode: .builtin) }
     }
 
+    /// DXVK's own cache and the KosmicKrisp driver's, switched together.
+    static func configureShaderCache(
+        enabled: Bool, backend: GraphicsBackend,
+        builder: inout EnvironmentBuilder, layer: EnvironmentLayer
+    ) {
+        let dxvk = backend == .dxvk
+        if enabled || !dxvk {
+            builder.remove("DXVK_SHADER_CACHE", layer: layer)
+        } else {
+            builder.set("DXVK_SHADER_CACHE", "0", layer: layer)
+        }
+        if dxvk, !enabled {
+            builder.set("MESA_SHADER_CACHE_DISABLE", "true", layer: layer)
+        } else {
+            builder.remove("MESA_SHADER_CACHE_DISABLE", layer: layer)
+        }
+    }
+
     /// Applies per-program overrides to the programUser layer of the builder.
     ///
     /// Each non-nil field in the overrides sets the corresponding environment variable(s)
@@ -39,6 +57,8 @@ extension Wine {
     static func applyProgramOverrides(
         _ overrides: ProgramOverrides,
         runtime: String? = nil,
+        inheritedBackend: GraphicsBackend = .dxvk,
+        inheritedShaderCacheEnabled: Bool = true,
         frameGeneration: Bool = false,
         metal4Enabled: Bool = true,
         relay12: Bool = false,
@@ -46,6 +66,9 @@ extension Wine {
         builder: inout EnvironmentBuilder,
         dllResolver: inout DLLOverrideResolver
     ) {
+        let requestedBackend = overrides.graphicsBackend ?? inheritedBackend
+        let cacheBackend = requestedBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: runtime) : requestedBackend
         // Graphics backend override: replaces bottle-level backend entirely
         if let backend = overrides.graphicsBackend {
             let resolved = if backend == .recommended {
@@ -53,13 +76,24 @@ extension Wine {
             } else {
                 backend
             }
+            // Only a DXVK program keeps the bottle's Vulkan driver swap. The
+            // `wined3d` that swap puts in `CX_ACTIVE_GRAPHICS_BACKEND` goes
+            // with it; any other value is frame generation's, and is left to
+            // the branches below.
+            if resolved != .dxvk {
+                for key in KosmicKrisp.environmentKeys {
+                    builder.remove(key, layer: .programUser)
+                }
+                if builder.resolve().environment["CX_ACTIVE_GRAPHICS_BACKEND"] == "wined3d" {
+                    builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
+                }
+            }
             switch resolved {
             case .d3dMetal, .recommended:
                 // Undo any bottle-level DXVK/DXMT by overriding DLLs to builtin
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
                 // Remove DXVK and wined3d env vars at program layer
                 builder.remove("DXVK_HUD", layer: .programUser)
-                builder.remove("DXVK_ASYNC", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
                 // A DXVK bottle never sets this, so a program forced onto
                 // D3DMetal inside one has to claim hardware scheduling itself
@@ -82,17 +116,17 @@ extension Wine {
                 )
 
             case .dxvk:
-                // Enable DXVK DLLs at program level
+                // Reset first, as under .dxmt, so a DXMT bottle's DLL modes do
+                // not survive into the DXVK preset.
+                dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
                 dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxvkPreset)
                 builder.remove("WINED3DMETAL", layer: .programUser)
-                // CX_ACTIVE_GRAPHICS_BACKEND deliberately survives, on the
-                // bottles that set it at all. It selects no backend: win32u is
-                // the only thing in the runtime that reads it, and all it does
-                // is answer KMTQAITYPE_WDDM_2_7_CAPS. Stripping it here starved
-                // every child of a DXVK-steered launcher, because Steam runs its
-                // games on D3DMetal (DXVK has no d3d12) while they inherit
-                // Steam's environment. D3DM_ENABLE_METALFX and D3DM_MTL4 already
-                // survive this branch for the same reason.
+                for (key, value) in KosmicKrisp.environment(for: runtime) {
+                    builder.set(key, value, layer: .programUser)
+                }
+                for key in KosmicKrisp.conflictingEnvironmentKeys {
+                    builder.remove(key, layer: .programUser)
+                }
 
             case .dxmt:
                 // Reset the full translation-DLL union to builtin first so a DXVK
@@ -103,10 +137,10 @@ extension Wine {
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
                 dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxmtPreset)
                 builder.remove("DXVK_HUD", layer: .programUser)
-                builder.remove("DXVK_ASYNC", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
-                // Survives for the reason given under .dxvk: DXMT translates d3d11
-                // only, so d3d12 is still D3DMetal here.
+                // CX_ACTIVE_GRAPHICS_BACKEND survives: DXMT translates d3d11
+                // only, so d3d12 is still D3DMetal here, and win32u's
+                // WDDM 2.7 caps answer is all that variable selects.
 
             case .wined3d:
                 // Force wined3d: disable D3DMetal + undo DXVK/DXMT DLLs
@@ -149,11 +183,6 @@ extension Wine {
             case .off:
                 builder.remove("DXVK_HUD", layer: .programUser)
             }
-        }
-
-        // DXVK async override
-        if let dxvkAsync = overrides.dxvkAsync {
-            builder.set("DXVK_ASYNC", dxvkAsync ? "1" : "0", layer: .programUser)
         }
 
         // Enhanced sync override
@@ -210,7 +239,12 @@ extension Wine {
         // answers `KMTQAITYPE_WDDM_2_7_CAPS`, and the graphics-backend branch
         // above only reaches it for a program that also overrides its backend.
         if let frameGeneration = overrides.frameGeneration {
-            if frameGeneration {
+            // The CrossOver Vulkan loader switch needs this value even for a
+            // native Vulkan game with no Direct3D DLLs. A frame generation
+            // override must not disconnect a DXVK launch from KosmicKrisp.
+            if builder.resolve().environment["CX_LIBVULKAN"] != nil {
+                builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "wined3d", layer: .programUser)
+            } else if frameGeneration {
                 builder.set("CX_ACTIVE_GRAPHICS_BACKEND", "d3dmetal", layer: .programUser)
             } else {
                 builder.remove("CX_ACTIVE_GRAPHICS_BACKEND", layer: .programUser)
@@ -258,13 +292,11 @@ extension Wine {
             }
         }
 
-        // Shader cache override, on the variable DXVK actually reads.
-        if let shaderCache = overrides.shaderCacheEnabled {
-            if !shaderCache {
-                builder.set("DXVK_STATE_CACHE", "0", layer: .programUser)
-            } else {
-                builder.remove("DXVK_STATE_CACHE", layer: .programUser)
-            }
+        if overrides.shaderCacheEnabled != nil || overrides.graphicsBackend != nil {
+            configureShaderCache(
+                enabled: overrides.shaderCacheEnabled ?? inheritedShaderCacheEnabled,
+                backend: cacheBackend, builder: &builder, layer: .programUser
+            )
         }
 
         // Input override: controller compatibility SDL hints at program level
@@ -323,7 +355,7 @@ extension Wine {
 
         // Non-sensitive keys allowed in the launch summary
         let allowedKeys = [
-            "DXVK_ASYNC", "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
+            "DXVK_HUD", "WINEESYNC", "WINEMSYNC",
             "D3DM_FORCE_D3D11", "D3DM_MTL4", "MTL_HUD_ENABLED", "WINED3DMETAL",
             BottleSettings.relay12EnvironmentKey, BottleSettings.relay12AppsEnvironmentKey,
             BottleSettings.relay12SkipEnvironmentKey, BottleSettings.relay12NonBlockingPSOsEnvironmentKey
