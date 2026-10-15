@@ -47,7 +47,9 @@ env:
 jobs:
   mirror:
     name: Mirror the newest runtime
-    if: github.repository == 'dappermint/Whisky'
+    # The mirror feeds dappermint's Pages distribution. Forks read the canary
+    # catalog from winecx-gptk directly and enable this with a variable.
+    if: github.repository == 'dappermint/Whisky' || vars.PUBLISH_RUNTIME_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout preview
