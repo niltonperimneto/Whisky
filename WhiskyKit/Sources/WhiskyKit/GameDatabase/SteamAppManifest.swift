@@ -127,15 +127,6 @@ public struct SteamAppManifest: Equatable, Sendable {
         return nil
     }
 
-    /// Searches a Wine bottle for a Steam App ID by scanning manifest files.
-    ///
-    /// - Parameter bottleURL: The root URL of the Wine bottle.
-    /// - Returns: The first App ID found, or `nil` if none found.
-    @available(*, deprecated, message: "Use SteamLibrary.enumerate(bottleURL:) instead")
-    public static func findAppId(in bottleURL: URL) -> Int? {
-        SteamLibrary.enumerate(bottleURL: bottleURL).first?.appId
-    }
-
     /// The manifest for `appId`, from whichever library folder holds the game.
     ///
     /// This is where a game's real name lives. An executable's name is an

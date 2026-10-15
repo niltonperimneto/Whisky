@@ -38,6 +38,18 @@ WhiskyKit is designed as a reusable framework that can be integrated into other 
 - ``Wine``
 - ``WhiskyWineInstaller``
 
+### In Progress
+
+These types are tested but not yet used by the app or the CLI. Game Mode's
+per-bottle session lifecycle (`beginSession` and `endSession(bottleURL:)`)
+works, but it is not wired into the launch path yet, and
+`SessionState.runningProgramCount` is a stub that always returns `0`.
+
+- ``GameModeManager``
+- ``SteamFrontend``
+- ``WhiskyURL``
+- ``VCRuntimeFallback``
+
 ### Configuration Types
 
 - ``BottleWineConfig``

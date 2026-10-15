@@ -37,6 +37,14 @@ import os.log
 ///
 /// Sessions are reference counted per bottle, so two games in one bottle hold
 /// one activity between them and it is released when the last one exits.
+///
+/// - Important: This is an ongoing implementation and nothing in the app or
+///   the CLI calls it yet. What works today is the session lifecycle:
+///   ``beginSession(bottleURL:programName:requested:)`` claims scheduling and
+///   ``endSession(bottleURL:)`` releases it, reference counted per bottle.
+///   Still missing: wiring into the program launch path, and
+///   ``SessionState/runningProgramCount``, which is a stub that always
+///   returns `0`.
 public final class GameModeManager: @unchecked Sendable {
     public static let shared = GameModeManager()
 

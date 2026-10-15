@@ -354,7 +354,6 @@
 		C1A2B3C4E5F60601A9B0E1D9 /* WhiskyAudioTest.exe */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/WhiskyAudioTest.exe; sourceTree = "<group>"; };
 		C1A2B3C4E5F60601A9B0F1D9 /* LibraryCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LibraryCard.swift; path = Whisky/Views/Library/LibraryCard.swift; sourceTree = SOURCE_ROOT; };
 		C1A2B3C4E5F60601A9B0F2D9 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LibraryView.swift; path = Whisky/Views/Library/LibraryView.swift; sourceTree = SOURCE_ROOT; };
-		CBCA6AF32393A3EF6AB9ACCD /* AppGridCard.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGridCard.swift; sourceTree = "<group>"; };
 		D1A2B3C4E5F60504A9B0C1D0 /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
 		D1A2B3C4E5F60504A9B0C1D2 /* RemediationCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemediationCardView.swift; sourceTree = "<group>"; };
 		D1A2B3C4E5F60504A9B0C1D4 /* LogViewerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogViewerView.swift; sourceTree = "<group>"; };
@@ -495,7 +494,6 @@
 				E60D3C220F9D9270BDCDC542 /* MetricBadge.swift */,
 				568940CD00F85D63E09B38AD /* HeroHeader.swift */,
 				F47A316A5F97C9DC50EB4685 /* IconPalette+Color.swift */,
-				CBCA6AF32393A3EF6AB9ACCD /* AppGridCard.swift */,
 			);
 			name = DesignSystem;
 			path = DesignSystem;
