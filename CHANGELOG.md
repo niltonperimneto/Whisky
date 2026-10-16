@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- PEAK now uses the D3DMetal + Relay12 profile, which keeps D3D12 enabled
+  instead of falling back to forced D3D11 when the game requests a D3D11On12
+  device.
 - DLSS frame generation can be set per program, beside the Metal 4 override in a
   program's graphics overrides. It is the setting most likely to be right for one
   title and wrong for the next: a title that ships DLSS-G and holds is worth the

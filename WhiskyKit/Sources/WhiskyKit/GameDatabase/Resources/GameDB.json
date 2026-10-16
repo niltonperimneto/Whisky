@@ -2,6 +2,61 @@
   "version": 1,
   "entries": [
     {
+      "id": "peak",
+      "title": "PEAK",
+      "aliases": [
+        "Peak"
+      ],
+      "subtitle": "Team PEAK",
+      "store": "steam",
+      "steamAppId": 3527290,
+      "rating": "playable",
+      "exeNames": [
+        "PEAK.exe"
+      ],
+      "pathPatterns": [
+        "peak"
+      ],
+      "antiCheat": null,
+      "constraints": {
+        "cpuArchitectures": [
+          "arm64",
+          "x86_64"
+        ],
+        "minMacOSVersion": "14.0.0",
+        "minWineVersion": "10.0"
+      },
+      "variants": [
+        {
+          "id": "d3dmetal-relay12",
+          "label": "Recommended (D3DMetal + Relay12)",
+          "isDefault": true,
+          "whenToUse": "Use when the runtime includes Relay12",
+          "rationale": [
+            "PEAK uses D3D12 and requests a D3D11On12 device",
+            "Relay12 supplies the D3D11On12 implementation that D3DMetal does not provide"
+          ],
+          "settings": {
+            "graphicsBackend": "d3dMetal",
+            "forceD3D11": false,
+            "relay12": true,
+            "shaderCacheEnabled": true
+          },
+          "environmentVariables": {},
+          "dllOverrides": [],
+          "winetricksVerbs": []
+        }
+      ],
+      "notes": [],
+      "knownIssues": [],
+      "provenance": {
+        "source": "community-reference",
+        "author": "Whisky Community",
+        "lastUpdated": "2026-10-16T00:00:00Z",
+        "referenceURL": "https://store.steampowered.com/app/3527290/PEAK/"
+      }
+    },
+    {
       "id": "aoe2-de",
       "title": "Age of Empires II: Definitive Edition",
       "aliases": [
