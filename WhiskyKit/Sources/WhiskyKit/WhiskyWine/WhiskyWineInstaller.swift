@@ -281,18 +281,6 @@ public class WhiskyWineInstaller {
         }
     }
 
-    /// Cheap structural checks followed by an optional producer file manifest.
-    static func validateRuntimeCandidate(_ folder: URL) throws {
-        guard isRuntimePresent(inLibraryFolder: folder), let info = whiskyWineInfo(
-            at: folder.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
-        )
-        else {
-            throw WhiskyWineInstallError.runtimeIncomplete
-        }
-        try validateRuntimeLayout(folder, info: info)
-        try verifyRuntimeManifest(in: folder, info: info)
-    }
-
     /// Computes the SHA-256 of a file by streaming it in chunks.
     ///
     /// The archive can be several hundred megabytes, so the file is hashed

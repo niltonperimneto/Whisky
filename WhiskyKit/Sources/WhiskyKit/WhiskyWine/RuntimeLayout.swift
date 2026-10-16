@@ -19,6 +19,32 @@
 import Foundation
 
 extension WhiskyWineInstaller {
+    /// Cheap structural checks followed by an optional producer file manifest.
+    static func validateRuntimeCandidate(_ folder: URL) throws {
+        let info = try validateRuntimeStructure(folder)
+        try verifyRuntimeManifest(in: folder, info: info)
+    }
+
+    /// Installed trees can contain managed GPTK deployments; their core remains producer-owned.
+    static func validateInstalledRuntime(_ folder: URL) throws {
+        let info = try validateRuntimeStructure(folder)
+        guard FileManager.default.fileExists(atPath: folder.appending(path: "Wine/bin/wineserver").path) else {
+            throw WhiskyWineInstallError.runtimeIncomplete
+        }
+        try verifyRuntimeCoreManifest(in: folder, info: info)
+    }
+
+    private static func validateRuntimeStructure(_ folder: URL) throws -> WhiskyWineVersion {
+        guard isRuntimePresent(inLibraryFolder: folder), let info = whiskyWineInfo(
+            at: folder.appending(path: "WhiskyWineVersion").appendingPathExtension("plist")
+        )
+        else {
+            throw WhiskyWineInstallError.runtimeIncomplete
+        }
+        try validateRuntimeLayout(folder, info: info)
+        return info
+    }
+
     static func validateRuntimeLayout(_ folder: URL, info: WhiskyWineVersion) throws {
         guard (1...2).contains(info.runtimeLayoutVersion ?? 1) else {
             throw WhiskyWineInstallError.runtimeIncomplete

@@ -1706,7 +1706,7 @@ extension Wine {
         defer { runtimeUseToken.end() }
         let snapshot = RuntimeSwitchSnapshot(prefix: bottle.url)
         if snapshot.isPending { throw RuntimeSwitchError.recoveryRequired(snapshot.backup) }
-        try WhiskyWineInstaller.validateRuntimeCandidate(WhiskyWineInstaller.libraryFolder(for: runtime))
+        try WhiskyWineInstaller.validateInstalledRuntime(WhiskyWineInstaller.libraryFolder(for: runtime))
         let settings = bottle.settings
         let previousRuntime = settings.runtime
         guard previousRuntime != runtime else { return }
