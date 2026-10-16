@@ -106,7 +106,8 @@ struct LaunchResolverTests {
                             "settings": {
                                 "graphicsBackend": "dxvk",
                                 "dxvkAsync": true,
-                                "forceD3D11": false
+                                "forceD3D11": false,
+                                "relay12": false
                             },
                             "environmentVariables": {
                                 "DXVK_FRAME_RATE": "120"
@@ -134,9 +135,19 @@ struct LaunchResolverTests {
         #expect(plan.overrides.graphicsBackend == .dxvk)
         #expect(plan.overrides.dxvkAsync == true)
         #expect(plan.overrides.forceD3D11 == false)
+        #expect(plan.overrides.relay12 == false)
         #expect(plan.gameProfileEnvironment["DXVK_FRAME_RATE"] == "120")
         #expect(plan.provenance.count == 1)
         #expect(plan.provenance[0].contains("Casualties: Unknown Demo"))
+    }
+
+    @Test("PEAK's profile enables Relay12 without forcing D3D11")
+    func peakRelay12Profile() {
+        let plan = LaunchResolver.plan(steamAppId: 3_527_290)
+
+        #expect(plan.overrides.graphicsBackend == .d3dMetal)
+        #expect(plan.overrides.forceD3D11 == false)
+        #expect(plan.overrides.relay12 == true)
     }
 
     @Test("User overrides win over GameDB fields")

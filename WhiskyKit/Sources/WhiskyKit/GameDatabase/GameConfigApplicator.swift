@@ -265,6 +265,15 @@ public enum GameConfigApplicator {
             ))
         }
 
+        if let relay12 = settings.relay12, relay12 != bottle.settings.relay12 {
+            changes.append(ConfigChange(
+                category: "Graphics",
+                settingName: "Relay12",
+                currentValue: bottle.settings.relay12 ? "Enabled" : "Disabled",
+                newValue: relay12 ? "Enabled" : "Disabled"
+            ))
+        }
+
         if let shaderCache = settings.shaderCacheEnabled, shaderCache != bottle.settings.shaderCacheEnabled {
             changes.append(ConfigChange(
                 category: "Performance",
@@ -369,6 +378,10 @@ public enum GameConfigApplicator {
 
         if let forceD3D11 = settings.forceD3D11 {
             bottle.settings.forceD3D11 = forceD3D11
+        }
+
+        if let relay12 = settings.relay12 {
+            bottle.settings.relay12 = relay12
         }
 
         if let shaderCacheEnabled = settings.shaderCacheEnabled {
