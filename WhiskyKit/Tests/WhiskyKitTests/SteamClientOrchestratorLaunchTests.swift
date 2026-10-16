@@ -67,12 +67,12 @@ struct SteamClientOrchestratorLaunchTests {
     func singleFlightStartup() async throws {
         let (bottle, games) = try Fixture.makeBottle(games: [1_086_940, 1_245_620])
         let driver = FakeSteamClientDriver(script: [[]])
-        let orchestrator = SteamClientOrchestrator(bottle: bottle, driver: driver, timing: Fixture.fast)
+        // Single-flight coordination must not depend on wall-clock startup delays.
+        var timing = Fixture.fast
+        timing.snapshotLifetime = 0
+        let orchestrator = SteamClientOrchestrator(bottle: bottle, driver: driver, timing: timing)
         driver.onStartClient = {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(30))
-                driver.script = [["steam.exe", "game1.exe", "game2.exe"]]
-            }
+            driver.script = [["steam.exe", "game1.exe", "game2.exe"]]
         }
 
         orchestrator.launch(games[0])
