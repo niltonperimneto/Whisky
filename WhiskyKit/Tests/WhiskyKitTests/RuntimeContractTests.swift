@@ -75,7 +75,7 @@ struct RuntimeContractTests {
     }
 
     @Test("Layout v2 metadata and payload agree")
-    func layoutV2() throws {
+    func layoutV2() async throws {
         let contract = try contract()
         guard contract.schema == 2 else { return }
         let info = try #require(WhiskyWineInstaller.whiskyWineInfo(at: libraries.appending(path: "WhiskyWineVersion.plist")))
@@ -84,7 +84,18 @@ struct RuntimeContractTests {
         for path in contract.forbidden ?? [] {
             #expect(!FileManager.default.fileExists(atPath: libraries.appending(path: path).path))
         }
-        try WhiskyWineInstaller.validateRuntimeCandidate(libraries)
+        let folder = libraries
+        // Archive hashing must not occupy an executor running short UI and polling deadlines.
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    try WhiskyWineInstaller.validateRuntimeCandidate(folder)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     @Test("The Relay12 builtins the importer seeds are in the contract")
