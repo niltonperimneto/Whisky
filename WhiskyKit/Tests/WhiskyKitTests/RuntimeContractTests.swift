@@ -52,7 +52,7 @@ struct RuntimeContractTests {
     private func contract() throws -> Contract {
         let url = URL(fileURLWithPath: Self.environment["WHISKY_RUNTIME_CONTRACT"] ?? "")
         let contract = try JSONDecoder().decode(Contract.self, from: Data(contentsOf: url))
-        try #require((1...2).contains(contract.schema), "unsupported runtime layout contract")
+        try #require((1 ... 2).contains(contract.schema), "unsupported runtime layout contract")
         return contract
     }
 
@@ -78,7 +78,8 @@ struct RuntimeContractTests {
     func layoutV2() async throws {
         let contract = try contract()
         guard contract.schema == 2 else { return }
-        let info = try #require(WhiskyWineInstaller.whiskyWineInfo(at: libraries.appending(path: "WhiskyWineVersion.plist")))
+        let info = try #require(WhiskyWineInstaller
+            .whiskyWineInfo(at: libraries.appending(path: "WhiskyWineVersion.plist")))
         #expect(info.runtimeLayoutVersion == 2)
         #expect(info.capabilities?.vulkanProvider == "kosmickrisp")
         for path in contract.forbidden ?? [] {

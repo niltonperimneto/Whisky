@@ -34,8 +34,10 @@ struct RuntimeSwitchSnapshotTests {
         try settings.encode(to: prefix.appending(path: "Metadata.plist"))
         try Data("user DLL".utf8).write(to: prefix.appending(path: "custom.dll"))
         try Data("original registry".utf8).write(to: prefix.appending(path: "user.reg"))
-        try FileManager.default.createSymbolicLink(atPath: prefix.appending(path: "link").path,
-                                                  withDestinationPath: "custom.dll")
+        try FileManager.default.createSymbolicLink(
+            atPath: prefix.appending(path: "link").path,
+            withDestinationPath: "custom.dll"
+        )
         let snapshot = RuntimeSwitchSnapshot(prefix: prefix)
         try snapshot.create()
         #expect(snapshot.isPending)
@@ -46,7 +48,8 @@ struct RuntimeSwitchSnapshotTests {
         #expect(!snapshot.isPending)
         #expect(try String(contentsOf: prefix.appending(path: "custom.dll"), encoding: .utf8) == "user DLL")
         #expect(try String(contentsOf: prefix.appending(path: "user.reg"), encoding: .utf8) == "original registry")
-        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: prefix.appending(path: "link").path) == "custom.dll")
+        #expect(try FileManager.default
+            .destinationOfSymbolicLink(atPath: prefix.appending(path: "link").path) == "custom.dll")
         let restored = try BottleSettings.decode(from: prefix.appending(path: "Metadata.plist"))
         #expect(restored.runtime == "old-runtime")
         #expect(restored.graphicsBackend == .dxmt)

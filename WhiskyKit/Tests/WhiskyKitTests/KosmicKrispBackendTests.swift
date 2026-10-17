@@ -141,8 +141,10 @@ struct KosmicKrispBackendTests {
 
     @Test("Layout v2 selects Vulkan without changing the Direct3D backend identity")
     func independentVulkanProvider() {
-        let environment = KosmicKrisp.environment(driverFolder: URL(fileURLWithPath: "/runtime with spaces/driver"),
-                                                  layoutVersion: 2)
+        let environment = KosmicKrisp.environment(
+            driverFolder: URL(fileURLWithPath: "/runtime with spaces/driver"),
+            layoutVersion: 2
+        )
         #expect(environment["CX_ACTIVE_GRAPHICS_BACKEND"] == nil)
         #expect(environment["WINE_VULKAN_LIBRARY"] == "/runtime with spaces/driver/libvulkan.1.dylib")
         #expect(environment["VK_DRIVER_FILES"] == "/runtime with spaces/driver/kosmickrisp_icd.json")

@@ -24,6 +24,7 @@ struct RuntimeSwitchSnapshot: Sendable {
     var backup: URL {
         prefix.deletingLastPathComponent().appending(path: ".\(prefix.lastPathComponent)-runtime-rollback")
     }
+
     var isPending: Bool { FileManager.default.fileExists(atPath: backup.path) }
 
     func create() throws {

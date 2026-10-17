@@ -30,15 +30,22 @@ struct InstalledRuntimeValidationTests {
         var files: [RuntimeManifest.File] = []
         for path in WhiskyWineInstaller.runtimeCorePaths + ["Wine/lib/external/README"] {
             let file = root.appending(path: path)
-            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
             let data = Data(path.utf8)
             try data.write(to: file)
-            files.append(RuntimeManifest.File(path: path, size: Int64(data.count),
-                         sha256: try #require(WhiskyWineInstaller.sha256(ofFileAt: file))))
+            try files.append(RuntimeManifest.File(
+                path: path,
+                size: Int64(data.count),
+                sha256: #require(WhiskyWineInstaller.sha256(ofFileAt: file))
+            ))
         }
-        try FileManager.default.createSymbolicLink(atPath: root.appending(path: "Wine/bin/wine64").path,
-            withDestinationPath: "../lib/wine/x86_64-unix/wine")
+        try FileManager.default.createSymbolicLink(
+            atPath: root.appending(path: "Wine/bin/wine64").path,
+            withDestinationPath: "../lib/wine/x86_64-unix/wine"
+        )
         try JSONEncoder().encode(RuntimeManifest(formatVersion: 1, files: files))
             .write(to: root.appending(path: "RuntimeManifest.json"))
         return root

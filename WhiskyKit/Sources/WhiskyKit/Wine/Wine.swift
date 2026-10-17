@@ -943,8 +943,8 @@ public class Wine {
             switch output {
             case .started:
                 break
-            case .terminated(let code):
-                if requireSuccess && code != 0 { throw RuntimeSwitchError.verificationFailed }
+            case let .terminated(code):
+                if requireSuccess, code != 0 { throw RuntimeSwitchError.verificationFailed }
             case let .message(message), let .error(message):
                 result.append(message)
             }
@@ -1698,7 +1698,8 @@ extension Wine {
     @MainActor
     public static func switchRuntime(bottle: Bottle, to runtime: String?) async throws {
         guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
-              !(await isWineserverRunning(for: bottle)) else {
+              await !isWineserverRunning(for: bottle)
+        else {
             throw WhiskyWineInstallError.runtimeBusy
         }
         guard !switchingPrefixes.contains(bottle.url) else { throw WhiskyWineInstallError.runtimeBusy }
@@ -1715,7 +1716,8 @@ extension Wine {
         defer { switchingPrefixes.remove(bottle.url) }
         try await Task.detached { try snapshot.create() }.value
         guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
-              !(await isWineserverRunning(for: bottle)) else {
+              await !isWineserverRunning(for: bottle)
+        else {
             try snapshot.commit()
             throw WhiskyWineInstallError.runtimeBusy
         }
@@ -1724,8 +1726,12 @@ extension Wine {
             clearForeignBackendDLLs(keeping: [], bottle: bottle)
             removeRuntimeSwitchSteamDLLs(bottle: bottle, runtime: previousRuntime)
             bottle.settings.runtime = runtime
-            _ = try await runWineWithBottle(["wineboot", "-u"], bottle: bottle,
-                                            requireSuccess: true, duringRuntimeSwitch: true)
+            _ = try await runWineWithBottle(
+                ["wineboot", "-u"],
+                bottle: bottle,
+                requireSuccess: true,
+                duringRuntimeSwitch: true
+            )
             let backend = settings.graphicsBackend == .recommended
                 ? GraphicsBackendResolver.resolve(for: runtime) : settings.graphicsBackend
             if WhiskyWineInstaller.isBackendAvailable(backend, for: runtime) {
@@ -1737,7 +1743,7 @@ extension Wine {
             try snapshot.commit()
         } catch {
             killBottleSynchronously(bottle: bottle)
-            guard !(await isWineserverRunning(for: bottle)) else {
+            guard await !isWineserverRunning(for: bottle) else {
                 throw RuntimeSwitchError.recoveryRequired(snapshot.backup)
             }
             try snapshot.restore()
@@ -1764,7 +1770,8 @@ extension Wine {
     @MainActor
     public static func restoreRuntimeSwitch(bottle: Bottle) async throws {
         guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
-              !(await isWineserverRunning(for: bottle)) else {
+              await !isWineserverRunning(for: bottle)
+        else {
             throw WhiskyWineInstallError.runtimeBusy
         }
         try RuntimeSwitchSnapshot(prefix: bottle.url).restore()
@@ -1801,12 +1808,15 @@ extension Wine {
     private static func removeRuntimeSwitchSteamDLLs(bottle: Bottle, runtime: String?) {
         for client in runtimeSwitchSteamClients(bottle: bottle) {
             let directories = steamHelperDirectories(forClient: client)
-            removeSteamHelperDXVK(from: directories, dxvk: dxvkFolder(for: runtime),
-                                  legacyDXVK: legacyDXVKFolder(for: runtime),
-                                  originalDXGI: GPTKImporter.originalsFolder(
-                                    inStore: GPTKImporter.storeFolder,
-                                    key: GPTKImporter.originalsKey(for: runtime)
-                                  ).appending(path: "dxgi.dll"))
+            removeSteamHelperDXVK(
+                from: directories,
+                dxvk: dxvkFolder(for: runtime),
+                legacyDXVK: legacyDXVKFolder(for: runtime),
+                originalDXGI: GPTKImporter.originalsFolder(
+                    inStore: GPTKImporter.storeFolder,
+                    key: GPTKImporter.originalsKey(for: runtime)
+                ).appending(path: "dxgi.dll")
+            )
         }
     }
 
@@ -1826,10 +1836,10 @@ extension Wine {
 
         public var errorDescription: String? {
             switch self {
-            case .customDLL(let url): "Preserve the custom DLL before switching runtimes: \(url.path)."
+            case let .customDLL(url): "Preserve the custom DLL before switching runtimes: \(url.path)."
             case .snapshotFailed: "Could not create a runtime rollback clone. The bottle was not changed."
             case .verificationFailed: "The destination runtime failed graphics verification."
-            case .recoveryRequired(let url): "A previous runtime switch needs recovery from \(url.path)."
+            case let .recoveryRequired(url): "A previous runtime switch needs recovery from \(url.path)."
             }
         }
     }

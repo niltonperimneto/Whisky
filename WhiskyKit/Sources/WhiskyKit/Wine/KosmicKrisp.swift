@@ -83,8 +83,10 @@ public enum KosmicKrisp {
 
     /// Legacy runtimes require the CrossOver backend selector as well as the loader.
     public static func environment(for runtime: String?) -> [String: String] {
-        environment(driverFolder: driverFolder(for: runtime),
-                    layoutVersion: WhiskyWineInstaller.whiskyWineInfo(for: runtime)?.runtimeLayoutVersion ?? 1)
+        environment(
+            driverFolder: driverFolder(for: runtime),
+            layoutVersion: WhiskyWineInstaller.whiskyWineInfo(for: runtime)?.runtimeLayoutVersion ?? 1
+        )
     }
 
     /// Testable seam for ``environment(for:)``.
@@ -102,8 +104,11 @@ public enum KosmicKrisp {
     /// Payload presence alone cannot establish Metal/Vulkan device support.
     public static func isUsable(for runtime: String?) -> Bool {
         guard isInstalled(for: runtime) else { return false }
-        return probeCache.isUsable(driver: driverFolder(for: runtime),
-                                   deviceOnly: WhiskyWineInstaller.whiskyWineInfo(for: runtime)?.runtimeLayoutVersion == 2)
+        return probeCache.isUsable(
+            driver: driverFolder(for: runtime),
+            deviceOnly: WhiskyWineInstaller.whiskyWineInfo(for: runtime)?
+                .runtimeLayoutVersion == 2
+        )
     }
 
     private static let probeCache = VulkanDeviceProbeCache()
@@ -115,6 +120,7 @@ final class VulkanDeviceProbeCache: @unchecked Sendable {
         let usable: Bool
         let date: Date
     }
+
     private var entries: [String: Entry] = [:]
 
     func isUsable(driver: URL, deviceOnly: Bool = true) -> Bool {
@@ -133,7 +139,9 @@ final class VulkanDeviceProbeCache: @unchecked Sendable {
         process.executableURL = probe
         process.arguments = [driver.appending(path: "libvulkan.1.dylib").path] + (deviceOnly ? ["--device-only"] : [])
         var environment = ProcessInfo.processInfo.environment
-        for key in KosmicKrisp.conflictingEnvironmentKeys { environment.removeValue(forKey: key) }
+        for key in KosmicKrisp.conflictingEnvironmentKeys {
+            environment.removeValue(forKey: key)
+        }
         environment["VK_DRIVER_FILES"] = driver.appending(path: "kosmickrisp_icd.json").path
         process.environment = environment
         process.standardOutput = FileHandle.nullDevice

@@ -75,8 +75,9 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let catalog = try decoder.decode(RuntimeCatalog.self, from: data)
-        guard (1...2).contains(catalog.catalogVersion),
-              catalog.runtimes.allSatisfy({ (1...2).contains($0.runtimeLayoutVersion ?? 1) }) else { throw RuntimeCatalogError.unsupportedVersion }
+        guard (1 ... 2).contains(catalog.catalogVersion),
+              catalog.runtimes.allSatisfy({ (1 ... 2).contains($0.runtimeLayoutVersion ?? 1) })
+        else { throw RuntimeCatalogError.unsupportedVersion }
         guard catalog.runtimes.allSatisfy(\.hasValidDigest) else { throw RuntimeCatalogError.invalidDigest }
         guard catalog.runtimes.allSatisfy({ $0.archiveURL.scheme == "https" }) else {
             throw RuntimeCatalogError.insecureURL

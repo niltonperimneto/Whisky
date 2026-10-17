@@ -46,17 +46,17 @@ extension WhiskyWineInstaller {
     }
 
     static func validateRuntimeLayout(_ folder: URL, info: WhiskyWineVersion) throws {
-        guard (1...2).contains(info.runtimeLayoutVersion ?? 1) else {
+        guard (1 ... 2).contains(info.runtimeLayoutVersion ?? 1) else {
             throw WhiskyWineInstallError.runtimeIncomplete
         }
         if info.runtimeLayoutVersion == 2 {
             guard info.capabilities?.vulkanProvider == "kosmickrisp",
                   KosmicKrisp.isInstalled(
-                    driverFolder: folder.appending(path: "Wine/lib/kosmickrisp"),
-                    dxvkFolder: folder.appending(path: "DXVK3")
+                      driverFolder: folder.appending(path: "Wine/lib/kosmickrisp"),
+                      dxvkFolder: folder.appending(path: "DXVK3")
                   ),
                   FileManager.default.isExecutableFile(
-                    atPath: folder.appending(path: "Wine/lib/kosmickrisp/tests/host-probe").path
+                      atPath: folder.appending(path: "Wine/lib/kosmickrisp/tests/host-probe").path
                   ),
                   !FileManager.default.fileExists(atPath: folder.appending(path: "DXVK").path)
             else { throw WhiskyWineInstallError.runtimeIncomplete }
