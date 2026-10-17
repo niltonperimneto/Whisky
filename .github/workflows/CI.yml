@@ -169,6 +169,26 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Package Whisky app artifact
+        run: |
+          set -euo pipefail
+          app_path=$(xcodebuild -project Whisky.xcodeproj -scheme Whisky -configuration Debug \
+            -showBuildSettings 2>/dev/null \
+            | awk -F' = ' '
+                /^ *BUILT_PRODUCTS_DIR = /  { dir = $2 }
+                /^ *FULL_PRODUCT_NAME = /   { name = $2 }
+                END { if (dir != "" && name != "") print dir "/" name }')
+          test -d "$app_path"
+          mkdir -p ci-artifacts
+          ditto "$app_path" "ci-artifacts/Whisky-PEAK-Relay12.app"
+
+      - name: Upload Whisky app artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Whisky-PEAK-Relay12-app
+          path: ci-artifacts/Whisky-PEAK-Relay12.app
+          if-no-files-found: error
+
       # Guards against the class of regression fixed in #134: a resource that the
       # app expects at runtime silently not making it into the bundle. winetricks
       # and its verb catalog are shipped in Contents/Resources (like cabextract);

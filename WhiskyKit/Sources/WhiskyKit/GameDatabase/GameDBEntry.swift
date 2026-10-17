@@ -189,6 +189,8 @@ public struct GameConfigVariantSettings: Codable, Sendable, Equatable {
     public let enhancedSync: EnhancedSync?
     /// Whether to force D3D11 mode.
     public let forceD3D11: Bool?
+    /// Whether D3D12 games should obtain their D3D11On12 device from Relay12.
+    public let relay12: Bool?
     /// The performance preset name.
     /// Whether shader caching should be enabled.
     public let shaderCacheEnabled: Bool?
@@ -203,6 +205,7 @@ public struct GameConfigVariantSettings: Codable, Sendable, Equatable {
         dxvkAsync: Bool? = nil,
         enhancedSync: EnhancedSync? = nil,
         forceD3D11: Bool? = nil,
+        relay12: Bool? = nil,
         shaderCacheEnabled: Bool? = nil,
         avxEnabled: Bool? = nil,
         sequoiaCompatMode: Bool? = nil
@@ -212,6 +215,7 @@ public struct GameConfigVariantSettings: Codable, Sendable, Equatable {
         self.dxvkAsync = dxvkAsync
         self.enhancedSync = enhancedSync
         self.forceD3D11 = forceD3D11
+        self.relay12 = relay12
         self.shaderCacheEnabled = shaderCacheEnabled
         self.avxEnabled = avxEnabled
         self.sequoiaCompatMode = sequoiaCompatMode
@@ -236,6 +240,7 @@ public struct GameConfigVariantSettings: Codable, Sendable, Equatable {
             self.enhancedSync = try container.decodeIfPresent(EnhancedSync.self, forKey: .enhancedSync)
         }
         self.forceD3D11 = try container.decodeIfPresent(Bool.self, forKey: .forceD3D11)
+        self.relay12 = try container.decodeIfPresent(Bool.self, forKey: .relay12)
         self.shaderCacheEnabled = try container.decodeIfPresent(Bool.self, forKey: .shaderCacheEnabled)
         self.avxEnabled = try container.decodeIfPresent(Bool.self, forKey: .avxEnabled)
         self.sequoiaCompatMode = try container.decodeIfPresent(Bool.self, forKey: .sequoiaCompatMode)
