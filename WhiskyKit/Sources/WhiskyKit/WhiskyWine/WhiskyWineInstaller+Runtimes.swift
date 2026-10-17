@@ -92,7 +92,7 @@ public extension WhiskyWineInstaller {
             runtimeInfo: whiskyWineInfo(for: runtime),
             d3dMetalInstalled: isD3DMetalInstalled(for: runtime),
             dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime),
-            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: runtime)
+            kosmicKrispInstalled: KosmicKrisp.isUsable(for: runtime)
         )
     }
 

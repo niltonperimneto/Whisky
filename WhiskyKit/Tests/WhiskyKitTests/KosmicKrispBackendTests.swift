@@ -139,6 +139,44 @@ struct KosmicKrispBackendTests {
         #expect(result.dllOverrides == "d3d10core=n,b;d3d11=n,b;d3d12=;d3d8=n,b;d3d9=n,b;dxgi=n,b")
     }
 
+    @Test("Layout v2 selects Vulkan without changing the Direct3D backend identity")
+    func independentVulkanProvider() {
+        let environment = KosmicKrisp.environment(driverFolder: URL(fileURLWithPath: "/runtime with spaces/driver"),
+                                                  layoutVersion: 2)
+        #expect(environment["CX_ACTIVE_GRAPHICS_BACKEND"] == nil)
+        #expect(environment["WINE_VULKAN_LIBRARY"] == "/runtime with spaces/driver/libvulkan.1.dylib")
+        #expect(environment["VK_DRIVER_FILES"] == "/runtime with spaces/driver/kosmickrisp_icd.json")
+    }
+
+    @Test("Device probe failure is distinct from an installed payload and invalidates on replacement")
+    func deviceProbe() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root.appending(path: "tests"), withIntermediateDirectories: true)
+        let probe = root.appending(path: "tests/host-probe")
+        try Data("#!/bin/sh\nexit 1\n".utf8).write(to: probe)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: probe.path)
+        let cache = VulkanDeviceProbeCache()
+        #expect(!cache.isUsable(driver: root))
+        try Data("#!/bin/sh\nexit 0\n# replacement probe\n".utf8).write(to: probe)
+        #expect(cache.isUsable(driver: root))
+    }
+
+    @Test("Layout v2 Vulkan selection preserves frame generation identity")
+    func frameGenerationWithIndependentProvider() {
+        for enabled in [true, false] {
+            var builder = EnvironmentBuilder()
+            builder.set("CX_LIBVULKAN", "/runtime/loader", layer: .bottleManaged)
+            builder.set("WINE_VULKAN_LIBRARY", "/runtime/loader", layer: .bottleManaged)
+            var resolver = DLLOverrideResolver(managed: [], bottleCustom: [], programCustom: [])
+            var overrides = ProgramOverrides()
+            overrides.frameGeneration = enabled
+            Wine.applyProgramOverrides(overrides, builder: &builder, dllResolver: &resolver)
+            #expect(builder.resolve().environment["CX_ACTIVE_GRAPHICS_BACKEND"] == (enabled ? "d3dmetal" : nil))
+            #expect(builder.resolve().environment["WINE_VULKAN_LIBRARY"] == "/runtime/loader")
+        }
+    }
+
     @Test("Other backends never get the driver swap")
     func otherBottlesUntouched() {
         for backend in [GraphicsBackend.d3dMetal, .dxmt, .wined3d] {

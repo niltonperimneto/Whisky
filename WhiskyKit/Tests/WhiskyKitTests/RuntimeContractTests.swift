@@ -42,6 +42,7 @@ struct RuntimeContractTests {
         let schema: Int
         let required: [String]
         let kosmickrisp: [String]
+        let forbidden: [String]?
     }
 
     private var libraries: URL {
@@ -51,7 +52,7 @@ struct RuntimeContractTests {
     private func contract() throws -> Contract {
         let url = URL(fileURLWithPath: Self.environment["WHISKY_RUNTIME_CONTRACT"] ?? "")
         let contract = try JSONDecoder().decode(Contract.self, from: Data(contentsOf: url))
-        try #require(contract.schema == 1, "unsupported runtime layout contract")
+        try #require((1...2).contains(contract.schema), "unsupported runtime layout contract")
         return contract
     }
 
@@ -71,6 +72,30 @@ struct RuntimeContractTests {
         let present = contract.kosmickrisp.count - missing(contract.kosmickrisp).count
         // All or nothing: a partial bundle is what makes DXVK fail at launch.
         #expect(present == 0 || present == contract.kosmickrisp.count, "\(missing(contract.kosmickrisp))")
+    }
+
+    @Test("Layout v2 metadata and payload agree")
+    func layoutV2() async throws {
+        let contract = try contract()
+        guard contract.schema == 2 else { return }
+        let info = try #require(WhiskyWineInstaller.whiskyWineInfo(at: libraries.appending(path: "WhiskyWineVersion.plist")))
+        #expect(info.runtimeLayoutVersion == 2)
+        #expect(info.capabilities?.vulkanProvider == "kosmickrisp")
+        for path in contract.forbidden ?? [] {
+            #expect(!FileManager.default.fileExists(atPath: libraries.appending(path: path).path))
+        }
+        let folder = libraries
+        // Archive hashing must not occupy an executor running short UI and polling deadlines.
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    try WhiskyWineInstaller.validateRuntimeCandidate(folder)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     @Test("The Relay12 builtins the importer seeds are in the contract")

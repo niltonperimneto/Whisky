@@ -79,9 +79,67 @@ enum RuntimeManifestError: LocalizedError, Equatable {
 extension WhiskyWineInstaller {
     static let runtimeManifestName = "RuntimeManifest.json"
 
+    static let runtimeCorePaths = [
+        "Wine/bin/wineserver", "Wine/lib/wine/x86_64-unix/wine",
+        "Wine/lib/wine/x86_64-unix/ntdll.so", "Wine/lib/wine/x86_64-unix/win32u.so"
+    ] + ["x86_64-windows", "i386-windows"].flatMap { lane in
+        ["ntdll.dll", "kernel32.dll", "kernelbase.dll", "win32u.dll", "winevulkan.dll"].map {
+            "Wine/lib/wine/\(lane)/\($0)"
+        }
+    }
+
+    static func verifyRuntimeCoreManifest(in folder: URL, info: WhiskyWineVersion) throws {
+        guard let manifest = try readRuntimeManifest(in: folder, info: info) else { return }
+        var entries: [String: RuntimeManifest.File] = [:]
+        for entry in manifest.files {
+            guard isSafeManifestPath(entry.path) else { throw RuntimeManifestError.unsafePath(entry.path) }
+            guard entries.updateValue(entry, forKey: entry.path) == nil else {
+                throw RuntimeManifestError.duplicatePath(entry.path)
+            }
+        }
+        for path in runtimeCorePaths {
+            guard let entry = entries[path] else { throw RuntimeManifestError.missingFile(path) }
+            try verifyManifestEntry(entry, in: folder, fileManager: .default)
+        }
+        for binary in ["Wine/bin/wine64", "Wine/bin/wineserver"] {
+            guard isRequiredBinaryPresent(binary, in: folder, declared: Set(entries.keys), fileManager: .default) else {
+                throw RuntimeManifestError.missingFile(binary)
+            }
+            let root = folder.resolvingSymlinksInPath().path + "/"
+            let target = folder.appending(path: binary).resolvingSymlinksInPath().path
+            guard target.hasPrefix(root), let entry = entries[String(target.dropFirst(root.count))] else {
+                throw RuntimeManifestError.unsafePath(binary)
+            }
+            try verifyManifestEntry(entry, in: folder, fileManager: .default)
+        }
+    }
+
     /// Verifies a producer manifest when present. Legacy runtimes without one
     /// remain installable; metadata v2 runtimes must carry it.
     static func verifyRuntimeManifest(in libraryFolder: URL, info: WhiskyWineVersion) throws {
+        guard let manifest = try readRuntimeManifest(in: libraryFolder, info: info) else { return }
+        let fileManager = FileManager.default
+        var seen = Set<String>()
+        for entry in manifest.files {
+            guard seen.insert(entry.path).inserted else {
+                throw RuntimeManifestError.duplicatePath(entry.path)
+            }
+            guard isSafeManifestPath(entry.path) else {
+                throw RuntimeManifestError.unsafePath(entry.path)
+            }
+            try verifyManifestEntry(entry, in: libraryFolder, fileManager: fileManager)
+        }
+        for required in ["Wine/bin/wine64", "Wine/bin/wineserver"] where !isRequiredBinaryPresent(
+            required, in: libraryFolder, declared: seen, fileManager: fileManager
+        ) {
+            throw RuntimeManifestError.missingFile(required)
+        }
+        try rejectUndeclaredFiles(in: libraryFolder, declared: seen, fileManager: fileManager)
+    }
+
+    private static func readRuntimeManifest(
+        in libraryFolder: URL, info: WhiskyWineVersion
+    ) throws -> RuntimeManifest? {
         let manifestURL = libraryFolder.appending(path: runtimeManifestName)
         let fileManager = FileManager.default
         let exists = fileManager.fileExists(atPath: manifestURL.path(percentEncoded: false))
@@ -89,7 +147,7 @@ extension WhiskyWineInstaller {
             if (info.manifestVersion ?? 1) >= 2 {
                 throw RuntimeManifestError.missingFile(runtimeManifestName)
             }
-            return
+            return nil
         }
 
         let manifest: RuntimeManifest
@@ -102,26 +160,7 @@ extension WhiskyWineInstaller {
             throw RuntimeManifestError.unsupportedVersion(manifest.formatVersion)
         }
 
-        var seen = Set<String>()
-        for entry in manifest.files {
-            guard seen.insert(entry.path).inserted else {
-                throw RuntimeManifestError.duplicatePath(entry.path)
-            }
-            guard isSafeManifestPath(entry.path) else {
-                throw RuntimeManifestError.unsafePath(entry.path)
-            }
-
-            try verifyManifestEntry(entry, in: libraryFolder, fileManager: fileManager)
-        }
-        for required in ["Wine/bin/wine64", "Wine/bin/wineserver"] where !isRequiredBinaryPresent(
-            required,
-            in: libraryFolder,
-            declared: seen,
-            fileManager: fileManager
-        ) {
-            throw RuntimeManifestError.missingFile(required)
-        }
-        try rejectUndeclaredFiles(in: libraryFolder, declared: seen, fileManager: fileManager)
+        return manifest
     }
 
     private static func isRequiredBinaryPresent(

@@ -41,6 +41,7 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
     public var dxmt: Bool?
     public var wined3d: Bool?
     public var wow64: Bool?
+    public var vulkanProvider: String?
 
     public init(
         gptkMajorVersions: [Int]? = nil,
@@ -51,7 +52,8 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
         dxvk: Bool? = nil,
         dxmt: Bool? = nil,
         wined3d: Bool? = nil,
-        wow64: Bool? = nil
+        wow64: Bool? = nil,
+        vulkanProvider: String? = nil
     ) {
         self.gptkMajorVersions = gptkMajorVersions
         self.wsarecvmsg = wsarecvmsg
@@ -62,6 +64,7 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
         self.dxmt = dxmt
         self.wined3d = wined3d
         self.wow64 = wow64
+        self.vulkanProvider = vulkanProvider
     }
 
     /// True only when the producer explicitly verified the complete ancillary
@@ -124,6 +127,7 @@ public struct WhiskyWineVersion: Codable {
     public var name: String?
 
     /// Version of the extended runtime metadata contract.
+    public var runtimeLayoutVersion: Int?
     public var manifestVersion: Int?
     public var releaseChannel: WhiskyWineReleaseChannel?
     public var wineVersion: String?
@@ -142,6 +146,7 @@ public struct WhiskyWineVersion: Codable {
         case sha256
         case gptkCapable
         case name
+        case runtimeLayoutVersion
         case manifestVersion
         case releaseChannel
         case wineVersion
@@ -161,6 +166,7 @@ public struct WhiskyWineVersion: Codable {
         sha256: String? = nil,
         gptkCapable: Bool? = nil,
         name: String? = nil,
+        runtimeLayoutVersion: Int? = nil,
         manifestVersion: Int? = nil,
         releaseChannel: WhiskyWineReleaseChannel? = nil,
         wineVersion: String? = nil,
@@ -178,6 +184,7 @@ public struct WhiskyWineVersion: Codable {
         self.sha256 = Self.normalizedDigest(sha256)
         self.gptkCapable = gptkCapable
         self.name = Self.normalized(name)
+        self.runtimeLayoutVersion = runtimeLayoutVersion
         self.manifestVersion = manifestVersion
         self.releaseChannel = releaseChannel
         self.wineVersion = Self.normalized(wineVersion)
@@ -202,6 +209,7 @@ public struct WhiskyWineVersion: Codable {
         sha256 = try Self.normalizedDigest(container.decodeIfPresent(String.self, forKey: .sha256))
         gptkCapable = try container.decodeIfPresent(Bool.self, forKey: .gptkCapable)
         name = try Self.normalized(container.decodeIfPresent(String.self, forKey: .name))
+        runtimeLayoutVersion = try container.decodeIfPresent(Int.self, forKey: .runtimeLayoutVersion)
         manifestVersion = try container.decodeIfPresent(Int.self, forKey: .manifestVersion)
         releaseChannel = try container.decodeIfPresent(WhiskyWineReleaseChannel.self, forKey: .releaseChannel)
         wineVersion = try Self.normalized(container.decodeIfPresent(String.self, forKey: .wineVersion))
@@ -251,6 +259,7 @@ public struct WhiskyWineVersion: Codable {
         try container.encodeIfPresent(sha256, forKey: .sha256)
         try container.encodeIfPresent(gptkCapable, forKey: .gptkCapable)
         try container.encodeIfPresent(name, forKey: .name)
+        try container.encodeIfPresent(runtimeLayoutVersion, forKey: .runtimeLayoutVersion)
         try container.encodeIfPresent(manifestVersion, forKey: .manifestVersion)
         try container.encodeIfPresent(releaseChannel, forKey: .releaseChannel)
         try container.encodeIfPresent(wineVersion, forKey: .wineVersion)

@@ -159,7 +159,7 @@ extension Wine {
             GraphicsBackendResolver.helperBackend(
                 for: launcher, launcherBackend: plan.effectiveBackend
             ) == .dxvk),
-            KosmicKrisp.isInstalled(for: runtime)
+            KosmicKrisp.isUsable(for: runtime)
         else {
             removeSteamHelperDXVK(from: directories, dxvk: dxvk)
             if !onDXVK, plan.decisionSource != .program,
