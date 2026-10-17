@@ -1697,11 +1697,7 @@ extension Wine {
     /// A durable sibling backup also permits recovery after app termination.
     @MainActor
     public static func switchRuntime(bottle: Bottle, to runtime: String?) async throws {
-        guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
-              await !isWineserverRunning(for: bottle)
-        else {
-            throw WhiskyWineInstallError.runtimeBusy
-        }
+        try await requireIdleRuntimeSwitch(bottle: bottle)
         guard !switchingPrefixes.contains(bottle.url) else { throw WhiskyWineInstallError.runtimeBusy }
         let runtimeUseToken = try beginRuntimeUse()
         defer { runtimeUseToken.end() }
@@ -1749,6 +1745,15 @@ extension Wine {
             try snapshot.restore()
             bottle.settings = settings
             throw error
+        }
+    }
+
+    @MainActor
+    private static func requireIdleRuntimeSwitch(bottle: Bottle) async throws {
+        guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
+              await !isWineserverRunning(for: bottle)
+        else {
+            throw WhiskyWineInstallError.runtimeBusy
         }
     }
 
