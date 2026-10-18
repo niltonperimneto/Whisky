@@ -128,6 +128,9 @@ jobs:
   build:
     name: Build all schemes
     needs: [lint, format]
+    permissions:
+      contents: read
+      actions: read
     # macos-26: the app's deployment target is 26.0, so an older runner cannot
     # launch it, and the UI tests fail before they start.
     runs-on: macos-26
@@ -180,14 +183,26 @@ jobs:
                 END { if (dir != "" && name != "") print dir "/" name }')
           test -d "$app_path"
           mkdir -p ci-artifacts
-          ditto "$app_path" "ci-artifacts/Whisky-PEAK-Relay12.app"
+          ditto "$app_path" "ci-artifacts/Whisky.app"
 
       - name: Upload Whisky app artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Whisky-PEAK-Relay12-app
-          path: ci-artifacts/Whisky-PEAK-Relay12.app
+          name: Whisky.app
+          # Upload the parent so the download retains Whisky.app/Contents/.
+          path: ci-artifacts/
           if-no-files-found: error
+
+      - name: Download the packaged app for validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The download action resets executable modes; gh preserves ZIP modes.
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name Whisky.app --dir "$RUNNER_TEMP/Whisky app download"
+
+      - name: Verify the downloaded macOS app bundle
+        run: swift scripts/check-app-download.swift "$RUNNER_TEMP/Whisky app download"
 
       # Guards against the class of regression fixed in #134: a resource that the
       # app expects at runtime silently not making it into the bundle. winetricks
