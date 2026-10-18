@@ -128,6 +128,9 @@ jobs:
   build:
     name: Build all schemes
     needs: [lint, format]
+    permissions:
+      contents: read
+      actions: read
     # macos-26: the app's deployment target is 26.0, so an older runner cannot
     # launch it, and the UI tests fail before they start.
     runs-on: macos-26
@@ -191,10 +194,12 @@ jobs:
           if-no-files-found: error
 
       - name: Download the packaged app for validation
-        uses: actions/download-artifact@v8
-        with:
-          name: Whisky.app
-          path: ${{ runner.temp }}/Whisky app download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # The download action resets executable modes; gh preserves ZIP modes.
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name Whisky.app --dir "$RUNNER_TEMP/Whisky app download"
 
       - name: Verify the downloaded macOS app bundle
         run: swift scripts/check-app-download.swift "$RUNNER_TEMP/Whisky app download"

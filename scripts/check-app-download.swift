@@ -43,11 +43,15 @@ guard try app.resourceValues(forKeys: [.isApplicationKey]).isApplication == true
 }
 
 guard let bundle = Bundle(url: app),
-      bundle.object(forInfoDictionaryKey: "CFBundlePackageType") as? String == "APPL",
-      let executable = bundle.executableURL,
+      bundle.object(forInfoDictionaryKey: "CFBundlePackageType") as? String == "APPL"
+else {
+    fail("missing application metadata")
+}
+
+guard let executable = bundle.executableURL,
       FileManager.default.isExecutableFile(atPath: executable.path)
 else {
-    fail("missing application metadata or executable permissions")
+    fail("missing launcher or executable permissions")
 }
 
 print("Verified Whisky.app: macOS application bundle with executable \(executable.lastPathComponent)")
