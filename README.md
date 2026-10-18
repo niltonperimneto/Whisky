@@ -40,6 +40,12 @@ On first launch the bottle list is empty, since this app has its own bundle iden
 archived original. They are referenced in place, never copied or moved, so the other build
 keeps working.
 
+### CI app downloads
+
+For a CI build, open a successful **CI** run in Actions and download the
+**Whisky.app** artifact. Extract `Whisky.app.zip` once to get the complete
+`Whisky.app` application bundle.
+
 ## Overview
 
 Whisky provides a clean and easy-to-use graphical wrapper for Wine built in native SwiftUI. You can make and manage bottles, install and run Windows apps and games, and unlock the full potential of your Mac with no technical knowledge required.

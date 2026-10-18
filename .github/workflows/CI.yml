@@ -180,14 +180,24 @@ jobs:
                 END { if (dir != "" && name != "") print dir "/" name }')
           test -d "$app_path"
           mkdir -p ci-artifacts
-          ditto "$app_path" "ci-artifacts/Whisky-PEAK-Relay12.app"
+          ditto "$app_path" "ci-artifacts/Whisky.app"
 
       - name: Upload Whisky app artifact
         uses: actions/upload-artifact@v7
         with:
-          name: Whisky-PEAK-Relay12-app
-          path: ci-artifacts/Whisky-PEAK-Relay12.app
+          name: Whisky.app
+          # Upload the parent so the download retains Whisky.app/Contents/.
+          path: ci-artifacts/
           if-no-files-found: error
+
+      - name: Download the packaged app for validation
+        uses: actions/download-artifact@v8
+        with:
+          name: Whisky.app
+          path: ${{ runner.temp }}/Whisky app download
+
+      - name: Verify the downloaded macOS app bundle
+        run: swift scripts/check-app-download.swift "$RUNNER_TEMP/Whisky app download"
 
       # Guards against the class of regression fixed in #134: a resource that the
       # app expects at runtime silently not making it into the bundle. winetricks
