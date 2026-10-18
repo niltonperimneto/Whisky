@@ -32,13 +32,28 @@ struct RuntimePickerView: View {
     /// task to run on, so it would never learn there is a second runtime.
     @State private var runtimes = WhiskyWineInstaller.installedRuntimes()
     @State private var loadingState: LoadingState = .success
+    @State private var errorMessage: String?
 
     var body: some View {
         // One runtime is no choice at all. A bottle still pointed at one that
         // has since been removed keeps the row, so it can be moved back to one
         // that exists.
-        if runtimes.count > 1 || bottle.settings.runtime != nil {
+        if runtimes.count > 1 || bottle.settings.runtime != nil || Wine.hasInterruptedRuntimeSwitch(bottle: bottle) {
             Section("config.runtime") {
+                if Wine.hasInterruptedRuntimeSwitch(bottle: bottle) {
+                    Button("Restore interrupted runtime switch") {
+                        Task {
+                            do {
+                                try await Wine.restoreRuntimeSwitch(bottle: bottle)
+                                loadingState = .success
+                            } catch {
+                                Self.logger.error("Runtime recovery failed: \(error.localizedDescription)")
+                                errorMessage = error.localizedDescription
+                                loadingState = .failed
+                            }
+                        }
+                    }
+                }
                 SettingsLoadingRow(
                     title: "config.runtime",
                     detail: "config.runtime.info",
@@ -50,6 +65,13 @@ struct RuntimePickerView: View {
                         }
                     }
                 }
+            }
+            .alert("Runtime change failed", isPresented: Binding(
+                get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "")
             }
         }
     }
@@ -64,19 +86,19 @@ struct RuntimePickerView: View {
             get: { bottle.settings.runtime },
             set: { newValue in
                 guard newValue != bottle.settings.runtime else { return }
-                bottle.settings.runtime = newValue
-                Task(priority: .userInitiated) { await updatePrefix() }
+                Task(priority: .userInitiated) { await updatePrefix(to: newValue) }
             }
         )
     }
 
-    private func updatePrefix() async {
+    private func updatePrefix(to runtime: String?) async {
         loadingState = .modifying
         do {
-            try await Wine.updatePrefix(bottle: bottle)
+            try await Wine.switchRuntime(bottle: bottle, to: runtime)
             loadingState = .success
         } catch {
             Self.logger.error("Failed to update the prefix after a runtime change: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
             loadingState = .failed
         }
     }

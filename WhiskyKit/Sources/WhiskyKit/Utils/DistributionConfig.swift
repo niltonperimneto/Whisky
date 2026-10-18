@@ -28,8 +28,10 @@ public enum DistributionConfig {
     /// The runtime catalog winecx-gptk's CI publishes: every installable
     /// runtime with its archive, digest and channel. Tried before
     /// ``versionPlistURL``, which only ever names one runtime.
-    public static let runtimeCatalogURL =
+    public static let legacyRuntimeCatalogURL =
         "https://raw.githubusercontent.com/niltonperimneto/winecx-gptk/main/runtime-catalog.json"
+    public static let runtimeCatalogURL =
+        "https://raw.githubusercontent.com/niltonperimneto/winecx-gptk/main/runtime-catalog-v2.json"
 
     /// Base URL for GitHub Releases downloads
     public static let releasesBaseURL = "https://github.com/dappermint/Whisky/releases/download"

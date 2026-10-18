@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Steam compatibility-page detection accepts either order of the Linux platform
+  comparison and preserves minified function names when applying the interface patch.
+- Runtime layout v2 supports the bundled KosmicKrisp backend and validates its
+  physical device before offering DXVK. Bottle runtime switches retain a
+  recoverable snapshot until Wine and the selected backend verify.
 - PEAK now uses the D3DMetal + Relay12 profile, which keeps D3D12 enabled
   instead of falling back to forced D3D11 when the game requests a D3D11On12
   device.

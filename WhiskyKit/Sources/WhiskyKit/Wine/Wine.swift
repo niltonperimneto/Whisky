@@ -242,6 +242,7 @@ public class Wine {
     public static func runWineProcess(
         name: String? = nil, args: [String], bottle: Bottle, environment: [String: String] = [:]
     ) throws -> AsyncStream<ProcessOutput> {
+        try checkRuntimeSwitch(bottle: bottle)
         let fileHandle = try makeFileHandle()
         fileHandle.writeApplicationInfo()
         fileHandle.writeInfo(for: bottle)
@@ -351,7 +352,7 @@ public class Wine {
             runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: bottle.settings.runtime),
             d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: bottle.settings.runtime),
             dxmtRuntimeNative: isDXMTRuntimeNative(for: bottle.settings.runtime),
-            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: bottle.settings.runtime)
+            kosmicKrispInstalled: KosmicKrisp.isUsable(for: bottle.settings.runtime)
         )
         // A launcher takes the bottle's backend like its games do: that backend
         // is staged into the shared system32, so a launcher on another one put
@@ -439,6 +440,7 @@ public class Wine {
         onLogFile: (@MainActor (URL) -> Void)? = nil,
         onStarted: (@MainActor () -> Void)? = nil
     ) async throws -> ProgramRunResult {
+        try checkRuntimeSwitch(bottle: bottle)
         try validateRuntimeCompatibility(for: bottle)
         let runtimeUseToken = try beginRuntimeUse()
         defer { runtimeUseToken.end() }
@@ -924,8 +926,10 @@ public class Wine {
     @discardableResult
     @MainActor
     private static func runWineWithBottle(
-        _ args: [String], bottle: Bottle, environment: [String: String] = [:]
+        _ args: [String], bottle: Bottle, environment: [String: String] = [:], requireSuccess: Bool = false,
+        duringRuntimeSwitch: Bool = false
     ) async throws -> String {
+        if !duringRuntimeSwitch { try checkRuntimeSwitch(bottle: bottle) }
         var result: [String] = []
         let fileHandle = try makeFileHandle()
         fileHandle.writeApplicationInfo()
@@ -937,8 +941,10 @@ public class Wine {
             args: args, environment: wineEnvironment, runtime: bottle.settings.runtime, fileHandle: fileHandle
         ) {
             switch output {
-            case .started, .terminated:
+            case .started:
                 break
+            case let .terminated(code):
+                if requireSuccess, code != 0 { throw RuntimeSwitchError.verificationFailed }
             case let .message(message), let .error(message):
                 result.append(message)
             }
@@ -1099,7 +1105,7 @@ public class Wine {
     @MainActor
     public static func enableDXVK(bottle: Bottle) throws {
         let runtime = bottle.settings.runtime
-        guard KosmicKrisp.isInstalled(for: runtime) else {
+        guard KosmicKrisp.isUsable(for: runtime) else {
             throw DXVKError.payloadMissing
         }
         let dxvk = dxvkFolder(for: runtime)
@@ -1684,7 +1690,163 @@ extension Wine {
     @MainActor
     public static func updatePrefix(bottle: Bottle) async throws -> String {
         logger.info("Updating Wine prefix for bottle '\(bottle.settings.name)'")
-        return try await runWine(["wineboot", "-u"], bottle: bottle)
+        return try await runWineWithBottle(["wineboot", "-u"], bottle: bottle, requireSuccess: true)
+    }
+
+    /// Explicit runtime changes retain a clone until Wine and the selected backend verify.
+    /// A durable sibling backup also permits recovery after app termination.
+    @MainActor
+    public static func switchRuntime(bottle: Bottle, to runtime: String?) async throws {
+        try await requireIdleRuntimeSwitch(bottle: bottle)
+        guard !switchingPrefixes.contains(bottle.url) else { throw WhiskyWineInstallError.runtimeBusy }
+        let runtimeUseToken = try beginRuntimeUse()
+        defer { runtimeUseToken.end() }
+        let snapshot = RuntimeSwitchSnapshot(prefix: bottle.url)
+        if snapshot.isPending { throw RuntimeSwitchError.recoveryRequired(snapshot.backup) }
+        try WhiskyWineInstaller.validateInstalledRuntime(WhiskyWineInstaller.libraryFolder(for: runtime))
+        let settings = bottle.settings
+        let previousRuntime = settings.runtime
+        guard previousRuntime != runtime else { return }
+        try validateRuntimeSwitchDLLs(bottle: bottle)
+        switchingPrefixes.insert(bottle.url)
+        defer { switchingPrefixes.remove(bottle.url) }
+        try await Task.detached { try snapshot.create() }.value
+        guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
+              await !isWineserverRunning(for: bottle)
+        else {
+            try snapshot.commit()
+            throw WhiskyWineInstallError.runtimeBusy
+        }
+        do {
+            // Establish ownership against the old payload before changing the pin.
+            clearForeignBackendDLLs(keeping: [], bottle: bottle)
+            removeRuntimeSwitchSteamDLLs(bottle: bottle, runtime: previousRuntime)
+            bottle.settings.runtime = runtime
+            _ = try await runWineWithBottle(
+                ["wineboot", "-u"],
+                bottle: bottle,
+                requireSuccess: true,
+                duringRuntimeSwitch: true
+            )
+            let backend = settings.graphicsBackend == .recommended
+                ? GraphicsBackendResolver.resolve(for: runtime) : settings.graphicsBackend
+            if WhiskyWineInstaller.isBackendAvailable(backend, for: runtime) {
+                try prepareBackendPrefix(backend, bottle: bottle)
+                guard !graphicsPrefixNeedsRepair(backend: backend, bottle: bottle) else {
+                    throw RuntimeSwitchError.verificationFailed
+                }
+            }
+            try snapshot.commit()
+        } catch {
+            killBottleSynchronously(bottle: bottle)
+            guard await !isWineserverRunning(for: bottle) else {
+                throw RuntimeSwitchError.recoveryRequired(snapshot.backup)
+            }
+            try snapshot.restore()
+            bottle.settings = settings
+            throw error
+        }
+    }
+
+    @MainActor
+    private static func requireIdleRuntimeSwitch(bottle: Bottle) async throws {
+        guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
+              await !isWineserverRunning(for: bottle)
+        else {
+            throw WhiskyWineInstallError.runtimeBusy
+        }
+    }
+
+    @MainActor private static var switchingPrefixes: Set<URL> = []
+
+    @MainActor
+    private static func checkRuntimeSwitch(bottle: Bottle) throws {
+        let snapshot = RuntimeSwitchSnapshot(prefix: bottle.url)
+        if snapshot.isPending || switchingPrefixes.contains(bottle.url) {
+            throw RuntimeSwitchError.recoveryRequired(snapshot.backup)
+        }
+    }
+
+    @MainActor
+    public static func hasInterruptedRuntimeSwitch(bottle: Bottle) -> Bool {
+        RuntimeSwitchSnapshot(prefix: bottle.url).isPending && !switchingPrefixes.contains(bottle.url)
+    }
+
+    @MainActor
+    public static func restoreRuntimeSwitch(bottle: Bottle) async throws {
+        guard ProcessRegistry.shared.getProcessCount(for: bottle) == 0,
+              await !isWineserverRunning(for: bottle)
+        else {
+            throw WhiskyWineInstallError.runtimeBusy
+        }
+        try RuntimeSwitchSnapshot(prefix: bottle.url).restore()
+        bottle.settings = try BottleSettings.decode(from: bottle.url.appending(path: "Metadata.plist"))
+    }
+
+    @MainActor
+    static func validateRuntimeSwitchDLLs(bottle: Bottle) throws {
+        let names = Set(["d3d8.dll", "d3d9.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll"])
+        for lane in ["system32", "syswow64"] {
+            for name in names {
+                let file = bottle.url.appending(path: "drive_c/windows/\(lane)/\(name)")
+                if FileManager.default.fileExists(atPath: file.path),
+                   (try? isNativePE(file)) == true,
+                   !isBackendPayload(file, named: name, runtime: bottle.settings.runtime) {
+                    throw RuntimeSwitchError.customDLL(file)
+                }
+            }
+        }
+        for client in runtimeSwitchSteamClients(bottle: bottle) {
+            for directory in steamHelperDirectories(forClient: client) {
+                for name in steamHelperPayload {
+                    let file = directory.appending(path: name)
+                    if FileManager.default.fileExists(atPath: file.path),
+                       !isBackendPayload(file, named: name, runtime: bottle.settings.runtime) {
+                        throw RuntimeSwitchError.customDLL(file)
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private static func removeRuntimeSwitchSteamDLLs(bottle: Bottle, runtime: String?) {
+        for client in runtimeSwitchSteamClients(bottle: bottle) {
+            let directories = steamHelperDirectories(forClient: client)
+            removeSteamHelperDXVK(
+                from: directories,
+                dxvk: dxvkFolder(for: runtime),
+                legacyDXVK: legacyDXVKFolder(for: runtime),
+                originalDXGI: GPTKImporter.originalsFolder(
+                    inStore: GPTKImporter.storeFolder,
+                    key: GPTKImporter.originalsKey(for: runtime)
+                ).appending(path: "dxgi.dll")
+            )
+        }
+    }
+
+    @MainActor
+    private static func runtimeSwitchSteamClients(bottle: Bottle) -> Set<URL> {
+        Set(bottle.programs.map(\.url).filter { LauncherType.detect(from: $0) == .steam })
+            .union(["Program Files (x86)", "Program Files"].map {
+                bottle.url.appending(path: "drive_c/\($0)/Steam/steam.exe")
+            })
+    }
+
+    public enum RuntimeSwitchError: LocalizedError {
+        case customDLL(URL)
+        case snapshotFailed
+        case verificationFailed
+        case recoveryRequired(URL)
+
+        public var errorDescription: String? {
+            switch self {
+            case let .customDLL(url): "Preserve the custom DLL before switching runtimes: \(url.path)."
+            case .snapshotFailed: "Could not create a runtime rollback clone. The bottle was not changed."
+            case .verificationFailed: "The destination runtime failed graphics verification."
+            case let .recoveryRequired(url): "A previous runtime switch needs recovery from \(url.path)."
+            }
+        }
     }
 
     /// Checks if an environment variable key is a valid POSIX shell identifier.

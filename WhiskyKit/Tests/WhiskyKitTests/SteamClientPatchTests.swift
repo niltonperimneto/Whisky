@@ -176,6 +176,68 @@ struct SteamClientPatchInterfaceTests {
     }
 }
 
+@Suite("SteamClientPatch Interface Update Tests")
+struct SteamClientPatchInterfaceUpdateTests {
+    @Test("Recognizes reversed platform operands without changing the function name")
+    func reversedPlatformComparison() throws {
+        let source = #"a=1,function $(){return a.TS.PLATFORM=="linux"},b=2"#
+        let range = try #require(SteamClientPatch.interfaceGateRange(in: source))
+        let replacement = SteamClientPatch.openedInterfaceGate(replacing: source[range])
+        #expect(source.replacingCharacters(in: range, with: replacement) == "a=1,function $(){return!0},b=2")
+    }
+
+    @Test("Ambiguous and unrelated comparisons are rejected")
+    func rejectsAmbiguousComparisons() {
+        let gate = #"function C(){return"linux"==a.TS.PLATFORM}"#
+        #expect(SteamClientPatch.interfaceGateRange(in: gate + gate) == nil)
+        #expect(SteamClientPatch.interfaceGateRange(in: #"function C(){return a.OTHER=="linux"}"#) == nil)
+    }
+
+    @Test("A renamed gate is backed up and patching is idempotent")
+    func preservesBackupAndFunctionName() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = SteamClientPatch.interfaceBundle(steamRoot: root)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let source = #"a=1,function $(){return a.TS.PLATFORM=="linux"},b=2"#
+        try source.write(to: target, atomically: true, encoding: .utf8)
+        try SteamClientPatch.applyInterfacePatch(steamRoot: root)
+        let patched = try String(contentsOf: target, encoding: .utf8)
+        #expect(patched == "a=1,function $(){return!0},b=2")
+        #expect(try String(contentsOf: SteamClientPatch.backup(of: target), encoding: .utf8) == source)
+        if case .patched = SteamClientPatch.interfaceState(steamRoot: root) {} else {
+            Issue.record("The backed-up renamed gate was not recognized")
+        }
+        try SteamClientPatch.applyInterfacePatch(steamRoot: root)
+        #expect(try String(contentsOf: SteamClientPatch.backup(of: target), encoding: .utf8) == source)
+        try (patched + "updated").write(to: target, atomically: true, encoding: .utf8)
+        if case .unrecognised = SteamClientPatch.interfaceState(steamRoot: root) {} else {
+            Issue.record("A different bundle was accepted as the backed-up patch")
+        }
+    }
+
+    @Test("Ambiguous files are not modified or backed up")
+    func ambiguousFileIsUnchanged() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = SteamClientPatch.interfaceBundle(steamRoot: root)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let source = #"function C(){return"linux"==a.TS.PLATFORM}function $(){return a.TS.PLATFORM=="linux"}"#
+        try source.write(to: target, atomically: true, encoding: .utf8)
+        #expect(throws: SteamClientPatchError.self) {
+            try SteamClientPatch.applyInterfacePatch(steamRoot: root)
+        }
+        #expect(try String(contentsOf: target, encoding: .utf8) == source)
+        #expect(!FileManager.default.fileExists(atPath: SteamClientPatch.backup(of: target).path))
+    }
+}
+
 @Suite("SteamClientPatch Live Tests")
 struct SteamClientPatchLiveTests {
     /// Does nothing unless Steam is installed. It is the only thing that

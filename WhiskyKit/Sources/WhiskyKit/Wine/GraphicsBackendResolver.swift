@@ -56,7 +56,7 @@ public enum GraphicsBackendResolver {
         runtimeInfo: WhiskyWineVersion? = WhiskyWineInstaller.whiskyWineInfo(),
         d3dMetalInstalled: Bool = WhiskyWineInstaller.isD3DMetalInstalled(),
         dxmtRuntimeNative: Bool = Wine.isDXMTRuntimeNative(),
-        kosmicKrispInstalled: Bool = KosmicKrisp.isInstalled(for: nil),
+        kosmicKrispInstalled: Bool = KosmicKrisp.isUsable(for: nil),
         architecture: Architecture = .x64
     ) -> GraphicsBackend {
         let dxvkOrFallback: GraphicsBackend = kosmicKrispInstalled ? .dxvk : .wined3d
@@ -132,7 +132,7 @@ public enum GraphicsBackendResolver {
             runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: runtime),
             d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: runtime),
             dxmtRuntimeNative: Wine.isDXMTRuntimeNative(for: runtime),
-            kosmicKrispInstalled: KosmicKrisp.isInstalled(for: runtime),
+            kosmicKrispInstalled: KosmicKrisp.isUsable(for: runtime),
             architecture: architecture
         )
     }

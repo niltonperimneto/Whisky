@@ -229,14 +229,15 @@ public final class RuntimeCoordinator {
     }
 
     private nonisolated static func fetchCatalog() async throws -> [AvailableRuntime] {
-        if let catalogURL = URL(string: DistributionConfig.runtimeCatalogURL) {
+        for endpoint in [DistributionConfig.runtimeCatalogURL, DistributionConfig.legacyRuntimeCatalogURL] {
+            guard let catalogURL = URL(string: endpoint) else { throw RuntimeOperationError.invalidURL }
             do {
                 let data = try await fetchData(from: catalogURL)
                 return try RuntimeCatalog.decode(data).runtimes.sorted {
                     ($0.publishedAt ?? .distantPast) > ($1.publishedAt ?? .distantPast)
                 }
             } catch let error as RuntimeOperationError where error == .notFound {
-                // Older deployments only publish WhiskyWineVersion.plist.
+                // Advance only on 404; invalid metadata and transport failures must remain visible.
             }
         }
 

@@ -29,6 +29,7 @@ public struct AvailableRuntime: Codable, Identifiable, Equatable, Sendable {
     public let wineVersion: String?
     public let capabilities: WhiskyWineCapabilities?
     public let publishedAt: Date?
+    public let runtimeLayoutVersion: Int?
 
     public var id: String { identifier }
 
@@ -41,7 +42,8 @@ public struct AvailableRuntime: Codable, Identifiable, Equatable, Sendable {
         minimumMacOS: String? = nil,
         wineVersion: String? = nil,
         capabilities: WhiskyWineCapabilities? = nil,
-        publishedAt: Date? = nil
+        publishedAt: Date? = nil,
+        runtimeLayoutVersion: Int? = nil
     ) {
         self.identifier = identifier
         self.version = version
@@ -52,6 +54,7 @@ public struct AvailableRuntime: Codable, Identifiable, Equatable, Sendable {
         self.wineVersion = wineVersion
         self.capabilities = capabilities
         self.publishedAt = publishedAt
+        self.runtimeLayoutVersion = runtimeLayoutVersion
     }
 
     public var hasValidDigest: Bool {
@@ -72,7 +75,9 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let catalog = try decoder.decode(RuntimeCatalog.self, from: data)
-        guard catalog.catalogVersion == 1 else { throw RuntimeCatalogError.unsupportedVersion }
+        guard (1 ... 2).contains(catalog.catalogVersion),
+              catalog.runtimes.allSatisfy({ (1 ... 2).contains($0.runtimeLayoutVersion ?? 1) })
+        else { throw RuntimeCatalogError.unsupportedVersion }
         guard catalog.runtimes.allSatisfy(\.hasValidDigest) else { throw RuntimeCatalogError.invalidDigest }
         guard catalog.runtimes.allSatisfy({ $0.archiveURL.scheme == "https" }) else {
             throw RuntimeCatalogError.insecureURL
