@@ -20,11 +20,29 @@ import XCTest
 
 /// The modern surfaces: the bottle shelf, the bottle workspace and the app grid.
 ///
-/// Launched with the flag forced on, so this suite exercises the modern path
-/// while the default-off suites keep covering the shipped one. Both run against
-/// the same build.
+/// Exercise the default shell in a disposable home directory. Legacy suites
+/// explicitly disable it, so both shells remain covered.
 final class WhiskyUITestsModernUI: WhiskyUITestCase {
-    override var extraLaunchArguments: [String] { ["-modernUI", "1"] }
+    override var extraLaunchArguments: [String] { [] }
+    override var bottleFixtureCount: Int { 2 }
+
+    func testModernPreferenceTogglePersistsAcrossLaunches() throws {
+        require(shelfContainer, "default modern shelf", timeout: 8)
+        app.typeKey(",", modifierFlags: .command)
+        require(app.buttons["Advanced"], "Advanced settings tab", timeout: 5).click()
+        let toggle = app.checkBoxes["settings.modernUI"]
+        require(toggle, "modern UI preference").click()
+        app.terminate()
+        app.launch()
+        require(app.buttons["sidebar.library"], "persisted legacy shell", timeout: 8)
+
+        app.typeKey(",", modifierFlags: .command)
+        require(app.buttons["Advanced"], "Advanced settings tab").click()
+        require(app.checkBoxes["settings.modernUI"], "modern UI preference").click()
+        app.terminate()
+        app.launch()
+        require(shelfContainer, "persisted modern shell", timeout: 8)
+    }
 
     // MARK: - Shelf
 
@@ -166,5 +184,48 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
             )
         }
         card.click()
+    }
+}
+
+/// Run the production preference registration against disposable domains.
+final class ModernUIPreferenceTests: XCTestCase {
+    func testFreshPreferencesUseModernUIWithoutPersistingAChoice() throws {
+        try withPreferences { defaults, domain in
+            ModernUI.registerDefaults(in: defaults)
+            XCTAssertTrue(defaults.bool(forKey: ModernUI.defaultsKey))
+            XCTAssertNil(defaults.persistentDomain(forName: domain)?[ModernUI.defaultsKey])
+        }
+    }
+
+    func testExplicitChoicesSurviveRegistrationAndRelaunch() throws {
+        try withPreferences { defaults, domain in
+            for choice in [false, true] {
+                defaults.set(choice, forKey: ModernUI.defaultsKey)
+                ModernUI.registerDefaults(in: defaults)
+                let reopened = try XCTUnwrap(UserDefaults(suiteName: domain))
+                ModernUI.registerDefaults(in: reopened)
+                XCTAssertEqual(reopened.bool(forKey: ModernUI.defaultsKey), choice)
+            }
+        }
+    }
+
+    func testLaunchArgumentsOverrideStoredChoice() throws {
+        try withPreferences { defaults, _ in
+            for choice in [false, true] {
+                defaults.set(!choice, forKey: ModernUI.defaultsKey)
+                defaults.setVolatileDomain([ModernUI.defaultsKey: choice], forName: UserDefaults.argumentDomain)
+                ModernUI.registerDefaults(in: defaults)
+                XCTAssertEqual(defaults.bool(forKey: ModernUI.defaultsKey), choice)
+                defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+                XCTAssertEqual(defaults.bool(forKey: ModernUI.defaultsKey), !choice)
+            }
+        }
+    }
+
+    private func withPreferences(_ body: (UserDefaults, String) throws -> Void) throws {
+        let domain = "WhiskyModernUITests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        try body(defaults, domain)
     }
 }

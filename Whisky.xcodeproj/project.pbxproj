@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AB2026102100000000000001 /* ModernUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63AA00D4EFA2170C05A49A27 /* ModernUI.swift */; };
 		E6C8AAF554D16B32059A8038 /* BottleDiagnosisPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C511FCB37835AA2BEB74CC01 /* BottleDiagnosisPresenter.swift */; };
 		BCA8D61359B638D4D7CA95C8 /* BottlePrefixState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F3A87EC2964521AE993F7D5 /* BottlePrefixState.swift */; };
 		7C44135B88040BCD31F683A1 /* BottleSettingsSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = D328CAF6B8FC1455E22AEDE9 /* BottleSettingsSearch.swift */; };
@@ -1114,6 +1115,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E7BB70E85616CF51250E10FB /* WhiskyUITests.swift in Sources */,
+				AB2026102100000000000001 /* ModernUI.swift in Sources */,
 				C1A2B3C4E5F60601A9B0A2D8 /* WhiskyUITestsGameDB.swift in Sources */,
 				C1A2B3C4E5F60601A9B0A1D8 /* UITestSupport.swift in Sources */,
 				BF1A541DA0932ED474FD4085 /* WhiskyUITestsModernUI.swift in Sources */,

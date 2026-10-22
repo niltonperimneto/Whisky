@@ -22,11 +22,19 @@ import XCTest
 /// rather than as XCUITest plumbing.
 class WhiskyUITestCase: XCTestCase {
     var app: XCUIApplication!
-    var extraLaunchArguments: [String] { [] }
+    private var fixtureHome: URL!
+    var bottleFixtureCount: Int { 1 }
+    // Legacy suites explicitly exercise the fallback shell.
+    var extraLaunchArguments: [String] { ["-modernUI", "0"] }
 
     override func setUpWithError() throws {
         continueAfterFailure = false
+        fixtureHome = FileManager.default.temporaryDirectory.appending(path: "WhiskyUITests-\(UUID().uuidString)")
+        try createBottleFixtures()
         app = XCUIApplication()
+        // Foundation honours this for home-directory and preferences lookups.
+        // UI tests must never read or change the developer's bottles or settings.
+        app.launchEnvironment["CFFIXED_USER_HOME"] = fixtureHome.path
         app.launchArguments += ["-WhiskyUITestMode", "1"]
         app.launchArguments += extraLaunchArguments
         app.launch()
@@ -37,6 +45,41 @@ class WhiskyUITestCase: XCTestCase {
 
     override func tearDownWithError() throws {
         app.terminate()
+        if let fixtureHome {
+            try FileManager.default.removeItem(at: fixtureHome)
+        }
+    }
+
+    private func createBottleFixtures() throws {
+        let container = fixtureHome.appending(path: "Library/Containers/com.dappermint.WhiskyPreview")
+        var paths: [URL] = []
+        for index in 0 ..< bottleFixtureCount {
+            let bottle = container.appending(path: "Bottles/Fixture-\(index)")
+            try FileManager.default.createDirectory(
+                at: bottle.appending(path: "drive_c"),
+                withIntermediateDirectories: true
+            )
+            let metadata: [String: Any] = ["info": ["name": "UI Fixture \(index + 1)"]]
+            let data = try PropertyListSerialization.data(fromPropertyList: metadata, format: .xml, options: 0)
+            try data.write(to: bottle.appending(path: "Metadata.plist"))
+            paths.append(bottle)
+        }
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
+        let registry = BottleRegistryFixture(paths: paths)
+        try PropertyListEncoder().encode(registry).write(to: container.appending(path: "BottleVM.plist"))
+    }
+
+    private struct BottleRegistryFixture: Encodable {
+        let paths: [URL]
+        let fileVersion = RegistryVersion()
+    }
+
+    private struct RegistryVersion: Encodable {
+        let major = 1
+        let minor = 0
+        let patch = 0
+        let preRelease = ""
+        let build = ""
     }
 
     // MARK: - Helpers
@@ -81,18 +124,30 @@ class WhiskyUITestCase: XCTestCase {
         return result == .completed
     }
 
-    /// Walk every visible static text label and return any that look like raw localization keys.
-    /// Heuristic: contains a `.`, no whitespace, starts lowercase.
+    /// Inspect one snapshot so asynchronous refreshes cannot invalidate elements.
+    /// Include button labels, which can leak untranslated keys just like text.
     func rawKeyLeaks() -> [String] {
-        app.staticTexts.allElementsBoundByIndex.compactMap { element -> String? in
-            let label = element.label
+        let root: XCUIElementSnapshot
+        do {
+            root = try app.snapshot()
+        } catch {
+            XCTFail("Could not inspect localization: \(error)")
+            return []
+        }
+        var leaks: [String] = []
+        var pending = [root]
+        while let node = pending.popLast() {
+            pending.append(contentsOf: node.children)
+            guard node.elementType == .staticText || node.elementType == .button else { continue }
+            let label = node.label
             guard !label.isEmpty,
                   label.contains("."),
                   !label.contains(" "),
                   let first = label.first, first.isLowercase
-            else { return nil }
-            return label
+            else { continue }
+            leaks.append(label)
         }
+        return leaks
     }
 
     /// Open the bottle settings window of the currently-selected bottle on

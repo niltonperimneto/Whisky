@@ -18,20 +18,20 @@
 
 import Foundation
 
-/// The opt-in switch for the modernized Liquid Glass surfaces: the bottle shelf,
-/// the bottle workspace and the app grid.
-///
-/// Off by default, so the shipped experience is unchanged until the migration
-/// cutover. Both experiences are built from the same models, so the flag only
-/// picks which view reads them — nothing behind it is duplicated.
-///
-/// `UserDefaults` honours `-key value` launch arguments, so `-modernUI 1`
-/// selects the modern path for a UI test run without writing to the real
-/// domain and leaking into the next launch.
+/// The preference for the Liquid Glass bottle shelf, workspace and app grid.
+/// Enabled by default; a stored preference or launch argument takes precedence.
+/// Both shells use the same bottle models and settings.
 enum ModernUI {
     /// The `UserDefaults` key backing the flag. Read it through `@AppStorage`
     /// in views so toggling it in Settings redraws them.
     static let defaultsKey = "modernUI"
+
+    static let defaultEnabled = true
+
+    /// Registration supplies a fallback without overwriting an explicit choice.
+    static func registerDefaults(in defaults: UserDefaults = .standard) {
+        defaults.register(defaults: [defaultsKey: defaultEnabled])
+    }
 
     /// Whether the modern surfaces are active, for the non-SwiftUI callers that
     /// cannot hold an `@AppStorage`.

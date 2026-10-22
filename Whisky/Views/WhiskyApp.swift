@@ -79,6 +79,7 @@ struct WhiskyApp: App {
     @Environment(\.openWindow) var openWindow
 
     init() {
+        ModernUI.registerDefaults()
         Telemetry.startIfConsented()
     }
 
