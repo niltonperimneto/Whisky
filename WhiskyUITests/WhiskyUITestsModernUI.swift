@@ -238,14 +238,14 @@ final class ModernUIPreferenceTests: XCTestCase {
     }
 
     func testLaunchArgumentsOverrideStoredChoice() throws {
-        try withPreferences { defaults, _ in
+        try withPreferences { defaults, domain in
             for choice in [false, true] {
                 defaults.set(!choice, forKey: ModernUI.defaultsKey)
                 defaults.setVolatileDomain([ModernUI.defaultsKey: choice], forName: UserDefaults.argumentDomain)
                 ModernUI.registerDefaults(in: defaults)
                 XCTAssertEqual(defaults.bool(forKey: ModernUI.defaultsKey), choice)
+                XCTAssertEqual(defaults.persistentDomain(forName: domain)?[ModernUI.defaultsKey] as? Bool, !choice)
                 defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
-                XCTAssertEqual(defaults.bool(forKey: ModernUI.defaultsKey), !choice)
             }
         }
     }
