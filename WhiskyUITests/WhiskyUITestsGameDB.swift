@@ -81,12 +81,7 @@ final class WhiskyUITestsGameDB: WhiskyUITestCase {
         openGameConfigurations()
         openCelesteDetail()
 
-        let applyButton = require(
-            app.buttons["gamedb.detail.applyButton"],
-            "Apply button",
-            timeout: 5
-        )
-        applyButton.click()
+        revealAndClickApplyButton()
 
         let cancelButton = require(
             app.buttons["gamedb.preview.cancelButton"],
@@ -104,6 +99,16 @@ final class WhiskyUITestsGameDB: WhiskyUITestCase {
             app.buttons["gamedb.preview.cancelButton"].waitForExistence(timeout: 2),
             "Preview sheet failed to dismiss after Cancel"
         )
+    }
+
+    private func revealAndClickApplyButton() {
+        let button = require(app.buttons["gamedb.detail.applyButton"], "Apply button", timeout: 5)
+        let scrollView = app.scrollViews.containing(.button, identifier: "gamedb.detail.applyButton").firstMatch
+        for _ in 0 ..< 8 {
+            if button.isHittable { break }
+            scrollView.scroll(byDeltaX: 0, deltaY: -160)
+        }
+        if waitUntilHittable(button, "Apply button") { button.click() }
     }
 
     // MARK: - Localization regression
@@ -152,7 +157,7 @@ final class WhiskyUITestsGameDB: WhiskyUITestCase {
         try requireBottleFixture()
         openGameConfigurations()
         openCelesteDetail()
-        require(app.buttons["gamedb.detail.applyButton"], "detail view", timeout: 5).click()
+        revealAndClickApplyButton()
         require(app.buttons["gamedb.preview.cancelButton"], "preview sheet", timeout: 5)
 
         let leaks = rawKeyLeaks()

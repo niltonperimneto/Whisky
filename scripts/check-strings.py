@@ -86,11 +86,21 @@ def used_keys() -> dict[str, str]:
             for pattern in patterns:
                 candidates += pattern.findall(text)
             for candidate in candidates:
-                # Interpolated keys ("menubar.launchFailed \(name)") carry a
-                # format suffix in the catalog; checking them needs the compiler
-                # rather than a regex, so they are out of scope here.
+                # Interpolated String(localized:) calls are checked separately
+                # by their stable prefix, without inferring Swift types.
                 if IDENTIFIER_KEY.match(candidate) and not NOT_A_KEY.match(candidate):
                     found.setdefault(candidate, str(rel))
+    return found
+
+
+def interpolated_key_prefixes() -> dict[str, str]:
+    """Check identifier prefixes without guessing Swift interpolation types."""
+    found: dict[str, str] = {}
+    pattern = re.compile(r'String\(\s*localized:\s*"([a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+)+) \\\(')
+    for src_dir in SOURCE_DIRS:
+        for path in sorted(src_dir.rglob("*.swift")):
+            for prefix in pattern.findall(path.read_text(encoding="utf-8")):
+                found.setdefault(prefix, str(path.relative_to(ROOT)))
     return found
 
 
@@ -113,6 +123,12 @@ def main() -> int:
     for key, site in sorted(used_keys().items()):
         if key not in strings:
             failures.append(f"used but not in the catalog: {key} ({site})")
+
+    # Swift supplies the interpolation format specifier; require its catalog
+    # family without guessing whether the expression is an Int or a String.
+    for prefix, site in sorted(interpolated_key_prefixes().items()):
+        if not any(key.startswith(prefix + " %") for key in strings):
+            failures.append(f"interpolated key missing from catalog: {prefix} ({site})")
 
     if failures:
         for failure in failures:

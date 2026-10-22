@@ -28,13 +28,11 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
 
     func testModernPreferenceTogglePersistsAcrossLaunches() throws {
         require(shelfContainer, "default modern shelf", timeout: 8)
+        app.terminate()
+        app.launchArguments += ["-selectedSettingsTab", "advanced"]
+        app.launch()
         app.typeKey(",", modifierFlags: .command)
-        require(
-            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Advanced")).firstMatch,
-            "Advanced settings tab",
-            timeout: 5
-        ).click()
-        let toggle = app.descendants(matching: .any).matching(identifier: "settings.modernUI").firstMatch
+        let toggle = app.switches.matching(identifier: "settings.modernUI").firstMatch
         require(toggle, "modern UI preference").click()
         app.terminate()
         app.launch()
@@ -42,11 +40,7 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
 
         app.typeKey(",", modifierFlags: .command)
         require(
-            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Advanced")).firstMatch,
-            "Advanced settings tab"
-        ).click()
-        require(
-            app.descendants(matching: .any).matching(identifier: "settings.modernUI").firstMatch,
+            app.switches.matching(identifier: "settings.modernUI").firstMatch,
             "modern UI preference"
         ).click()
         app.terminate()

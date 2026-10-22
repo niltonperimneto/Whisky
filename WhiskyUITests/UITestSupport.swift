@@ -138,16 +138,15 @@ class WhiskyUITestCase: XCTestCase {
         var pending = [root]
         while let node = pending.popLast() {
             pending.append(contentsOf: node.children)
-            guard node.elementType == .staticText || node.elementType == .button else { continue }
-            let label = node.label
-            guard !label.isEmpty,
-                  label.contains("."),
-                  !label.contains(" "),
-                  let first = label.first, first.isLowercase
-            else { continue }
-            leaks.append(label)
+            guard [.staticText, .button, .window].contains(node.elementType) else { continue }
+            for label in [node.label, node.value as? String ?? ""] {
+                let pattern = #"\b[a-z][A-Za-z0-9]*(?:\.[A-Za-z0-9]+){2,}\b"#
+                if let range = label.range(of: pattern, options: .regularExpression) {
+                    leaks.append(String(label[range]))
+                }
+            }
         }
-        return leaks
+        return Array(Set(leaks)).sorted()
     }
 
     /// Open the bottle settings window of the currently-selected bottle on

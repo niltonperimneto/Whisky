@@ -32,18 +32,16 @@ struct GameEntryDetailView: View {
     @State private var toast: ToastData?
 
     var body: some View {
-        ScrollView {
-            Form {
-                communityTrustBanner
-                atAGlanceSection
-                recommendedConfigSection
-                variantsSection
-                whatItChangesSection
-                notesAndIssuesSection
-                provenanceSection
-            }
-            .formStyle(.grouped)
+        Form {
+            communityTrustBanner
+            atAGlanceSection
+            recommendedConfigSection
+            variantsSection
+            whatItChangesSection
+            notesAndIssuesSection
+            provenanceSection
         }
+        .formStyle(.grouped)
         .navigationTitle(entry.title)
         .toast($toast)
         .sheet(isPresented: $showPreviewSheet) {

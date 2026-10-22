@@ -63,3 +63,22 @@ switches. No Wine process is needed for these UI fixtures.
 Historical PE toolchain and runtime changes are not reapplied. The integration
 preserves current graphics capability checks, bottle pins, runtime validation,
 environment layering, and Swift concurrency isolation.
+
+## UI validation follow-up
+
+Disposable fixtures exposed issues that the old suites skipped on empty runners:
+the entire bottle-settings tab group overflowed at its 760-point window width,
+and the modern Processes pane still provided two additional stop buttons.
+Settings tabs now occupy a pinned horizontal row above the form; standalone
+settings windows and toolbar search remain. The modern workspace suppresses the
+process pane's lifecycle buttons while the legacy pane retains them.
+
+GameDB detail uses the grouped form's own scrolling. Tests reveal the Apply
+button before interacting. Preference tests open Advanced through the existing
+selected-tab setting and target the actual switch.
+
+CI screenshots also exposed missing interpolated shelf subtitles. Restore the
+bottle-count and running-count entries, plus the app-grid filter label, from the
+redesign catalog. Preserve existing translations. Localization checks now cover
+interpolated String(localized:) key families, and UI checks inspect window titles
+and static-text values as well as labels.
