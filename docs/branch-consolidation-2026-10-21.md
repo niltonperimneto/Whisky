@@ -55,7 +55,10 @@ Enable modern UI through registered defaults and matching AppStorage fallback
 values. Stored preferences and command-line overrides retain precedence. Keep
 the legacy toggle and explicitly select the legacy shell in its test suites.
 Add preference tests using disposable defaults domains, covering fresh defaults,
-persisted choices, re-registration, and launch argument precedence.
+persisted choices, re-registration, and launch argument precedence. UI suites
+use disposable home directories and bottle metadata, fail on missing fixtures,
+and cover preference toggling, empty shelves, and navigation reset on bottle
+switches. No Wine process is needed for these UI fixtures.
 
 Historical PE toolchain and runtime changes are not reapplied. The integration
 preserves current graphics capability checks, bottle pins, runtime validation,

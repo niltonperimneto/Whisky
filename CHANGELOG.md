@@ -197,6 +197,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of raw localization keys (#208).
 
 ### Changed
+- The redesigned bottle shelf, workspace and app grid are now enabled by default.
+  Existing interface preferences are preserved, and the legacy interface remains
+  available in Settings. Switching bottles resets workspace navigation, and
+  bottle operations temporarily disable workspace actions.
 - DLSS frame generation is now its own bottle setting, separate from the MetalFX
   toggle, and it is off by default. Upscaling and frame generation reach MetalFX
   through the same bridge but fail differently: upscaling is measured good, and

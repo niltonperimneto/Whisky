@@ -29,16 +29,26 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
     func testModernPreferenceTogglePersistsAcrossLaunches() throws {
         require(shelfContainer, "default modern shelf", timeout: 8)
         app.typeKey(",", modifierFlags: .command)
-        require(app.buttons["Advanced"], "Advanced settings tab", timeout: 5).click()
-        let toggle = app.checkBoxes["settings.modernUI"]
+        require(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Advanced")).firstMatch,
+            "Advanced settings tab",
+            timeout: 5
+        ).click()
+        let toggle = app.descendants(matching: .any).matching(identifier: "settings.modernUI").firstMatch
         require(toggle, "modern UI preference").click()
         app.terminate()
         app.launch()
         require(app.buttons["sidebar.library"], "persisted legacy shell", timeout: 8)
 
         app.typeKey(",", modifierFlags: .command)
-        require(app.buttons["Advanced"], "Advanced settings tab").click()
-        require(app.checkBoxes["settings.modernUI"], "modern UI preference").click()
+        require(
+            app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Advanced")).firstMatch,
+            "Advanced settings tab"
+        ).click()
+        require(
+            app.descendants(matching: .any).matching(identifier: "settings.modernUI").firstMatch,
+            "modern UI preference"
+        ).click()
         app.terminate()
         app.launch()
         require(shelfContainer, "persisted modern shell", timeout: 8)
@@ -69,6 +79,18 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
     func testShelfCardOpensTheWorkspace() throws {
         try openFirstBottleFromShelf()
         require(app.buttons["nav.applications"], "applications tab", timeout: 8)
+    }
+
+    func testSwitchingBottlesResetsWorkspaceNavigation() throws {
+        try openFirstBottleFromShelf()
+        require(app.buttons["nav.tools"], "tools tab", timeout: 8).click()
+        let picker = app.descendants(matching: .any).matching(identifier: "bottle.picker").firstMatch
+        let current = picker.value as? String
+        require(picker, "bottle switcher").click()
+        let next = current == "UI Fixture 1" ? "UI Fixture 2" : "UI Fixture 1"
+        require(app.menuItems[next], "other bottle").click()
+        let empty = app.staticTexts["Nothing to Launch"]
+        require(empty, "applications tab after switching bottles", timeout: 8)
     }
 
     // MARK: - Workspace
@@ -171,19 +193,25 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
         app.descendants(matching: .any).matching(identifier: "bottleShelf").firstMatch
     }
 
-    /// Opens the first bottle from the shelf, skipping when the container has
-    /// no bottles: CI runners start fresh without fixtures.
+    /// Open the fixture; absence is a failure, not skipped coverage.
     private func openFirstBottleFromShelf() throws {
         require(shelfContainer, "bottle shelf", timeout: 8)
-
         let card = app.descendants(matching: .any).matching(identifier: "shelf.bottle").firstMatch
-        guard card.waitForExistence(timeout: 5) else {
-            throw XCTSkip(
-                "No bottle fixtures in user container; skipping. "
-                    + "Create a bottle locally before running this suite."
-            )
-        }
-        card.click()
+        require(card, "disposable bottle card", timeout: 8).click()
+    }
+}
+
+final class WhiskyUITestsEmptyModernUI: WhiskyUITestCase {
+    override var extraLaunchArguments: [String] { ["-modernUI", "1"] }
+    override var bottleFixtureCount: Int { 0 }
+
+    func testEmptyShelfOffersBottleCreation() {
+        require(app.staticTexts["No Bottles Yet"], "empty shelf", timeout: 8)
+        require(app.buttons.matching(identifier: "toolbar.createBottle").firstMatch, "create bottle action")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Modern empty shelf"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
 }
 

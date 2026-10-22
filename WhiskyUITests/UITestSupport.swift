@@ -200,21 +200,11 @@ class WhiskyUITestCase: XCTestCase {
 
     // MARK: - Smoke
 
-    /// Throws XCTSkip if the user container has no bottles. CI runners start fresh
-    /// without fixtures, and most of these tests assume at least one bottle exists.
+    /// Select the disposable bottle created for this test. Missing fixtures fail
+    /// the test instead of silently skipping coverage on CI.
     func requireBottleFixture() throws {
-        // The app lands on the library now, so a test that wants bottle detail
-        // selects a bottle the way a person would rather than assuming one is
-        // already open.
         let bottleRow = app.descendants(matching: .any).matching(identifier: "sidebar.bottle").firstMatch
-        if bottleRow.waitForExistence(timeout: 5) {
-            bottleRow.tap()
-        }
-        if !app.buttons["nav.bottleConfiguration"].waitForExistence(timeout: 5) {
-            throw XCTSkip(
-                "No bottle fixtures in user container; skipping. " +
-                    "Run a bottle setup locally before running this suite."
-            )
-        }
+        require(bottleRow, "disposable bottle in sidebar", timeout: 8).click()
+        require(app.buttons["nav.bottleConfiguration"], "bottle configuration", timeout: 8)
     }
 }
