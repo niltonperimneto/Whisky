@@ -20,11 +20,33 @@ import XCTest
 
 /// The modern surfaces: the bottle shelf, the bottle workspace and the app grid.
 ///
-/// Launched with the flag forced on, so this suite exercises the modern path
-/// while the default-off suites keep covering the shipped one. Both run against
-/// the same build.
+/// Exercise the default shell in a disposable home directory. Legacy suites
+/// explicitly disable it, so both shells remain covered.
 final class WhiskyUITestsModernUI: WhiskyUITestCase {
-    override var extraLaunchArguments: [String] { ["-modernUI", "1"] }
+    override var extraLaunchArguments: [String] { [] }
+    override var bottleFixtureCount: Int { 2 }
+
+    func testModernPreferenceTogglePersistsAcrossLaunches() throws {
+        require(shelfContainer, "default modern shelf", timeout: 8)
+        app.terminate()
+        app.launchArguments += ["-selectedSettingsTab", "advanced"]
+        app.launch()
+        app.typeKey(",", modifierFlags: .command)
+        let toggle = app.switches.matching(identifier: "settings.modernUI").firstMatch
+        require(toggle, "modern UI preference").click()
+        app.terminate()
+        app.launch()
+        require(app.buttons["sidebar.library"], "persisted legacy shell", timeout: 8)
+
+        app.typeKey(",", modifierFlags: .command)
+        require(
+            app.switches.matching(identifier: "settings.modernUI").firstMatch,
+            "modern UI preference"
+        ).click()
+        app.terminate()
+        app.launch()
+        require(shelfContainer, "persisted modern shell", timeout: 8)
+    }
 
     // MARK: - Shelf
 
@@ -51,6 +73,18 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
     func testShelfCardOpensTheWorkspace() throws {
         try openFirstBottleFromShelf()
         require(app.buttons["nav.applications"], "applications tab", timeout: 8)
+    }
+
+    func testSwitchingBottlesResetsWorkspaceNavigation() throws {
+        try openFirstBottleFromShelf()
+        require(app.buttons["nav.tools"], "tools tab", timeout: 8).click()
+        let picker = app.descendants(matching: .any).matching(identifier: "bottle.picker").firstMatch
+        let current = picker.value as? String
+        require(picker, "bottle switcher").click()
+        let next = current == "UI Fixture 1" ? "UI Fixture 2" : "UI Fixture 1"
+        require(app.menuItems[next], "other bottle").click()
+        let empty = app.staticTexts["Nothing to Launch"]
+        require(empty, "applications tab after switching bottles", timeout: 8)
     }
 
     // MARK: - Workspace
@@ -153,18 +187,67 @@ final class WhiskyUITestsModernUI: WhiskyUITestCase {
         app.descendants(matching: .any).matching(identifier: "bottleShelf").firstMatch
     }
 
-    /// Opens the first bottle from the shelf, skipping when the container has
-    /// no bottles: CI runners start fresh without fixtures.
+    /// Open the fixture; absence is a failure, not skipped coverage.
     private func openFirstBottleFromShelf() throws {
         require(shelfContainer, "bottle shelf", timeout: 8)
-
         let card = app.descendants(matching: .any).matching(identifier: "shelf.bottle").firstMatch
-        guard card.waitForExistence(timeout: 5) else {
-            throw XCTSkip(
-                "No bottle fixtures in user container; skipping. "
-                    + "Create a bottle locally before running this suite."
-            )
+        require(card, "disposable bottle card", timeout: 8).click()
+    }
+}
+
+final class WhiskyUITestsEmptyModernUI: WhiskyUITestCase {
+    override var extraLaunchArguments: [String] { ["-modernUI", "1"] }
+    override var bottleFixtureCount: Int { 0 }
+
+    func testEmptyShelfOffersBottleCreation() {
+        require(app.staticTexts["No Bottles Yet"], "empty shelf", timeout: 8)
+        require(app.buttons.matching(identifier: "toolbar.createBottle").firstMatch, "create bottle action")
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Modern empty shelf"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
+    }
+}
+
+/// Run the production preference registration against disposable domains.
+final class ModernUIPreferenceTests: XCTestCase {
+    func testFreshPreferencesUseModernUIWithoutPersistingAChoice() throws {
+        try withPreferences { defaults, domain in
+            ModernUI.registerDefaults(in: defaults)
+            XCTAssertTrue(defaults.bool(forKey: ModernUI.defaultsKey))
+            XCTAssertNil(defaults.persistentDomain(forName: domain)?[ModernUI.defaultsKey])
         }
-        card.click()
+    }
+
+    func testExplicitChoicesSurviveRegistrationAndRelaunch() throws {
+        try withPreferences { defaults, domain in
+            for choice in [false, true] {
+                defaults.set(choice, forKey: ModernUI.defaultsKey)
+                ModernUI.registerDefaults(in: defaults)
+                let reopened = try XCTUnwrap(UserDefaults(suiteName: domain))
+                ModernUI.registerDefaults(in: reopened)
+                XCTAssertEqual(reopened.bool(forKey: ModernUI.defaultsKey), choice)
+            }
+        }
+    }
+
+    func testLaunchArgumentsOverrideStoredChoice() throws {
+        try withPreferences { defaults, domain in
+            for choice in [false, true] {
+                defaults.set(!choice, forKey: ModernUI.defaultsKey)
+                defaults.setVolatileDomain([ModernUI.defaultsKey: choice], forName: UserDefaults.argumentDomain)
+                ModernUI.registerDefaults(in: defaults)
+                XCTAssertEqual(defaults.bool(forKey: ModernUI.defaultsKey), choice)
+                XCTAssertEqual(defaults.persistentDomain(forName: domain)?[ModernUI.defaultsKey] as? Bool, !choice)
+                defaults.removeVolatileDomain(forName: UserDefaults.argumentDomain)
+            }
+        }
+    }
+
+    private func withPreferences(_ body: (UserDefaults, String) throws -> Void) throws {
+        let domain = "WhiskyModernUITests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        try body(defaults, domain)
     }
 }

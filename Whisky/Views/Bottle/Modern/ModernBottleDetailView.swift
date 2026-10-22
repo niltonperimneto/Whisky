@@ -179,7 +179,7 @@ struct ModernBottleDetailView: View {
                 case .programs:
                     ProgramsView(bottle: bottle, path: $path)
                 case .processes:
-                    RunningProcessesView(bottle: bottle)
+                    RunningProcessesView(bottle: bottle, showsLifecycleControls: false)
                 case .gameConfigs:
                     GameConfigurationView(bottle: bottle)
                 }
@@ -291,7 +291,7 @@ struct ModernBottleDetailView: View {
         case .processes:
             // The hero owns the lifecycle control here, so the pane's own stop
             // menu stands down rather than offering a second one.
-            RunningProcessesView(bottle: bottle)
+            RunningProcessesView(bottle: bottle, showsLifecycleControls: false)
         case .tools:
             BottleToolsView(bottle: bottle, path: $path, toast: $toast)
         }

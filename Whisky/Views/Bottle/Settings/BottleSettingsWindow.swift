@@ -149,11 +149,8 @@ struct BottleSettingsView: View {
             }
         }
         .navigationTitle(Text("bottleSettings.window.title \(bottle.settings.name)"))
-        // The tabs are the toolbar; the name is in the window's title, which
-        // the Window menu and Mission Control still show.
-        .toolbar(removing: .title)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScrollView(.horizontal) {
                 SettingsToolbarTabs(
                     tabs: BottleSettingsTab.allCases,
                     selection: $selectedTab,
@@ -161,8 +158,11 @@ struct BottleSettingsView: View {
                     systemImage: \.systemImage,
                     accessibilityIdentifier: { "bottleSettings.tab.\($0.rawValue)" }
                 )
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-            .sharedBackgroundVisibility(.hidden)
+            .background(.bar)
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: Text("bottleSettings.search.prompt"))
         .bottleDiagnosisSheets(diagnosis)

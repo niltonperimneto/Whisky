@@ -26,7 +26,7 @@ import WhiskyKit
 struct ContentView: View {
     @State private var shelfModel = BottleShelfModel()
 
-    @AppStorage(ModernUI.defaultsKey) private var modernUI: Bool = false
+    @AppStorage(ModernUI.defaultsKey) private var modernUI: Bool = ModernUI.defaultEnabled
     @Environment(BottleVM.self) var bottleVM: BottleVM
     @Binding var showSetup: Bool
 
@@ -61,6 +61,8 @@ struct ContentView: View {
                 if let bottleURL = selected, let bottle = bottleVM.bottles.first(where: { $0.url == bottleURL }) {
                     ModernBottleDetailView(bottle: bottle, selected: $selected)
                         .environment(shelfModel)
+                        .disabled(bottle.inFlight)
+                        .id(bottle.url)
                 } else {
                     ModernBottleShelfView(selected: $selected, showBottleCreation: $showBottleCreation)
                         .environment(shelfModel)

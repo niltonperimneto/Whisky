@@ -30,11 +30,13 @@ struct RunningProcessesView: View {
     /// The window this pane names. A pane inside a split view still writes the
     /// window's title, and it wins over anything the container sets, so the
     /// Debug window passes its own name in rather than fighting for it.
+    private let showsLifecycleControls: Bool
     private let windowTitle: LocalizedStringKey
 
-    init(bottle: Bottle, windowTitle: LocalizedStringKey = "tab.processes") {
+    init(bottle: Bottle, windowTitle: LocalizedStringKey = "tab.processes", showsLifecycleControls: Bool = true) {
         self.bottle = bottle
         self.windowTitle = windowTitle
+        self.showsLifecycleControls = showsLifecycleControls
         _viewModel = State(initialValue: ProcessesViewModel(bottle: bottle))
     }
 
@@ -315,20 +317,22 @@ extension RunningProcessesView {
             }
             .keyboardShortcut("r", modifiers: .command)
 
-            Button {
-                showStopConfirmation = true
-            } label: {
-                Label("process.action.stopBottle", systemImage: "stop.circle")
-            }
-            .disabled(viewModel.shutdownState != .idle)
-            .keyboardShortcut(.delete, modifiers: .command)
+            if showsLifecycleControls {
+                Button {
+                    showStopConfirmation = true
+                } label: {
+                    Label("process.action.stopBottle", systemImage: "stop.circle")
+                }
+                .disabled(viewModel.shutdownState != .idle)
+                .keyboardShortcut(.delete, modifiers: .command)
 
-            Button {
-                showForceStopConfirmation = true
-            } label: {
-                Label("process.action.forceStop", systemImage: "stop.circle.fill")
+                Button {
+                    showForceStopConfirmation = true
+                } label: {
+                    Label("process.action.forceStop", systemImage: "stop.circle.fill")
+                }
+                .disabled(viewModel.shutdownState != .idle)
             }
-            .disabled(viewModel.shutdownState != .idle)
         }
     }
 

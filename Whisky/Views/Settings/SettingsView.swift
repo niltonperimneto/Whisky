@@ -266,7 +266,7 @@ private struct PrivacySettingsPane: View {
 
 private struct AdvancedSettingsPane: View {
     @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
-    @AppStorage(ModernUI.defaultsKey) private var modernUI = false
+    @AppStorage(ModernUI.defaultsKey) private var modernUI = ModernUI.defaultEnabled
 
     var body: some View {
         Section {
@@ -284,6 +284,7 @@ private struct AdvancedSettingsPane: View {
                 detail: "settings.advanced.modernUI.detail",
                 isOn: $modernUI
             )
+            .accessibilityIdentifier("settings.modernUI")
         }
 
         Section {
