@@ -233,6 +233,8 @@ extension ProgramOverrideSettingsView {
 
     private var performanceSection: some View {
         Section("program.overrides.performance") {
+            Toggle("Request macOS Game Mode", isOn: $program.settings.requestsGameMode)
+                .disabled(!GameModeLaunchPolicy.isAvailable(for: bottle.settings.runtime))
             InheritableToggle(
                 "config.shaderCache",
                 value: field(\.shaderCacheEnabled),

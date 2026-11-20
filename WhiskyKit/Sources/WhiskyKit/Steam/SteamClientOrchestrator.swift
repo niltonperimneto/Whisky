@@ -207,7 +207,7 @@ public final class SteamClientOrchestrator {
 
         phases[game.appId] = .launching
         do {
-            try driver.launchGame(game)
+            try await driver.launchGame(game)
         } catch {
             launchError = error.localizedDescription
             return
