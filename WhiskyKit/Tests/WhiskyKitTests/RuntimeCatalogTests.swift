@@ -39,6 +39,28 @@ struct RuntimeCatalogTests {
         let catalog = try RuntimeCatalog.decode(data)
         #expect(catalog.runtimes.count == 1)
         #expect(catalog.runtimes[0].channel == .canary)
+        #expect(catalog.defaultRuntime()?.identifier == "winecx-gptk-canary-4.7.1")
+    }
+
+    @Test func selectsHighestCompatibleStableVersionBeforeCanary() throws {
+        let archiveURL = try #require(URL(string: "https://example.com/runtime.tar.gz"))
+        let runtimes = [
+            ("4.8.9", WhiskyWineReleaseChannel.stable, "26.0"),
+            ("4.8.10", .stable, "26.0.1"),
+            ("4.8.11", .stable, "26.1"),
+            ("4.8.12", .canary, "26.0")
+        ].map { version, channel, minimumMacOS in
+            AvailableRuntime(
+                identifier: version,
+                version: version,
+                channel: channel,
+                archiveURL: archiveURL,
+                sha256: String(repeating: "a", count: 64),
+                minimumMacOS: minimumMacOS
+            )
+        }
+        let catalog = RuntimeCatalog(catalogVersion: 2, runtimes: runtimes)
+        #expect(catalog.defaultRuntime(for: MacOSVersion(major: 26, minor: 0, patch: 1))?.version == "4.8.10")
     }
 
     @Test func acceptsV2AndRejectsUnknownLayouts() throws {
