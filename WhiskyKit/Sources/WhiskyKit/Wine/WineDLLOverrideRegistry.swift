@@ -37,7 +37,9 @@ public extension Wine {
             case .dxvk:
                 "d3d8=n,b;d3d9=n,b;d3d10core=n,b;d3d11=n,b;dxgi=n,b"
             case .dxmt:
-                "d3d10core=n,b;d3d11=n,b;d3d12=n,b;dxgi=n,b"
+                DLLOverrideResolver.dxmtPreset
+                    .map { "\($0.dllName)=\($0.mode.rawValue)" }
+                    .joined(separator: ";")
             case .wined3d:
                 "d3d9=b;d3d10=b;d3d10core=b;d3d11=b;d3d12=b;dxgi=b"
             case .recommended:

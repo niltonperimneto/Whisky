@@ -118,6 +118,17 @@ final class DLLOverrideRegistryTests: XCTestCase {
         XCTAssertNil(parsed["d3d12"])
     }
 
+    func testDXMTRouteUsesNativeTranslationAndBuiltinMetalBridge() {
+        let route = Wine.BackendRoute(executableName: "ROTTR.exe", backend: .dxmt)
+        let overrides = Wine.parseDLLOverrides(route.dllOverrides)
+
+        XCTAssertEqual(overrides["d3d10core"], "n,b")
+        XCTAssertEqual(overrides["d3d11"], "n,b")
+        XCTAssertEqual(overrides["dxgi"], "n,b")
+        XCTAssertEqual(overrides["winemetal"], "b")
+        XCTAssertEqual(overrides["d3d12"], "")
+    }
+
     func testUnknownExecutableCarriesNothing() {
         XCTAssertTrue(Wine.helperExecutables(for: URL(filePath: "/B/thing.exe")).isEmpty)
     }
