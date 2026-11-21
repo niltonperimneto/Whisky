@@ -72,6 +72,8 @@ public struct GameRecord: Codable, Equatable, Sendable, Identifiable {
     /// source, tagged by origin at projection time, so the sort can choose.
     public var lastPlayedInWhisky: Date?
     public var firstSeen: Date
+    /// An executable relative to the Steam install directory. A selection opts this game in.
+    public var gameModeExecutable: String?
 
     public init(id: GameRecordID, firstSeen: Date = Date()) {
         self.id = id
@@ -90,6 +92,7 @@ public struct GameRecord: Codable, Equatable, Sendable, Identifiable {
         self.hidden = try container.decodeIfPresent(Bool.self, forKey: .hidden) ?? false
         self.lastPlayedInWhisky = try container.decodeIfPresent(Date.self, forKey: .lastPlayedInWhisky)
         self.firstSeen = try container.decodeIfPresent(Date.self, forKey: .firstSeen) ?? Date()
+        self.gameModeExecutable = try container.decodeIfPresent(String.self, forKey: .gameModeExecutable)
     }
 }
 

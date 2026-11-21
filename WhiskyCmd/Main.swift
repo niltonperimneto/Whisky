@@ -304,7 +304,8 @@ extension Whisky {
 
             do {
                 let result = try await Wine.runProgram(
-                    at: url, args: args, bottle: bottle, environment: environment
+                    at: url, args: args, bottle: bottle, environment: environment,
+                    programSettings: program.settings
                 )
 
                 let exeName = url.lastPathComponent
@@ -874,7 +875,7 @@ extension Whisky {
                 target = try SteamLauncher.resolveBottle(appId: appId, in: bottles)
             }
 
-            try SteamLauncher.launch(appId: appId, bottle: target)
+            try await SteamLauncher.launch(appId: appId, bottle: target)
 
             if json {
                 let payload = [

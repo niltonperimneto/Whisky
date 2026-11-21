@@ -144,6 +144,7 @@ public struct ProgramSettings: Codable {
     /// Individual fields within ``ProgramOverrides`` can override specific
     /// bottle settings while leaving others inherited.
     public var overrides: ProgramOverrides?
+    public var requestsGameMode = false
 
     // MARK: - Diagnostics
 
@@ -185,6 +186,7 @@ public struct ProgramSettings: Codable {
         ) ?? [:]
         self.arguments = try container.decodeIfPresent(String.self, forKey: .arguments) ?? ""
         self.overrides = try container.decodeIfPresent(ProgramOverrides.self, forKey: .overrides)
+        self.requestsGameMode = try container.decodeIfPresent(Bool.self, forKey: .requestsGameMode) ?? false
         self.activeWineDebugPreset = container.decodeLenientIfPresent(
             WineDebugPreset.self,
             forKey: .activeWineDebugPreset
