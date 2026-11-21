@@ -104,7 +104,10 @@ jobs:
 
           echo "pages serves $have, newest $CHANNEL build is $want"
           newest=$(printf '%s\n%s\n' "$have" "$want" | sort -V | tail -1)
-          if [ "$CHANNEL" = "stable" ] && { [ "$want" = "$have" ] || { [ "$newest" = "$have" ] && [ "$FORCE" != "true" ]; }; }; then
+          mirror_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/v$want/Libraries.tar.gz"
+          if [ "$CHANNEL" = "stable" ] && [ "$FORCE" != "true" ] &&
+            { { [ "$want" != "$have" ] && [ "$newest" = "$have" ]; } ||
+              { [ "$want" = "$have" ] && curl --fail --silent --location --head --retry 3 "$mirror_url" >/dev/null; }; }; then
             echo "nothing to do" | tee -a "$GITHUB_STEP_SUMMARY"
             echo "go=false" >> "$GITHUB_OUTPUT"
           else
@@ -204,6 +207,9 @@ jobs:
               "${prerelease_args[@]}" \
               --title "Wine runtime $VERSION" --notes "$notes"
           fi
+
+          curl --fail --silent --show-error --location --head --retry 3 \
+            "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/$tag/Libraries.tar.gz" >/dev/null
 
       - name: Point Pages at it
         if: steps.pick.outputs.go == 'true' && (inputs.channel == 'stable' || inputs.channel == '')
