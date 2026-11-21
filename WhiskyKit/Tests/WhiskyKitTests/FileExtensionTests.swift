@@ -362,10 +362,12 @@ final class FileManagerReplaceDLLsTests: XCTestCase {
             try Data("original".utf8).write(to: destinationDir.appending(path: name))
             try Data("replacement".utf8).write(to: sourceDir.appending(path: name))
         }
+        let newDLL = "d3d8.dll"
+        try Data("replacement".utf8).write(to: sourceDir.appending(path: newDLL))
 
         try FileManager.default.replaceDLLs(in: destinationDir, withContentsIn: sourceDir)
 
-        for name in dllNames {
+        for name in dllNames + [newDLL] {
             let content = try String(contentsOf: destinationDir.appending(path: name), encoding: .utf8)
             XCTAssertEqual(content, "replacement", "\(name) must be replaced even when non-DLL files are present")
         }
