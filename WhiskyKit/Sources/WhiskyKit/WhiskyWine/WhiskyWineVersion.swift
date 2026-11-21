@@ -42,6 +42,8 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
     public var wined3d: Bool?
     public var wow64: Bool?
     public var vulkanProvider: String?
+    public var childLaunchPolicySchema: Int?
+    public var gameModeLaunchPolicyVersion: Int?
 
     public init(
         gptkMajorVersions: [Int]? = nil,
@@ -53,7 +55,9 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
         dxmt: Bool? = nil,
         wined3d: Bool? = nil,
         wow64: Bool? = nil,
-        vulkanProvider: String? = nil
+        vulkanProvider: String? = nil,
+        childLaunchPolicySchema: Int? = nil,
+        gameModeLaunchPolicyVersion: Int? = nil
     ) {
         self.gptkMajorVersions = gptkMajorVersions
         self.wsarecvmsg = wsarecvmsg
@@ -65,6 +69,8 @@ public struct WhiskyWineCapabilities: Codable, Equatable, Sendable {
         self.wined3d = wined3d
         self.wow64 = wow64
         self.vulkanProvider = vulkanProvider
+        self.childLaunchPolicySchema = childLaunchPolicySchema
+        self.gameModeLaunchPolicyVersion = gameModeLaunchPolicyVersion
     }
 
     /// True only when the producer explicitly verified the complete ancillary
