@@ -413,48 +413,19 @@ public class WhiskyWineInstaller {
 
     /// Checks if a newer version of WhiskyWine is available.
     ///
-    /// This method compares the locally installed version against the
-    /// remote version plist to determine if an update is available.
-    ///
-    /// - Returns: A tuple containing:
-    ///   - A boolean indicating whether an update is available.
-    ///   - The remote version if an update is available, or `0.0.0` otherwise.
+    /// Compares the installed version with the runtime offered by setup.
     public static func shouldUpdateWhiskyWine() async -> (Bool, SemanticVersion) {
-        let versionPlistURL = DistributionConfig.versionPlistURL
-        let localVersion = whiskyWineVersion()
-
-        var remoteVersion: SemanticVersion?
-
-        if let remoteUrl = URL(string: versionPlistURL) {
-            remoteVersion = await withCheckedContinuation { continuation in
-                URLSession(configuration: .ephemeral).dataTask(with: URLRequest(url: remoteUrl)) { data, _, error in
-                    do {
-                        if error == nil, let data {
-                            let decoder = PropertyListDecoder()
-                            let remoteInfo = try decoder.decode(WhiskyWineVersion.self, from: data)
-                            let remoteVersion = remoteInfo.version
-
-                            continuation.resume(returning: remoteVersion)
-                            return
-                        }
-                        if let error {
-                            logger.warning("Failed to fetch remote version: \(error.localizedDescription)")
-                        }
-                    } catch {
-                        logger.warning("Failed to decode remote version: \(error.localizedDescription)")
-                    }
-
-                    continuation.resume(returning: nil)
-                }.resume()
-            }
-        }
-
-        if let localVersion, let remoteVersion {
-            if localVersion < remoteVersion {
+        do {
+            if let localVersion = whiskyWineVersion(),
+               let published = try await RuntimeCatalog.fetchPublished(),
+               let runtime = published.catalog.defaultRuntime(),
+               let remoteVersion = SemanticVersion(runtime.version),
+               localVersion < remoteVersion {
                 return (true, remoteVersion)
             }
+        } catch {
+            logger.warning("Failed to fetch runtime catalog: \(error.localizedDescription)")
         }
-
         return (false, SemanticVersion(0, 0, 0))
     }
 
