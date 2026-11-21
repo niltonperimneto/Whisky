@@ -24,9 +24,15 @@ public enum SteamLaunchError: LocalizedError, Equatable {
     case steamNotInstalled
     /// No bottle known to Whisky has that App ID installed.
     case gameNotFound(appId: Int)
+    case gameModeRequiresSteamRestart
+    case gameModeExecutableMissing
 
     public var errorDescription: String? {
         switch self {
+        case .gameModeRequiresSteamRestart:
+            String(localized: "Quit Steam in this bottle, then launch the game again from Whisky to request Game Mode.")
+        case .gameModeExecutableMissing:
+            String(localized: "Select the game executable again in its Game Mode settings.")
         case .steamNotInstalled:
             String(localized: "steam.launch.error.noClient")
         case let .gameNotFound(appId):
@@ -57,13 +63,27 @@ public enum SteamLauncher {
     @discardableResult
     public static func launch(
         appId: Int, bottle: Bottle, installURL: URL? = nil, record: Bool = true
-    ) throws -> Task<Void, Never> {
+    ) async throws -> Task<Void, Never> {
         guard let steamRoot = SteamLibrary.detectInstall(bottleURL: bottle.url) else {
             throw SteamLaunchError.steamNotInstalled
         }
 
         let installURL = installURL ?? SteamLibrary.enumerate(bottleURL: bottle.url)
             .first { $0.appId == appId }?.installURL
+        if GameModeLaunchPolicy.isAvailable(for: bottle.settings.runtime, steam: true) {
+            let record = GameRecordStore(bottleURL: bottle.url).record(for: .steam(appID: appId))
+            if let selected = record?.gameModeExecutable {
+                guard let installURL,
+                      GameModeLaunchPolicy.steamExecutables(in: installURL).contains(where: { $0.path == selected })
+                else { throw SteamLaunchError.gameModeExecutableMissing }
+                if await WineSteamClientDriver(bottle: bottle).processList().contains(where: {
+                    $0.imageName.caseInsensitiveCompare("steam.exe") == .orderedSame
+                }), await !GameModeLaunchPolicy.runningSteamHasPolicy(in: bottle.url, runtime: bottle.settings.runtime) {
+                    throw SteamLaunchError.gameModeRequiresSteamRestart
+                }
+            }
+            try GameModeLaunchPolicy.writeSteamPolicies(in: bottle.url, runtime: bottle.settings.runtime)
+        }
         let plan = LaunchResolver.plan(
             steamAppId: appId,
             userOverrides: installURL.flatMap { userOverrides(forInstallURL: $0, bottle: bottle) }

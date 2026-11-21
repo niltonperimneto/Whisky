@@ -95,7 +95,8 @@ enum QuickLaunch {
         }
 
         if let steam = value("steam"), let appId = Int(steam) {
-            launchSteam(appId: appId, bottleName: value("bottle"))
+            let bottleName = value("bottle")
+            Task { await launchSteam(appId: appId, bottleName: bottleName) }
         } else if let pinName = value("pin") {
             launchPin(named: pinName, bottleName: value("bottle"))
         } else {
@@ -104,7 +105,7 @@ enum QuickLaunch {
         return true
     }
 
-    private static func launchSteam(appId: Int, bottleName: String?) {
+    private static func launchSteam(appId: Int, bottleName: String?) async {
         let bottles = BottleVM.shared.bottles.filter(\.isAvailable)
         do {
             let target: Bottle
@@ -120,7 +121,7 @@ enum QuickLaunch {
             } else {
                 target = try SteamLauncher.resolveBottle(appId: appId, in: bottles)
             }
-            _ = try SteamLauncher.launch(appId: appId, bottle: target)
+            _ = try await SteamLauncher.launch(appId: appId, bottle: target)
         } catch {
             presentLaunchFailure(programName: "Steam \(appId)", error: error.localizedDescription)
         }

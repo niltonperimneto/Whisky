@@ -512,6 +512,11 @@ public class Wine {
             resolvedBackend: effectiveBackend
         )
 
+        GameModeLaunchPolicy.apply(
+            to: &wineEnvironment, executable: url, bottleURL: bottle.url,
+            runtime: bottle.settings.runtime, requestsGameMode: programSettings?.requestsGameMode == true
+        )
+
         let steamHelper = prepareSteamHelper(for: url, bottle: bottle, plan: graphicsPlan, log: fileHandle)
         if steamHelper != nil {
             addSteamHelperDriver(to: &wineEnvironment, backend: effectiveBackend, runtime: bottle.settings.runtime)

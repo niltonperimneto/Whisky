@@ -187,6 +187,12 @@ struct AppGridView: View {
         }
 
         Divider()
+        if case let .steam(appID) = tile.entry.launch, let installURL = tile.entry.installURL {
+            SteamGameModeMenu(
+                appID: appID, installURL: installURL, bottle: bottle,
+                onError: { model.launchError = $0 }
+            )
+        }
         Button("library.card.settings") { openSettings(for: tile) }
 
         if let url = tile.entry.programURL {
