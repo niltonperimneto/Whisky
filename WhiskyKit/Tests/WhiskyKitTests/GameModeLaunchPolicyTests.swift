@@ -26,7 +26,7 @@ struct GameModeLaunchPolicyTests {
         let settings = try decoder.decode(ProgramSettings.self, from: Data("{}".utf8))
         #expect(!settings.requestsGameMode)
 
-        let id = GameRecordID.steam(appID: 271590)
+        let id = GameRecordID.steam(appID: 271_590)
         let data = try JSONEncoder().encode(["id": id])
         let record = try decoder.decode(GameRecord.self, from: data)
         #expect(record.gameModeExecutable == nil)
@@ -56,13 +56,20 @@ struct GameModeLaunchPolicyTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let install = root.appending(path: "drive_c/Steam/Grand Theft Auto V")
         let target = install.appending(path: "bin/GTA5.exe")
-        try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: target.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
         try Data().write(to: target)
         let outside = root.appending(path: "outside.exe")
         try Data().write(to: outside)
-        try FileManager.default.createSymbolicLink(at: install.appending(path: "escaped.exe"), withDestinationURL: outside)
+        try FileManager.default.createSymbolicLink(
+            at: install.appending(path: "escaped.exe"),
+            withDestinationURL: outside
+        )
 
         #expect(GameModeLaunchPolicy.steamExecutables(in: install).map(\.path) == ["bin/GTA5.exe"])
-        #expect(GameModeLaunchPolicy.executablePaths(target, in: root).contains("c:/Steam/Grand Theft Auto V/bin/GTA5.exe"))
+        #expect(GameModeLaunchPolicy.executablePaths(target, in: root)
+            .contains("c:/Steam/Grand Theft Auto V/bin/GTA5.exe"))
     }
 }

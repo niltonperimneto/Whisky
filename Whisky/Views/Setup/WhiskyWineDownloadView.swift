@@ -229,7 +229,7 @@ extension WhiskyWineDownloadView {
                 return
             }
             startDownload(from: downloadURL)
-        } catch RuntimeCatalogError.httpStatus(let statusCode) {
+        } catch let RuntimeCatalogError.httpStatus(statusCode) {
             diagnostics.versionHTTPStatus = statusCode
             diagnostics.record("Runtime catalog HTTP \(statusCode)")
             setDownloadFailure(formatHTTPError(statusCode: statusCode))
