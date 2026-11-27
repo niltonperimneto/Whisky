@@ -59,6 +59,13 @@ extension Wine {
         ).environment
     }
 
+    static func usesDXVKForHUD(backend: GraphicsBackend, programOverrides: ProgramOverrides?) -> Bool {
+        if let programOverrides, programOverrides.graphicsBackend == nil, let dxvk = programOverrides.dxvk {
+            return dxvk
+        }
+        return backend.usesDXVK
+    }
+
     /// The same construction, keeping the per-key provenance so an inspector
     /// can say which layer set each variable and why. `logSummary` is off for
     /// inspection so browsing settings never writes launch lines to the log.
@@ -104,21 +111,28 @@ extension Wine {
             )
         }
 
+        let bottleBackend = resolvedBackend ?? (bottle.settings.graphicsBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+            : bottle.settings.graphicsBackend)
+        let requestedHUDBackend = programOverrides?.graphicsBackend ?? bottleBackend
+        let hudBackend = resolvedBackend ?? (requestedHUDBackend == .recommended
+            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
+            : requestedHUDBackend)
+        let usesDXVKForHUD = Self.usesDXVKForHUD(backend: hudBackend, programOverrides: programOverrides)
+
         // Layer 3: Bottle managed -- settings-derived env vars (DXVK, sync, Metal, perf)
         let managedOverrides = bottle.settings.populateBottleManagedLayer(
             builder: &builder,
-            resolvedBackend: resolvedBackend
+            resolvedBackend: bottleBackend,
+            usesDXVKForHUD: usesDXVKForHUD,
+            supportsMetalHUD: hudBackend.supportsMetalHUD
         )
         dllResolver.managed.append(contentsOf: managedOverrides)
 
-        // Relay12's per-program choices, as lists for the processes this launch
-        // does not start itself: the games Steam starts from its own window.
-        let relay12Backend = resolvedBackend ?? (bottle.settings.graphicsBackend == .recommended
-            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
-            : bottle.settings.graphicsBackend)
+        // Relay12's per-program choices for games that Steam launches itself.
         let relay12Scope = BottleSettings.relay12ProgramScope(
             bottleEnabled: bottle.settings.relay12,
-            backend: relay12Backend,
+            backend: bottleBackend,
             programs: bottle.programs.map { ($0.url.lastPathComponent, $0.settings.overrides?.relay12) }
         )
         for (key, value) in relay12Scope.sorted(by: { $0.key < $1.key }) {
@@ -208,6 +222,12 @@ extension Wine {
                 builder: &builder,
                 dllResolver: &dllResolver
             )
+            if usesDXVKForHUD, let dxvkHud = overrides.dxvkHud {
+                builder.set("DXVK_HUD", dxvkHud.environmentValue, layer: .programUser)
+            }
+            if hudBackend.supportsMetalHUD, let metalHud = overrides.metalHud {
+                builder.set("MTL_HUD_ENABLED", metalHud ? "1" : "0", layer: .programUser)
+            }
         }
 
         // Layer 8: featureRuntime -- the diagnostic preset, which yields to a WINEDEBUG the user set

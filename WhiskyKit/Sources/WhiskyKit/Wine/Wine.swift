@@ -105,6 +105,11 @@ public class Wine {
         public let decisionSource: GraphicsLaunchDecisionSource
         public let programOverrides: ProgramOverrides?
 
+        /// Includes the legacy per-program DXVK DLL preference when it applies.
+        public var usesDXVKForHUD: Bool {
+            Wine.usesDXVKForHUD(backend: effectiveBackend, programOverrides: programOverrides)
+        }
+
         /// Upstream DXVK carries its own `dxgi.dll`; every other backend keeps
         /// the one it comes with.
         public var dxgiStrategy: String {
@@ -339,7 +344,7 @@ public class Wine {
     /// overrides — otherwise a steered launcher gets DXVK's files and none of its
     /// overrides.
     @MainActor
-    static func makeGraphicsLaunchPlan(
+    public static func makeGraphicsLaunchPlan(
         for url: URL, bottle: Bottle, programOverrides: ProgramOverrides?
     ) -> GraphicsLaunchPlan {
         let choice = programOverrides?.graphicsBackend ?? bottle.settings.graphicsBackend
@@ -373,7 +378,8 @@ public class Wine {
             architecture: GraphicsBackendResolver.architecture(of: url)
         )
         var pinnedOverrides = programOverrides
-        if resolved != GraphicsBackendResolver.resolve(for: bottle.settings.runtime) {
+        let replacesUnavailableOverride = choice != .recommended && programOverrides?.graphicsBackend != nil
+        if replacesUnavailableOverride || resolved != GraphicsBackendResolver.resolve(for: bottle.settings.runtime) {
             var pinned = programOverrides ?? ProgramOverrides()
             pinned.graphicsBackend = resolved
             pinnedOverrides = pinned

@@ -107,24 +107,22 @@ struct LaunchPlanInspectorView: View {
         let plan = LaunchResolver.plan(
             forProgramAt: program.url, userOverrides: program.settings.overrides
         )
+        let graphics = Wine.makeGraphicsLaunchPlan(for: program.url, bottle: bottle, programOverrides: plan.overrides)
         let resolved = Wine.constructWineEnvironmentWithProvenance(
             for: bottle,
             environment: program.generateEnvironment(),
-            programOverrides: plan.overrides,
+            programOverrides: graphics.programOverrides,
             programSettings: program.settings,
             gameProfileEnvironment: plan.gameProfileEnvironment,
+            resolvedBackend: graphics.effectiveBackend,
             logSummary: false
         )
         planNotes = plan.provenance
         entries = resolved.provenance.entries.values.sorted { $0.key < $1.key }
         dllOverrides = resolved.environment["WINEDLLOVERRIDES"]
-        let requestedBackend = plan.overrides.graphicsBackend ?? bottle.settings.graphicsBackend
-        let backend = requestedBackend == .recommended
-            ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime)
-            : requestedBackend
         backendRoute = Wine.BackendRoute(
             executableName: program.url.lastPathComponent,
-            backend: backend
+            backend: graphics.effectiveBackend
         )
     }
 }

@@ -20,6 +20,15 @@ import Foundation
 
 public enum DXVKHUD: Codable, Equatable, Sendable {
     case full, partial, fps, off
+
+    var environmentValue: String {
+        switch self {
+        case .full: "full"
+        case .partial: "devinfo,fps,frametimes"
+        case .fps: "fps"
+        case .off: "0"
+        }
+    }
 }
 
 public struct BottleDXVKConfig: Codable, Equatable {

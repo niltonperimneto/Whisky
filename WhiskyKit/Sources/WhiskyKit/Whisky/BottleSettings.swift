@@ -971,12 +971,22 @@ public struct BottleSettings: Codable, Equatable {
         builder: inout EnvironmentBuilder,
         resolvedBackend: GraphicsBackend? = nil
     ) -> [(entry: DLLOverrideEntry, source: DLLOverrideSource)] {
-        var managedDLLOverrides: [(entry: DLLOverrideEntry, source: DLLOverrideSource)] = []
-
-        // Resolve the graphics backend (`.recommended` -> concrete backend)
-        let resolvedBackend = resolvedBackend ?? (graphicsBackend == .recommended
+        let backend = resolvedBackend ?? (graphicsBackend == .recommended
             ? GraphicsBackendResolver.resolve(for: runtime)
             : graphicsBackend)
+        return populateBottleManagedLayer(
+            builder: &builder, resolvedBackend: backend,
+            usesDXVKForHUD: backend.usesDXVK, supportsMetalHUD: backend.supportsMetalHUD
+        )
+    }
+
+    func populateBottleManagedLayer(
+        builder: inout EnvironmentBuilder,
+        resolvedBackend: GraphicsBackend,
+        usesDXVKForHUD: Bool,
+        supportsMetalHUD: Bool
+    ) -> [(entry: DLLOverrideEntry, source: DLLOverrideSource)] {
+        var managedDLLOverrides: [(entry: DLLOverrideEntry, source: DLLOverrideSource)] = []
 
         // Backend-conditional env vars and DLL overrides
         switch resolvedBackend {
@@ -1009,16 +1019,6 @@ public struct BottleSettings: Codable, Equatable {
             // DXVK: DLL overrides + env vars
             for entry in DLLOverrideResolver.dxvkPreset {
                 managedDLLOverrides.append((entry: entry, source: .dxvk))
-            }
-            switch dxvkHud {
-            case .full:
-                builder.set("DXVK_HUD", "full", layer: .bottleManaged)
-            case .partial:
-                builder.set("DXVK_HUD", "devinfo,fps,frametimes", layer: .bottleManaged)
-            case .fps:
-                builder.set("DXVK_HUD", "fps", layer: .bottleManaged)
-            case .off:
-                break
             }
             // Upstream DXVK needs Vulkan 1.3 features only KosmicKrisp
             // exposes, so the launch runs on that driver. The file placement
@@ -1088,7 +1088,10 @@ public struct BottleSettings: Codable, Equatable {
             builder.set("WINEESYNC", "1", layer: .bottleManaged)
         }
 
-        if metalHud {
+        if usesDXVKForHUD, dxvkHud != .off {
+            builder.set("DXVK_HUD", dxvkHud.environmentValue, layer: .bottleManaged)
+        }
+        if supportsMetalHUD, metalHud {
             builder.set("MTL_HUD_ENABLED", "1", layer: .bottleManaged)
         }
 

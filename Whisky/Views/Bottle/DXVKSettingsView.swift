@@ -20,7 +20,7 @@ import AppKit
 import SwiftUI
 import WhiskyKit
 
-/// DXVK's switches and its `dxvk.conf`, shown with advanced settings. Greyed
+/// The `dxvk.conf` editor, shown with advanced settings. Greyed
 /// out, with the reason in the footer, while the bottle runs another backend.
 struct DXVKSettingsView: View {
     @Bindable var bottle: Bottle
@@ -39,13 +39,6 @@ struct DXVKSettingsView: View {
 
     var body: some View {
         Section {
-            SettingsPicker("config.dxvkHud", detail: "config.dxvkHud.info", selection: $bottle.settings.dxvkHud) {
-                Text("config.dxvkHud.off").tag(DXVKHUD.off)
-                Text("config.dxvkHud.fps").tag(DXVKHUD.fps)
-                Text("config.dxvkHud.partial").tag(DXVKHUD.partial)
-                Text("config.dxvkHud.full").tag(DXVKHUD.full)
-            }
-
             LabeledContent {
                 HStack(spacing: 8) {
                     Button("config.dxvk.openInEditor") {
