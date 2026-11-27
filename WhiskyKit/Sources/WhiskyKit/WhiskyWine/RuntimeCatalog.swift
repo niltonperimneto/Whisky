@@ -72,21 +72,44 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
         self.runtimes = runtimes
     }
 
-    /// The current catalog is authoritative. Older producers may only publish v1.
-    public static func fetchPublished() async throws -> (catalog: RuntimeCatalog, source: URL)? {
+    /// Runtime catalogs can be published at different times. When both describe
+    /// the same runtime, use the newer format's metadata.
+    public static func fetchPublished() async throws -> (catalog: RuntimeCatalog, sources: [URL])? {
+        guard let currentURL = URL(string: DistributionConfig.runtimeCatalogURL),
+              let legacyURL = URL(string: DistributionConfig.legacyRuntimeCatalogURL)
+        else { throw URLError(.badURL) }
+
         let session = URLSession(configuration: .ephemeral)
-        for endpoint in [DistributionConfig.runtimeCatalogURL, DistributionConfig.legacyRuntimeCatalogURL] {
-            guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
-            let (data, response) = try await session.data(from: url)
-            if let response = response as? HTTPURLResponse {
-                if response.statusCode == 404 { continue }
-                guard (200 ... 299).contains(response.statusCode) else {
-                    throw RuntimeCatalogError.httpStatus(response.statusCode)
-                }
+        async let current = fetch(from: currentURL, session: session)
+        async let legacy = fetch(from: legacyURL, session: session)
+        if let catalog = try await current {
+            if let legacyCatalog = try? await legacy {
+                return (catalog.includingLegacyRuntimes(from: legacyCatalog), [currentURL, legacyURL])
             }
-            return try (decode(data), url)
+            try Task.checkCancellation()
+            return (catalog, [currentURL])
+        }
+        if let catalog = try await legacy {
+            return (catalog, [legacyURL])
         }
         return nil
+    }
+
+    private static func fetch(from url: URL, session: URLSession) async throws -> RuntimeCatalog? {
+        let (data, response) = try await session.data(from: url)
+        if let response = response as? HTTPURLResponse {
+            if response.statusCode == 404 { return nil }
+            guard (200 ... 299).contains(response.statusCode) else {
+                throw RuntimeCatalogError.httpStatus(response.statusCode)
+            }
+        }
+        return try decode(data)
+    }
+
+    func includingLegacyRuntimes(from legacy: RuntimeCatalog) -> RuntimeCatalog {
+        var identifiers = Set(runtimes.map(\.identifier))
+        let additionalRuntimes = legacy.runtimes.filter { identifiers.insert($0.identifier).inserted }
+        return RuntimeCatalog(catalogVersion: catalogVersion, runtimes: runtimes + additionalRuntimes)
     }
 
     /// Prefer stable releases, using canary when the producer has no compatible stable build.

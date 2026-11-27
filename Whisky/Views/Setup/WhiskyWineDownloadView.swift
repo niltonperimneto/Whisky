@@ -217,7 +217,9 @@ extension WhiskyWineDownloadView {
             guard let published = try await RuntimeCatalog.fetchPublished() else {
                 throw RuntimeCatalogError.httpStatus(404)
             }
-            diagnostics.record("Loaded runtime catalog from \(published.source.absoluteString)")
+            for source in published.sources {
+                diagnostics.record("Loaded runtime catalog from \(source.absoluteString)")
+            }
             guard let runtime = published.catalog.defaultRuntime() else {
                 throw RuntimeCatalogError.noDefaultRuntime
             }

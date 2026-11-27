@@ -63,6 +63,29 @@ struct RuntimeCatalogTests {
         #expect(catalog.defaultRuntime(for: MacOSVersion(major: 26, minor: 0, patch: 1))?.version == "4.8.10")
     }
 
+    @Test func mergingCatalogsRetainsNewerReleasesAndPrefersV2Metadata() throws {
+        let archive = try #require(URL(string: "https://example.com/runtime.tar.gz"))
+        let digest = String(repeating: "a", count: 64)
+        let current = AvailableRuntime(
+            identifier: "shared", version: "4.8.6", channel: .canary,
+            archiveURL: archive, sha256: digest, runtimeLayoutVersion: 2
+        )
+        let legacyDuplicate = AvailableRuntime(
+            identifier: "shared", version: "4.8.6", channel: .canary,
+            archiveURL: archive, sha256: digest
+        )
+        let newerRelease = AvailableRuntime(
+            identifier: "newer", version: "4.8.19", channel: .canary,
+            archiveURL: archive, sha256: digest
+        )
+        let merged = RuntimeCatalog(catalogVersion: 2, runtimes: [current]).includingLegacyRuntimes(
+            from: RuntimeCatalog(catalogVersion: 1, runtimes: [legacyDuplicate, newerRelease])
+        )
+
+        #expect(merged.runtimes == [current, newerRelease])
+        #expect(merged.defaultRuntime() == newerRelease)
+    }
+
     @Test func acceptsV2AndRejectsUnknownLayouts() throws {
         let digest = String(repeating: "b", count: 64)
         let data = Data("""
