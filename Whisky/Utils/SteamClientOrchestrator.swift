@@ -120,7 +120,7 @@ final class SteamClientOrchestrator {
         // it is never awaited. installURL is already known here, which saves
         // the launcher a library rescan.
         do {
-            try SteamLauncher.launch(
+            try await SteamLauncher.launch(
                 appId: game.appId, bottle: bottle, installURL: game.installURL
             )
         } catch {

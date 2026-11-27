@@ -212,43 +212,27 @@ extension WhiskyWineDownloadView {
 
     @MainActor
     private func fetchVersionAndDownload() async {
-        guard let versionURL = URL(string: DistributionConfig.versionPlistURL) else {
-            setDownloadFailure(String(localized: "setup.whiskywine.error.invalidVersionURL"))
-            return
-        }
-
-        diagnostics.versionPlistURL = versionURL.absoluteString
-        diagnostics.record("Fetching version plist")
+        diagnostics.record("Fetching runtime catalog from \(DistributionConfig.runtimeCatalogURL)")
         do {
-            let (data, response) = try await URLSession(configuration: .ephemeral).data(from: versionURL)
-
-            // Check HTTP status code before attempting to decode
-            if let httpResponse = response as? HTTPURLResponse,
-               !(200 ... 299).contains(httpResponse.statusCode) {
-                diagnostics.versionHTTPStatus = httpResponse.statusCode
-                diagnostics.record("Version plist HTTP \(httpResponse.statusCode)")
-                setDownloadFailure(formatHTTPError(statusCode: httpResponse.statusCode))
-                return
+            guard let published = try await RuntimeCatalog.fetchPublished() else {
+                throw RuntimeCatalogError.httpStatus(404)
             }
-
-            let versionInfo = try PropertyListDecoder().decode(WhiskyWineVersion.self, from: data)
-            expectedSHA256 = versionInfo.sha256
-
-            let version = versionInfo.version
-            let versionString = "\(version.major).\(version.minor).\(version.patch)"
-            let downloadURLString = DistributionConfig.librariesURL(version: versionString)
-            diagnostics.record("Resolved version \(versionString)")
-
-            guard let downloadURL = URL(string: downloadURLString) else {
-                setDownloadFailure(String(localized: "setup.whiskywine.error.invalidDownloadURL"))
-                return
+            diagnostics.record("Loaded runtime catalog from \(published.source.absoluteString)")
+            guard let runtime = published.catalog.defaultRuntime() else {
+                throw RuntimeCatalogError.noDefaultRuntime
             }
-
+            expectedSHA256 = runtime.sha256
+            let downloadURL = runtime.archiveURL
+            diagnostics.record("Resolved version \(runtime.version) (\(runtime.channel.rawValue))")
             diagnostics.downloadURL = downloadURL.absoluteString
             if await reuseExistingArchiveIfValid() {
                 return
             }
             startDownload(from: downloadURL)
+        } catch RuntimeCatalogError.httpStatus(let statusCode) {
+            diagnostics.versionHTTPStatus = statusCode
+            diagnostics.record("Runtime catalog HTTP \(statusCode)")
+            setDownloadFailure(formatHTTPError(statusCode: statusCode))
         } catch {
             let errorMessage = error.localizedDescription
             diagnostics.record("Version fetch failed: \(errorMessage)")

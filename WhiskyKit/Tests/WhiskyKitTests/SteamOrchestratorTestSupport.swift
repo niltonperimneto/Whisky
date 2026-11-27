@@ -76,7 +76,7 @@ final class FakeSteamClientDriver: SteamClientDriver {
         fixesCalls += 1
     }
 
-    func launchGame(_ game: SteamGame) throws {
+    func launchGame(_ game: SteamGame) async throws {
         if let launchFailure {
             throw launchFailure
         }

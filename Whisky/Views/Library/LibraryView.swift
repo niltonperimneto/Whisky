@@ -216,6 +216,7 @@ struct LibraryView: View {
             }
             Button("library.card.unpin", role: .destructive) { unpin(url, in: row.item.bottleURL) }
         }
+        gameModeMenu(for: row)
         Button("library.card.settings") {
             openSettings(for: row)
         }
@@ -354,5 +355,18 @@ private struct LibraryProgramSettingsSheet: View {
             }
         }
         .frame(minWidth: 560, minHeight: 620)
+    }
+}
+
+private extension LibraryView {
+    @ViewBuilder
+    func gameModeMenu(for row: LibraryRow) -> some View {
+        if case let .steam(appID) = row.item.launch, let installURL = row.item.installURL,
+           let bottle = bottles.first(where: { $0.url == row.item.bottleURL }) {
+            SteamGameModeMenu(
+                appID: appID, installURL: installURL, bottle: bottle,
+                onError: { model.launchError = $0 }
+            )
+        }
     }
 }

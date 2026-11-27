@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import SemanticVersion
 
 /// A producer-published runtime that can be installed side by side.
 public struct AvailableRuntime: Codable, Identifiable, Equatable, Sendable {
@@ -71,6 +72,46 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
         self.runtimes = runtimes
     }
 
+    /// The current catalog is authoritative. Older producers may only publish v1.
+    public static func fetchPublished() async throws -> (catalog: RuntimeCatalog, source: URL)? {
+        let session = URLSession(configuration: .ephemeral)
+        for endpoint in [DistributionConfig.runtimeCatalogURL, DistributionConfig.legacyRuntimeCatalogURL] {
+            guard let url = URL(string: endpoint) else { throw URLError(.badURL) }
+            let (data, response) = try await session.data(from: url)
+            if let response = response as? HTTPURLResponse {
+                if response.statusCode == 404 { continue }
+                guard (200 ... 299).contains(response.statusCode) else {
+                    throw RuntimeCatalogError.httpStatus(response.statusCode)
+                }
+            }
+            return (try decode(data), url)
+        }
+        return nil
+    }
+
+    /// Prefer stable releases, using canary when the producer has no compatible stable build.
+    public func defaultRuntime(for macOS: MacOSVersion = .current) -> AvailableRuntime? {
+        let candidates = runtimes.compactMap { runtime -> (runtime: AvailableRuntime, version: SemanticVersion)? in
+            guard let version = SemanticVersion(runtime.version) else { return nil }
+            if let minimum = runtime.minimumMacOS {
+                let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
+                let numbers = parts.compactMap { Int($0) }
+                guard (1 ... 3).contains(parts.count), numbers.count == parts.count,
+                      numbers.allSatisfy({ $0 >= 0 }) else { return nil }
+                let components = numbers + Array(repeating: 0, count: 3 - numbers.count)
+                guard macOS >= MacOSVersion(major: components[0], minor: components[1], patch: components[2])
+                else { return nil }
+            }
+            return (runtime, version)
+        }
+        for channel in [WhiskyWineReleaseChannel.stable, .canary] {
+            if let latest = candidates.filter({ $0.runtime.channel == channel }).max(by: { $0.version < $1.version }) {
+                return latest.runtime
+            }
+        }
+        return nil
+    }
+
     public static func decode(_ data: Data) throws -> RuntimeCatalog {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -87,6 +128,8 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
 }
 
 public enum RuntimeCatalogError: LocalizedError, Equatable {
+    case httpStatus(Int)
+    case noDefaultRuntime
     case unsupportedVersion
     case invalidDigest
     case insecureURL
@@ -94,6 +137,8 @@ public enum RuntimeCatalogError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case let .httpStatus(status): "The runtime service returned HTTP \(status)."
+        case .noDefaultRuntime: "The runtime catalog has no compatible default runtime."
         case .unsupportedVersion: "The runtime catalog uses an unsupported format."
         case .invalidDigest: "The runtime catalog contains an invalid checksum."
         case .insecureURL: "The runtime catalog contains an insecure download URL."

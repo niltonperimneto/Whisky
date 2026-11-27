@@ -512,6 +512,11 @@ public class Wine {
             resolvedBackend: effectiveBackend
         )
 
+        GameModeLaunchPolicy.apply(
+            to: &wineEnvironment, executable: url, bottleURL: bottle.url,
+            runtime: bottle.settings.runtime, requestsGameMode: programSettings?.requestsGameMode == true
+        )
+
         let steamHelper = prepareSteamHelper(for: url, bottle: bottle, plan: graphicsPlan, log: fileHandle)
         if steamHelper != nil {
             addSteamHelperDriver(to: &wineEnvironment, backend: effectiveBackend, runtime: bottle.settings.runtime)
@@ -936,6 +941,31 @@ public class Wine {
         fileHandle.writeInfo(for: bottle)
         WineUserProfile.reconcile(bottleURL: bottle.url)
         let wineEnvironment = constructWineEnvironment(for: bottle, environment: environment)
+
+        if duringRuntimeSwitch {
+            // Wineboot can start background programs that inherit its output
+            // handles. A regular log file lets us wait for Wineboot alone.
+            let process = Process()
+            process.executableURL = wineBinary(for: bottle)
+            process.currentDirectoryURL = process.executableURL?.deletingLastPathComponent()
+            process.arguments = args
+            process.environment = wineEnvironment
+            process.standardOutput = fileHandle
+            process.standardError = fileHandle
+            fileHandle.writeInfo(for: process)
+            defer { try? fileHandle.closeWineLog() }
+            let status: Int32 = try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+                do {
+                    try process.run()
+                } catch {
+                    process.terminationHandler = nil
+                    continuation.resume(throwing: error)
+                }
+            }
+            if requireSuccess, status != 0 { throw RuntimeSwitchError.verificationFailed }
+            return ""
+        }
 
         for await output in try runWineProcess(
             args: args, environment: wineEnvironment, runtime: bottle.settings.runtime, fileHandle: fileHandle
