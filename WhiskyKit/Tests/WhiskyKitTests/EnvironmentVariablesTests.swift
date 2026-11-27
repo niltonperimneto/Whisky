@@ -237,6 +237,35 @@ final class EnvironmentVariablesTests: XCTestCase {
         XCTAssertNil(fallback["MTL_HUD_ENABLED"])
     }
 
+    @MainActor
+    func testUnavailableProgramBackendDoesNotReapplyItsHUD() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bottle = Bottle(bottleUrl: directory, inFlight: false, isAvailable: true)
+        bottle.settings.runtime = "missing-\(UUID().uuidString)"
+
+        var overrides = ProgramOverrides()
+        overrides.graphicsBackend = .dxvk
+        overrides.dxvkHud = .fps
+        overrides.metalHud = true
+        let plan = Wine.makeGraphicsLaunchPlan(
+            for: directory.appending(path: "game.exe"), bottle: bottle, programOverrides: overrides
+        )
+
+        XCTAssertEqual(plan.decisionSource, .unavailableFallback)
+        XCTAssertEqual(plan.effectiveBackend, .wined3d)
+        XCTAssertEqual(plan.programOverrides?.graphicsBackend, .wined3d)
+        XCTAssertFalse(plan.usesDXVKForHUD)
+
+        let environment = Wine.constructWineEnvironment(
+            for: bottle, programOverrides: plan.programOverrides, resolvedBackend: plan.effectiveBackend
+        )
+        XCTAssertNil(environment["DXVK_HUD"])
+        XCTAssertNil(environment["MTL_HUD_ENABLED"])
+        XCTAssertEqual(environment["WINED3DMETAL"], "0")
+    }
+
     func testEnvironmentVariablesWithMetalTrace() {
         var settings = BottleSettings()
         settings.metalTrace = true
