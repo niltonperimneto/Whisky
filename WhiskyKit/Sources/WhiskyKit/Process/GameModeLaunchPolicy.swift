@@ -151,7 +151,8 @@ public enum GameModeLaunchPolicy {
         }
         addDrive(driveC, letter: "c")
         let devices = bottleURL.appending(path: "dosdevices")
-        for drive in (try? FileManager.default.contentsOfDirectory(at: devices, includingPropertiesForKeys: nil)) ?? [] {
+        for drive in (try? FileManager.default.contentsOfDirectory(at: devices, includingPropertiesForKeys: nil)) ??
+            [] {
             let name = drive.lastPathComponent.lowercased()
             guard name.count == 2, name.last == ":", let letter = name.first, letter.isASCII, letter.isLetter
             else { continue }
@@ -175,7 +176,8 @@ public enum GameModeLaunchPolicy {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             guard process.terminationStatus == 0,
-                  let listing = String(data: data, encoding: .utf8) else { return false }
+                  let listing = String(data: data, encoding: .utf8)
+            else { return false }
             return listing.split(whereSeparator: \.isNewline).contains { line in
                 let fields = line.split(maxSplits: 1, whereSeparator: \.isWhitespace)
                 guard fields.count == 2, let pid = Int32(fields[0]),
@@ -204,7 +206,7 @@ public enum GameModeLaunchPolicy {
         let count = bytes.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) }
         guard count > 0, let pathEnd = bytes.dropFirst(header).firstIndex(of: 0) else { return false }
         var rest = bytes[bytes.index(after: pathEnd)...].drop(while: { $0 == 0 })
-        for _ in 0..<count {
+        for _ in 0 ..< count {
             guard let end = rest.firstIndex(of: 0) else { return false }
             rest = rest[rest.index(after: end)...]
         }
@@ -224,7 +226,10 @@ enum GameModeIdentityBundle {
         let gameKey = digest(executable.standardizedFileURL.path)
         let values = try loader.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let moduleDate = try ntdll.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-        let loaderKey = digest("\(loader.path)|\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(values.fileSize ?? 0)|\(moduleDate?.timeIntervalSince1970 ?? 0)")
+        let loaderKey =
+            digest(
+                "\(loader.path)|\(values.contentModificationDate?.timeIntervalSince1970 ?? 0)|\(values.fileSize ?? 0)|\(moduleDate?.timeIntervalSince1970 ?? 0)"
+            )
         let folder = temporaryDirectory.appending(path: "whisky-game-mode")
         let bundle = folder.appending(path: "\(gameKey)-\(loaderKey).app")
         let relativeLoader = "Contents/MacOS/WineGameLoader"

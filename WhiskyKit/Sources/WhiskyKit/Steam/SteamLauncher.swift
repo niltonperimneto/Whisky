@@ -78,7 +78,9 @@ public enum SteamLauncher {
                 else { throw SteamLaunchError.gameModeExecutableMissing }
                 if await WineSteamClientDriver(bottle: bottle).processList().contains(where: {
                     $0.imageName.caseInsensitiveCompare("steam.exe") == .orderedSame
-                }), await !GameModeLaunchPolicy.runningSteamHasPolicy(in: bottle.url, runtime: bottle.settings.runtime) {
+                }),
+                    await !GameModeLaunchPolicy
+                    .runningSteamHasPolicy(in: bottle.url, runtime: bottle.settings.runtime) {
                     throw SteamLaunchError.gameModeRequiresSteamRestart
                 }
             }

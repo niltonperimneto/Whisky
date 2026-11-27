@@ -84,7 +84,7 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
                     throw RuntimeCatalogError.httpStatus(response.statusCode)
                 }
             }
-            return (try decode(data), url)
+            return try (decode(data), url)
         }
         return nil
     }
@@ -97,7 +97,8 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
                 let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
                 let numbers = parts.compactMap { Int($0) }
                 guard (1 ... 3).contains(parts.count), numbers.count == parts.count,
-                      numbers.allSatisfy({ $0 >= 0 }) else { return nil }
+                      numbers.allSatisfy({ $0 >= 0 })
+                else { return nil }
                 let components = numbers + Array(repeating: 0, count: 3 - numbers.count)
                 guard macOS >= MacOSVersion(major: components[0], minor: components[1], patch: components[2])
                 else { return nil }
