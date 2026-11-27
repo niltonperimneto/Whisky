@@ -105,6 +105,11 @@ public class Wine {
         public let decisionSource: GraphicsLaunchDecisionSource
         public let programOverrides: ProgramOverrides?
 
+        /// Includes the legacy per-program DXVK DLL preference when it applies.
+        public var usesDXVKForHUD: Bool {
+            Wine.usesDXVKForHUD(backend: effectiveBackend, programOverrides: programOverrides)
+        }
+
         /// Upstream DXVK carries its own `dxgi.dll`; every other backend keeps
         /// the one it comes with.
         public var dxgiStrategy: String {
@@ -339,7 +344,7 @@ public class Wine {
     /// overrides — otherwise a steered launcher gets DXVK's files and none of its
     /// overrides.
     @MainActor
-    static func makeGraphicsLaunchPlan(
+    public static func makeGraphicsLaunchPlan(
         for url: URL, bottle: Bottle, programOverrides: ProgramOverrides?
     ) -> GraphicsLaunchPlan {
         let choice = programOverrides?.graphicsBackend ?? bottle.settings.graphicsBackend
@@ -373,7 +378,8 @@ public class Wine {
             architecture: GraphicsBackendResolver.architecture(of: url)
         )
         var pinnedOverrides = programOverrides
-        if resolved != GraphicsBackendResolver.resolve(for: bottle.settings.runtime) {
+        let replacesUnavailableOverride = choice != .recommended && programOverrides?.graphicsBackend != nil
+        if replacesUnavailableOverride || resolved != GraphicsBackendResolver.resolve(for: bottle.settings.runtime) {
             var pinned = programOverrides ?? ProgramOverrides()
             pinned.graphicsBackend = resolved
             pinnedOverrides = pinned
@@ -510,6 +516,11 @@ public class Wine {
             for: bottle, environment: environment, programOverrides: programOverrides,
             programSettings: programSettings, gameProfileEnvironment: gameProfileEnvironment,
             resolvedBackend: effectiveBackend
+        )
+
+        GameModeLaunchPolicy.apply(
+            to: &wineEnvironment, executable: url, bottleURL: bottle.url,
+            runtime: bottle.settings.runtime, requestsGameMode: programSettings?.requestsGameMode == true
         )
 
         let steamHelper = prepareSteamHelper(for: url, bottle: bottle, plan: graphicsPlan, log: fileHandle)
@@ -936,6 +947,31 @@ public class Wine {
         fileHandle.writeInfo(for: bottle)
         WineUserProfile.reconcile(bottleURL: bottle.url)
         let wineEnvironment = constructWineEnvironment(for: bottle, environment: environment)
+
+        if duringRuntimeSwitch {
+            // Wineboot can start background programs that inherit its output
+            // handles. A regular log file lets us wait for Wineboot alone.
+            let process = Process()
+            process.executableURL = wineBinary(for: bottle)
+            process.currentDirectoryURL = process.executableURL?.deletingLastPathComponent()
+            process.arguments = args
+            process.environment = wineEnvironment
+            process.standardOutput = fileHandle
+            process.standardError = fileHandle
+            fileHandle.writeInfo(for: process)
+            defer { try? fileHandle.closeWineLog() }
+            let status: Int32 = try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+                do {
+                    try process.run()
+                } catch {
+                    process.terminationHandler = nil
+                    continuation.resume(throwing: error)
+                }
+            }
+            if requireSuccess, status != 0 { throw RuntimeSwitchError.verificationFailed }
+            return ""
+        }
 
         for await output in try runWineProcess(
             args: args, environment: wineEnvironment, runtime: bottle.settings.runtime, fileHandle: fileHandle

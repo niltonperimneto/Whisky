@@ -178,12 +178,92 @@ final class EnvironmentVariablesTests: XCTestCase {
 
     func testEnvironmentVariablesWithMetalHUD() {
         var settings = BottleSettings()
+        settings.graphicsBackend = .d3dMetal
         settings.metalHud = true
 
         var env: [String: String] = [:]
         settings.environmentVariables(wineEnv: &env)
 
         XCTAssertEqual(env["MTL_HUD_ENABLED"], "1")
+    }
+
+    @MainActor
+    func testHUDSettingsFollowResolvedLaunchBackend() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bottle = Bottle(bottleUrl: directory, inFlight: false, isAvailable: true)
+        bottle.settings.graphicsBackend = .recommended
+        bottle.settings.dxvkHud = .partial
+        bottle.settings.metalHud = true
+
+        for backend: GraphicsBackend in [.dxvk, .dxmt, .d3dMetal, .wined3d] {
+            let environment = Wine.constructWineEnvironment(for: bottle, resolvedBackend: backend)
+            XCTAssertEqual(environment["DXVK_HUD"], backend == .dxvk ? "devinfo,fps,frametimes" : nil)
+            XCTAssertEqual(environment["MTL_HUD_ENABLED"], backend == .wined3d ? nil : "1")
+        }
+    }
+
+    @MainActor
+    func testProgramHUDOverridesAndInheritance() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bottle = Bottle(bottleUrl: directory, inFlight: false, isAvailable: true)
+        bottle.settings.graphicsBackend = .wined3d
+        bottle.settings.dxvkHud = .full
+        bottle.settings.metalHud = true
+
+        var overrides = ProgramOverrides()
+        overrides.graphicsBackend = .dxvk
+        let inherited = Wine.constructWineEnvironment(for: bottle, programOverrides: overrides)
+        XCTAssertEqual(inherited["DXVK_HUD"], "full")
+        XCTAssertEqual(inherited["MTL_HUD_ENABLED"], "1")
+
+        overrides.dxvkHud = .off
+        overrides.metalHud = false
+        let disabled = Wine.constructWineEnvironment(for: bottle, programOverrides: overrides)
+        XCTAssertEqual(disabled["DXVK_HUD"], "0")
+        XCTAssertEqual(disabled["MTL_HUD_ENABLED"], "0")
+
+        overrides.dxvkHud = .fps
+        overrides.metalHud = true
+        let fallback = Wine.constructWineEnvironment(
+            for: bottle,
+            programOverrides: overrides,
+            resolvedBackend: .wined3d
+        )
+        XCTAssertNil(fallback["DXVK_HUD"])
+        XCTAssertNil(fallback["MTL_HUD_ENABLED"])
+    }
+
+    @MainActor
+    func testUnavailableProgramBackendDoesNotReapplyItsHUD() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bottle = Bottle(bottleUrl: directory, inFlight: false, isAvailable: true)
+        bottle.settings.runtime = "missing-\(UUID().uuidString)"
+
+        var overrides = ProgramOverrides()
+        overrides.graphicsBackend = .dxvk
+        overrides.dxvkHud = .fps
+        overrides.metalHud = true
+        let plan = Wine.makeGraphicsLaunchPlan(
+            for: directory.appending(path: "game.exe"), bottle: bottle, programOverrides: overrides
+        )
+
+        XCTAssertEqual(plan.decisionSource, .unavailableFallback)
+        XCTAssertEqual(plan.effectiveBackend, .wined3d)
+        XCTAssertEqual(plan.programOverrides?.graphicsBackend, .wined3d)
+        XCTAssertFalse(plan.usesDXVKForHUD)
+
+        let environment = Wine.constructWineEnvironment(
+            for: bottle, programOverrides: plan.programOverrides, resolvedBackend: plan.effectiveBackend
+        )
+        XCTAssertNil(environment["DXVK_HUD"])
+        XCTAssertNil(environment["MTL_HUD_ENABLED"])
+        XCTAssertEqual(environment["WINED3DMETAL"], "0")
     }
 
     func testEnvironmentVariablesWithMetalTrace() {

@@ -109,7 +109,11 @@ extension ProgramOverrideSettingsView {
     // MARK: - Graphics
 
     private var graphicsSection: some View {
-        Section {
+        let launch = LaunchResolver.plan(forProgramAt: program.url, userOverrides: program.settings.overrides)
+        let graphics = Wine.makeGraphicsLaunchPlan(for: program.url, bottle: bottle, programOverrides: launch.overrides)
+        let effectiveBackend = graphics.effectiveBackend
+
+        return Section {
             InheritablePicker(
                 "config.graphics.backend",
                 value: backendBinding,
@@ -117,15 +121,22 @@ extension ProgramOverrideSettingsView {
                 options: offeredBackends
             ) { $0.displayName }
 
-            // Resolved, so a program on Recommended that runs DXVK does not
-            // hide the controls that are in effect.
-            if effectiveBackend.usesDXVK {
+            if graphics.usesDXVKForHUD {
                 InheritablePicker(
                     "config.dxvkHud",
                     value: field(\.dxvkHud),
                     inherited: bottle.settings.dxvkHud,
                     options: [.off, .fps, .partial, .full]
                 ) { $0.settingsDescription }
+            }
+
+            if effectiveBackend.supportsMetalHUD {
+                InheritableToggle(
+                    "config.metalHud",
+                    detail: "config.metalHud.info",
+                    value: field(\.metalHud),
+                    inherited: bottle.settings.metalHud
+                )
             }
 
             // D3DMetal only takes the Metal 4 path for D3D12 devices, so this
@@ -169,12 +180,6 @@ extension ProgramOverrideSettingsView {
                 }
             }
 
-            InheritableToggle(
-                "config.metalHud",
-                detail: "config.metalHud.info",
-                value: field(\.metalHud),
-                inherited: bottle.settings.metalHud
-            )
         } header: {
             Text("program.overrides.graphics")
         } footer: {
@@ -189,12 +194,6 @@ extension ProgramOverrideSettingsView {
         GraphicsBackend.allCases.filter {
             WhiskyWineInstaller.isBackendAvailable($0, for: bottle.settings.runtime)
         }
-    }
-
-    /// The backend this program actually launches with.
-    private var effectiveBackend: GraphicsBackend {
-        let backend = program.settings.overrides?.graphicsBackend ?? bottle.settings.graphicsBackend
-        return backend == .recommended ? GraphicsBackendResolver.resolve(for: bottle.settings.runtime) : backend
     }
 
     private var relay12Available: Bool {
@@ -233,6 +232,8 @@ extension ProgramOverrideSettingsView {
 
     private var performanceSection: some View {
         Section("program.overrides.performance") {
+            Toggle("Request macOS Game Mode", isOn: $program.settings.requestsGameMode)
+                .disabled(!GameModeLaunchPolicy.isAvailable(for: bottle.settings.runtime))
             InheritableToggle(
                 "config.shaderCache",
                 value: field(\.shaderCacheEnabled),

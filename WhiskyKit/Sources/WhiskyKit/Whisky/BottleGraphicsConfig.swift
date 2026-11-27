@@ -75,6 +75,14 @@ public enum GraphicsBackend: String, Codable, CaseIterable, Equatable, Sendable 
         self == .dxvk
     }
 
+    /// Whether the resolved translation layer presents through Metal.
+    public var supportsMetalHUD: Bool {
+        switch self {
+        case .d3dMetal, .dxvk, .dxmt: true
+        case .recommended, .wined3d: false
+        }
+    }
+
     /// Whether this backend can actually be used with the given installed
     /// runtime record. DXMT requires a runtime that bundles its payload
     /// (Wine Libraries ≥ 3.1.0, signalled by `dxmtVersion` in the runtime

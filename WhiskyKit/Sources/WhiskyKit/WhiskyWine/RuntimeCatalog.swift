@@ -17,6 +17,7 @@
 //
 
 import Foundation
+import SemanticVersion
 
 /// A producer-published runtime that can be installed side by side.
 public struct AvailableRuntime: Codable, Identifiable, Equatable, Sendable {
@@ -71,6 +72,70 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
         self.runtimes = runtimes
     }
 
+    /// Runtime catalogs can be published at different times. When both describe
+    /// the same runtime, use the newer format's metadata.
+    public static func fetchPublished() async throws -> (catalog: RuntimeCatalog, sources: [URL])? {
+        guard let currentURL = URL(string: DistributionConfig.runtimeCatalogURL),
+              let legacyURL = URL(string: DistributionConfig.legacyRuntimeCatalogURL)
+        else { throw URLError(.badURL) }
+
+        let session = URLSession(configuration: .ephemeral)
+        async let current = fetch(from: currentURL, session: session)
+        async let legacy = fetch(from: legacyURL, session: session)
+        if let catalog = try await current {
+            if let legacyCatalog = try? await legacy {
+                return (catalog.includingLegacyRuntimes(from: legacyCatalog), [currentURL, legacyURL])
+            }
+            try Task.checkCancellation()
+            return (catalog, [currentURL])
+        }
+        if let catalog = try await legacy {
+            return (catalog, [legacyURL])
+        }
+        return nil
+    }
+
+    private static func fetch(from url: URL, session: URLSession) async throws -> RuntimeCatalog? {
+        let (data, response) = try await session.data(from: url)
+        if let response = response as? HTTPURLResponse {
+            if response.statusCode == 404 { return nil }
+            guard (200 ... 299).contains(response.statusCode) else {
+                throw RuntimeCatalogError.httpStatus(response.statusCode)
+            }
+        }
+        return try decode(data)
+    }
+
+    func includingLegacyRuntimes(from legacy: RuntimeCatalog) -> RuntimeCatalog {
+        var identifiers = Set(runtimes.map(\.identifier))
+        let additionalRuntimes = legacy.runtimes.filter { identifiers.insert($0.identifier).inserted }
+        return RuntimeCatalog(catalogVersion: catalogVersion, runtimes: runtimes + additionalRuntimes)
+    }
+
+    /// Prefer stable releases, using canary when the producer has no compatible stable build.
+    public func defaultRuntime(for macOS: MacOSVersion = .current) -> AvailableRuntime? {
+        let candidates = runtimes.compactMap { runtime -> (runtime: AvailableRuntime, version: SemanticVersion)? in
+            guard let version = SemanticVersion(runtime.version) else { return nil }
+            if let minimum = runtime.minimumMacOS {
+                let parts = minimum.split(separator: ".", omittingEmptySubsequences: false)
+                let numbers = parts.compactMap { Int($0) }
+                guard (1 ... 3).contains(parts.count), numbers.count == parts.count,
+                      numbers.allSatisfy({ $0 >= 0 })
+                else { return nil }
+                let components = numbers + Array(repeating: 0, count: 3 - numbers.count)
+                guard macOS >= MacOSVersion(major: components[0], minor: components[1], patch: components[2])
+                else { return nil }
+            }
+            return (runtime, version)
+        }
+        for channel in [WhiskyWineReleaseChannel.stable, .canary] {
+            if let latest = candidates.filter({ $0.runtime.channel == channel }).max(by: { $0.version < $1.version }) {
+                return latest.runtime
+            }
+        }
+        return nil
+    }
+
     public static func decode(_ data: Data) throws -> RuntimeCatalog {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -87,6 +152,8 @@ public struct RuntimeCatalog: Codable, Equatable, Sendable {
 }
 
 public enum RuntimeCatalogError: LocalizedError, Equatable {
+    case httpStatus(Int)
+    case noDefaultRuntime
     case unsupportedVersion
     case invalidDigest
     case insecureURL
@@ -94,6 +161,8 @@ public enum RuntimeCatalogError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
+        case let .httpStatus(status): "The runtime service returned HTTP \(status)."
+        case .noDefaultRuntime: "The runtime catalog has no compatible default runtime."
         case .unsupportedVersion: "The runtime catalog uses an unsupported format."
         case .invalidDigest: "The runtime catalog contains an invalid checksum."
         case .insecureURL: "The runtime catalog contains an insecure download URL."

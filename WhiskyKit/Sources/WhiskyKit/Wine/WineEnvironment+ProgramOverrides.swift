@@ -92,8 +92,6 @@ extension Wine {
             case .d3dMetal, .recommended:
                 // Undo any bottle-level DXVK/DXMT by overriding DLLs to builtin
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
-                // Remove DXVK and wined3d env vars at program layer
-                builder.remove("DXVK_HUD", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
                 // A DXVK bottle never sets this, so a program forced onto
                 // D3DMetal inside one has to claim hardware scheduling itself
@@ -136,7 +134,6 @@ extension Wine {
                 // the DXMT trio and b for winemetal. DXVK/wined3d env must not leak.
                 dllResolver.programCustom.append(contentsOf: Self.translationDLLResetEntries)
                 dllResolver.programCustom.append(contentsOf: DLLOverrideResolver.dxmtPreset)
-                builder.remove("DXVK_HUD", layer: .programUser)
                 builder.remove("WINED3DMETAL", layer: .programUser)
                 // CX_ACTIVE_GRAPHICS_BACKEND survives: DXMT translates d3d11
                 // only, so d3d12 is still D3DMetal here, and win32u's
@@ -168,20 +165,6 @@ extension Wine {
                         DLLOverrideEntry(dllName: entry.dllName, mode: .builtin)
                     )
                 }
-            }
-        }
-
-        // DXVK HUD override
-        if let dxvkHud = overrides.dxvkHud {
-            switch dxvkHud {
-            case .full:
-                builder.set("DXVK_HUD", "full", layer: .programUser)
-            case .partial:
-                builder.set("DXVK_HUD", "devinfo,fps,frametimes", layer: .programUser)
-            case .fps:
-                builder.set("DXVK_HUD", "fps", layer: .programUser)
-            case .off:
-                builder.remove("DXVK_HUD", layer: .programUser)
             }
         }
 
@@ -225,13 +208,6 @@ extension Wine {
         // an explicit value overrides that.
         if let metal4Enabled = overrides.metal4Enabled {
             builder.set("D3DM_MTL4", metal4Enabled ? "1" : "0", layer: .programUser)
-        }
-
-        // Metal HUD override. Controls the Metal Performance HUD overlay.
-        // Explicit false is retained as MTL_HUD_ENABLED=0 so a game can
-        // opt out of a bottle-level HUD.
-        if let metalHud = overrides.metalHud {
-            builder.set("MTL_HUD_ENABLED", metalHud ? "1" : "0", layer: .programUser)
         }
 
         // Frame generation override. `CX_ACTIVE_GRAPHICS_BACKEND` is the whole

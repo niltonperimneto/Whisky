@@ -300,3 +300,52 @@ struct LibraryCard: View {
         icon = Image(nsImage: sampled.image)
     }
 }
+
+/// Selecting the executable enables Game Mode for exactly that Steam title.
+struct SteamGameModeMenu: View {
+    let appID: Int
+    let installURL: URL
+    let bottle: Bottle
+    let onError: (String) -> Void
+    @State private var selected: String?
+
+    var body: some View {
+        Menu("Request macOS Game Mode") {
+            Button {
+                update(nil)
+            } label: {
+                if selected == nil {
+                    Label("Off", systemImage: "checkmark")
+                } else {
+                    Text("Off")
+                }
+            }
+            ForEach(GameModeLaunchPolicy.steamExecutables(in: installURL)) { executable in
+                Button {
+                    update(executable.path)
+                } label: {
+                    if selected == executable.path {
+                        Label(executable.path, systemImage: "checkmark")
+                    } else {
+                        Text(executable.path)
+                    }
+                }
+            }
+        }
+        .disabled(!GameModeLaunchPolicy.isAvailable(for: bottle.settings.runtime, steam: true))
+        .onAppear {
+            selected = GameRecordStore(bottleURL: bottle.url).record(for: .steam(appID: appID))?.gameModeExecutable
+        }
+    }
+
+    private func update(_ path: String?) {
+        do {
+            try GameModeLaunchPolicy.setSteamExecutable(
+                path, appID: appID, bottleURL: bottle.url, runtime: bottle.settings.runtime
+            )
+            selected = path
+        } catch {
+            onError(error.localizedDescription)
+        }
+    }
+}

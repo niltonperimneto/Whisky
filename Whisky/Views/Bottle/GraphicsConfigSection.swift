@@ -21,8 +21,8 @@ import SwiftUI
 import WhiskyKit
 
 /// The Graphics tab: the backend, what the backend offers, and, with advanced
-/// settings shown, the DXVK and Metal switches and the programs that override
-/// the backend.
+/// settings shown, the DXVK configuration file, Metal diagnostics and program
+/// backend overrides.
 struct GraphicsConfigSection: View {
     @Bindable var bottle: Bottle
     @AppStorage(SettingsKeys.showAdvanced) private var showAdvanced = false
@@ -32,14 +32,12 @@ struct GraphicsConfigSection: View {
     private static let supportsRaytracing = MTLCreateSystemDefaultDevice()?.supportsFamily(.apple9) ?? false
 
     private var resolvedBackend: GraphicsBackend {
-        if bottle.settings.graphicsBackend == .recommended {
-            let runtime = bottle.settings.runtime
-            return GraphicsBackendResolver.resolve(
-                runtimeInfo: WhiskyWineInstaller.whiskyWineInfo(for: runtime),
-                d3dMetalInstalled: WhiskyWineInstaller.isD3DMetalInstalled(for: runtime)
-            )
+        let backend = bottle.settings.graphicsBackend
+        let runtime = bottle.settings.runtime
+        if backend == .recommended || !WhiskyWineInstaller.isBackendAvailable(backend, for: runtime) {
+            return GraphicsBackendResolver.resolve(for: runtime)
         }
-        return bottle.settings.graphicsBackend
+        return backend
     }
 
     private var relay12Available: Bool {
@@ -47,19 +45,18 @@ struct GraphicsConfigSection: View {
     }
 
     var body: some View {
+        let backend = resolvedBackend
+
         Section {
             BackendPickerView(
                 selection: $bottle.settings.graphicsBackend,
-                resolvedBackend: resolvedBackend,
+                resolvedBackend: backend,
                 isBackendAvailable: { backend in
                     WhiskyWineInstaller.isBackendAvailable(backend, for: bottle.settings.runtime)
                 }
             )
 
-            // A bottle explicitly set to D3DMetal without its payload silently
-            // degrades to WineD3D at launch — say so instead (issue #146).
-            if bottle.settings.graphicsBackend == .d3dMetal,
-               !WhiskyWineInstaller.isBackendAvailable(.d3dMetal, for: bottle.settings.runtime) {
+            if bottle.settings.graphicsBackend == .d3dMetal, backend == .wined3d {
                 SettingsNotice(.warning, "config.graphics.backend.d3dMetal.missingWarning")
             }
 
@@ -67,8 +64,8 @@ struct GraphicsConfigSection: View {
         } header: {
             Text("config.graphics.backend")
         } footer: {
-            if bottle.settings.graphicsBackend == .recommended {
-                Text("config.graphics.helperCurrently \(resolvedBackend.displayName)")
+            if bottle.settings.graphicsBackend != backend {
+                Text("config.graphics.helperCurrently \(backend.displayName)")
             } else {
                 Text("config.graphics.helperNextLaunch")
             }
@@ -76,10 +73,23 @@ struct GraphicsConfigSection: View {
         .task { isRunning = await RunningBottleNotice.isRunning(bottle) }
 
         Section("config.title.graphics") {
+            if backend.usesDXVK {
+                SettingsPicker("config.dxvkHud", detail: "config.dxvkHud.info", selection: $bottle.settings.dxvkHud) {
+                    Text("config.dxvkHud.off").tag(DXVKHUD.off)
+                    Text("config.dxvkHud.fps").tag(DXVKHUD.fps)
+                    Text("config.dxvkHud.partial").tag(DXVKHUD.partial)
+                    Text("config.dxvkHud.full").tag(DXVKHUD.full)
+                }
+            }
+
+            if backend.supportsMetalHUD {
+                SettingsToggle("config.metalHud", detail: "config.metalHud.info", isOn: $bottle.settings.metalHud)
+            }
+
             // MetalFX rides on D3DMetal's DLSS bridge and Metal 4 is D3DMetal's
             // own command-encoding backend, so both are meaningless under any
             // other backend rather than merely inactive.
-            if resolvedBackend == .d3dMetal {
+            if backend == .d3dMetal {
                 SettingsToggle("config.metalFX", detail: "config.metalFX.info", isOn: $bottle.settings.metalFX)
                 SettingsToggle("config.metal4", detail: "config.metal4.info", isOn: $bottle.settings.metal4Enabled)
                 // Frame generation reaches MetalFX through the same DLSS bridge
@@ -97,7 +107,7 @@ struct GraphicsConfigSection: View {
             // bottle's Steam launches included. So it is offered everywhere
             // but there, and greyed out, with the reason, on a runtime that
             // does not ship it.
-            if resolvedBackend != .wined3d {
+            if backend != .wined3d {
                 relay12Toggle
                 // Relay12 skips draws whose pipeline is still compiling when
                 // this is on. Upstream DXVK 3 has no async mode, so Relay12
@@ -125,10 +135,9 @@ struct GraphicsConfigSection: View {
         }
 
         if showAdvanced {
-            DXVKSettingsView(bottle: bottle, resolvedBackend: resolvedBackend, bottleURL: bottle.url)
+            DXVKSettingsView(bottle: bottle, resolvedBackend: backend, bottleURL: bottle.url)
 
             Section("config.metal.title") {
-                SettingsToggle("config.metalHud", detail: "config.metalHud.info", isOn: $bottle.settings.metalHud)
                 SettingsToggle("config.metalTrace", detail: "config.metalTrace.info", isOn: $bottle.settings.metalTrace)
                 if Self.supportsRaytracing {
                     SettingsToggle("config.dxr", detail: "config.dxr.info", isOn: $bottle.settings.dxrEnabled)
@@ -165,9 +174,7 @@ struct GraphicsConfigSection: View {
     /// True when a setting that only shows with advanced settings on is not at
     /// its default, so hiding them would hide something in effect.
     private var hasAdvancedSettingsConfigured: Bool {
-        bottle.settings.dxvkHud != .off
-            || bottle.settings.metalHud
-            || bottle.settings.metalTrace
+        bottle.settings.metalTrace
             || bottle.settings.metalValidation
             || bottle.settings.dxrEnabled
     }
